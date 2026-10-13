@@ -14,6 +14,7 @@ import json
 import sys
 import time
 from collections import Counter
+from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -87,9 +88,103 @@ class ResourceSoakRunner(impl.ResourceSoakRunner):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.requested_token_count = self.req_tokens
+        self._original_symbols = list(getattr(impl.cfg, "SYMBOLS", []) or [])
+        self._original_underlying_ltp = impl.ws._underlying_ltp
+        self._synthetic_resolver_fixture_installed = False
+        budget = int(impl.ws._GOVERNED_FEED_SUBSCRIPTION_BUDGET)
+        if self.req_tokens > budget:
+            self.tokens = self.tokens[:budget]
+            self.req_tokens = len(self.tokens)
         self.last_cycle_condition_snapshot: dict = {}
 
+    def _install_synthetic_resolver_fixture(self) -> None:
+        """Give reconnect-time production resolution a matching offline master."""
+        expiry = date(2026, 12, 31)
+        index_token = 256265
+        instruments = [
+            {
+                "instrument_token": index_token,
+                "exchange": "NSE",
+                "tradingsymbol": "NIFTY 50",
+                "name": "NIFTY 50",
+                "segment": "INDICES",
+                "instrument_type": "INDEX",
+            }
+        ]
+        for index, token in enumerate(self.tokens):
+            instruments.append(
+                {
+                    "instrument_token": int(token),
+                    "exchange": "NFO",
+                    "tradingsymbol": f"NIFTY{expiry:%y%m%d}{23000 + index // 2 * 50}"
+                    f"{'CE' if index % 2 == 0 else 'PE'}",
+                    "name": "NIFTY",
+                    "segment": "NFO-OPT",
+                    "instrument_type": "CE" if index % 2 == 0 else "PE",
+                    "expiry": expiry,
+                    "strike": 23000 + index // 2 * 50,
+                }
+            )
+
+        def instruments_for_exchange(exchange=None, force=False):
+            _ = force
+            if exchange is None:
+                return list(instruments)
+            exchange_key = str(exchange).upper()
+            return [
+                row for row in instruments
+                if str(row.get("exchange") or "").upper() == exchange_key
+            ]
+
+        # The production resolver is intentionally exercised by reconnect and
+        # watchdog rebuilds. Keep its instrument/spot inputs deterministic and
+        # entirely local to this synthetic soak process.
+        impl.cfg.SYMBOLS = ["NIFTY"]
+        impl.ws.kite_client.instruments = instruments_for_exchange
+        impl.ws.kite_client.next_available_expiry = lambda *args, **kwargs: expiry
+        impl.ws._underlying_ltp = lambda *args, **kwargs: (25000.0, "synthetic_soak_fixture")
+        self._synthetic_resolver_fixture_installed = True
+
+    def _publish_validated_replay_candidate(self) -> None:
+        """Give the synthetic soak socket a production-shaped replay contract."""
+        tokens = list(self.tokens)
+        option_contracts = {
+            int(token): {
+                "symbol": "NIFTY",
+                "instrument_type": "CE" if index % 2 == 0 else "PE",
+                "exchange": "NFO",
+                "expiry": "2026-12-31",
+                "strike": 25000 + (index // 2) * 50,
+            }
+            for index, token in enumerate(tokens)
+        }
+        desired_revision = impl.ws.record_desired_option_contracts(
+            option_contracts,
+            expected_tokens=tokens,
+            source="feed_reconnect_resource_soak_fixture",
+        )
+        if desired_revision <= 0:
+            raise RuntimeError("soak option identity fixture was not recorded")
+        configured_budget = int(impl.ws._GOVERNED_FEED_SUBSCRIPTION_BUDGET)
+        if len(tokens) > configured_budget:
+            raise RuntimeError(
+                "soak token count exceeds governed replay-candidate budget"
+            )
+        impl.ws.record_desired_subscription_candidate(
+            tokens,
+            option_tokens=tokens,
+            configured_budget=configured_budget,
+            source="feed_reconnect_resource_soak_fixture",
+        )
+        validated_tokens, reason = impl.ws._validated_desired_subscription_tokens()
+        if validated_tokens != sorted(tokens):
+            raise RuntimeError(
+                f"soak replay candidate did not validate: {reason}"
+            )
+
     def _do_warmup(self):
+        self._install_synthetic_resolver_fixture()
         process_start = impl._resource_snapshot()
 
         try:
@@ -117,6 +212,7 @@ class ResourceSoakRunner(impl.ResourceSoakRunner):
         setattr(impl.ws, "_STOP_REQUESTED", False)
         setattr(impl.ws, "_LAST_RUNTIME_ERROR", None)
 
+        self._publish_validated_replay_candidate()
         impl.ws.start_depth_ws(self.tokens, skip_lock=True, skip_guard=True)
         time.sleep(0.1)
 
@@ -136,6 +232,10 @@ class ResourceSoakRunner(impl.ResourceSoakRunner):
 
     def _cleanup_runtime(self, reason: str) -> None:
         super()._cleanup_runtime(reason)
+        if str(reason) == "shutdown" and self._synthetic_resolver_fixture_installed:
+            impl.cfg.SYMBOLS = list(self._original_symbols)
+            impl.ws._underlying_ltp = self._original_underlying_ltp
+            self._synthetic_resolver_fixture_installed = False
         if str(reason) != "soak_finish":
             return
 
@@ -162,6 +262,13 @@ class ResourceSoakRunner(impl.ResourceSoakRunner):
         )
         expected = _normalized_counter(getattr(impl.ws, "_LAST_TOKENS", []))
         actual = _normalized_counter(getattr(ticker, "tokens", [])) if ticker else Counter()
+        validated_candidate, candidate_reason = (
+            impl.ws._validated_desired_subscription_tokens()
+        )
+        candidate_matches_expected = (
+            candidate_reason == "validated_desired_plan"
+            and validated_candidate == sorted(expected.elements())
+        )
         snapshot = {
             "old_generation_id": old_generation_id,
             "current_generation_id": current_generation_id,
@@ -194,6 +301,9 @@ class ResourceSoakRunner(impl.ResourceSoakRunner):
             "expected_subscriptions": sorted(expected.elements()),
             "actual_subscriptions": sorted(actual.elements()),
             "subscriptions_match_exactly": expected == actual,
+            "replay_candidate_valid": candidate_reason == "validated_desired_plan",
+            "replay_candidate_matches_expected": candidate_matches_expected,
+            "replay_candidate_reason": candidate_reason,
             "runtime_state": getattr(impl.ws, "_RUNTIME_STATE", None),
             "last_runtime_error": getattr(impl.ws, "_LAST_RUNTIME_ERROR", None),
         }
@@ -213,12 +323,15 @@ class ResourceSoakRunner(impl.ResourceSoakRunner):
                 not snapshot["recovery_blocked"],
                 not snapshot["depth_lock_acquired"],
                 snapshot["subscriptions_match_exactly"],
+                snapshot["replay_candidate_matches_expected"],
             )
         )
         return success, ticker, current_generation_id
 
     def run(self):
         result = super().run()
+        result["configuration"]["requested_token_count"] = self.requested_token_count
+        result["configuration"]["effective_token_count"] = self.req_tokens
         result["last_cycle_condition_snapshot"] = dict(
             self.last_cycle_condition_snapshot
         )

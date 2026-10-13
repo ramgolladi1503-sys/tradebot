@@ -13,8 +13,10 @@ import re
 import atexit
 import sqlite3
 import queue
+from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 from core.auth import get_kite_ticker
 from core.events import write_json_atomic
@@ -182,6 +184,7 @@ _PENDING_UNSUBSCRIBE_TOKENS = set()
 _PENDING_MODE_FULL_TOKENS = set()
 _LAST_MUTATION_RESULT = None
 _SOCKET_GENERATION = 0
+_OPTION_OWNERSHIP_BOOTSTRAP_GENERATION = 0
 _SOCKET_GENERATION_LOCK = threading.RLock()
 _SOCKET_START_LOCK = threading.RLock()
 _SOCKET_LIFECYCLE_LOCK = threading.RLock()
@@ -372,13 +375,18 @@ def _current_socket_generation() -> int:
         return int(_SOCKET_GENERATION)
 
 
+def _is_option_ownership_bootstrap_generation(socket_generation: int) -> bool:
+    with _SOCKET_GENERATION_LOCK:
+        return int(_OPTION_OWNERSHIP_BOOTSTRAP_GENERATION) == int(socket_generation)
+
+
 def _advance_socket_generation(
     *,
     restart_verification_reason: str | None = None,
     start_epoch: float | None = None,
 ) -> int | None:
     """Publish a generation only after prior callback work has drained."""
-    global _SOCKET_GENERATION
+    global _SOCKET_GENERATION, _OPTION_OWNERSHIP_BOOTSTRAP_GENERATION
     if _CALLBACK_COORDINATOR.is_owner_thread:
         _defer_socket_lifecycle(
             lambda: _advance_socket_generation(
@@ -397,6 +405,11 @@ def _advance_socket_generation(
         with _SOCKET_GENERATION_LOCK:
             _SOCKET_GENERATION += 1
             socket_generation = int(_SOCKET_GENERATION)
+            _OPTION_OWNERSHIP_BOOTSTRAP_GENERATION = socket_generation
+            _invalidate_applied_option_ownership(
+                "socket_generation_advanced",
+                socket_generation=socket_generation,
+            )
             _invalidate_feed_restart_verification_for_socket_advance(
                 socket_generation=socket_generation
             )
@@ -422,6 +435,537 @@ _INTENDED_TOKENS: list[int] | None = None
 _UNDERLYING_TOKENS: set[int] = set()
 _UNDERLYING_TOKEN_TO_SYMBOL: dict[int, str] = {}
 _TOKEN_TO_SYMBOL: dict[int, str] = {}
+
+
+@dataclass(frozen=True, slots=True)
+class OptionContractIdentity:
+    """Instrument-master identity for one configured index option token."""
+
+    token: int
+    symbol: str
+    instrument_type: str
+    exchange: str
+    expiry: str
+    strike: float
+
+
+@dataclass(frozen=True, slots=True)
+class DesiredOptionContractSnapshot:
+    """Immutable candidate metadata; this is not evidence of subscription."""
+
+    revision: int
+    source: str
+    expected_tokens: frozenset[int]
+    contracts: Mapping[int, OptionContractIdentity]
+    complete: bool
+
+
+@dataclass(frozen=True, slots=True)
+class DesiredSubscriptionCandidate:
+    """Validated final subscription plan eligible for reconnect replay."""
+
+    revision: int
+    tokens: frozenset[int]
+    option_revision: int
+    configured_budget: int
+    observation_enabled: bool
+    observation_verdict: str
+    observation_final_union: frozenset[int]
+    observation_plan_sha: str
+    observation_feed_session_id: str
+    observation_feed_epoch: int
+    observation_reconnect_generation: int
+    complete: bool
+    source: str
+
+
+@dataclass(frozen=True, slots=True)
+class AppliedOptionOwnershipSnapshot:
+    """Generation-bound local API-applied option ownership view."""
+
+    state: str
+    socket_generation: int
+    revision: int
+    provenance: str
+    contracts: Mapping[int, OptionContractIdentity]
+
+
+_OPTION_OWNERSHIP_LOCK = threading.RLock()
+_OPTION_OWNERSHIP_MUTATION_LOCK = threading.RLock()
+_DESIRED_OPTION_CONTRACT_REVISION = 0
+_DESIRED_OPTION_CONTRACT_SNAPSHOT = DesiredOptionContractSnapshot(
+    revision=0,
+    source="uninitialized",
+    expected_tokens=frozenset(),
+    contracts=MappingProxyType({}),
+    complete=False,
+)
+_DESIRED_SUBSCRIPTION_CANDIDATE_REVISION = 0
+_DESIRED_SUBSCRIPTION_CANDIDATE = DesiredSubscriptionCandidate(
+    revision=0,
+    tokens=frozenset(),
+    option_revision=0,
+    configured_budget=0,
+    observation_enabled=False,
+    observation_verdict="UNAVAILABLE",
+    observation_final_union=frozenset(),
+    observation_plan_sha="",
+    observation_feed_session_id="",
+    observation_feed_epoch=0,
+    observation_reconnect_generation=0,
+    complete=False,
+    source="uninitialized",
+)
+_APPLIED_OPTION_OWNERSHIP_REVISION = 0
+_APPLIED_OPTION_OWNERSHIP_SNAPSHOT = AppliedOptionOwnershipSnapshot(
+    state="UNKNOWN",
+    socket_generation=0,
+    revision=0,
+    provenance="process_start_unconfirmed",
+    contracts=MappingProxyType({}),
+)
+
+
+def _freeze_option_contracts(
+    contracts: Mapping[int, Mapping[str, Any]] | None,
+) -> dict[int, OptionContractIdentity]:
+    """Accept only explicit CE/PE instrument identities for configured indexes."""
+    if not isinstance(contracts, Mapping):
+        raise ValueError("option contracts must be a mapping")
+    normalized: dict[int, OptionContractIdentity] = {}
+    for token_raw, raw in contracts.items():
+        if isinstance(token_raw, bool):
+            raise ValueError("option contract token must be a positive integer")
+        try:
+            token = int(token_raw)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError("option contract token must be a positive integer") from exc
+        if token <= 0 or token in normalized or not isinstance(raw, Mapping):
+            raise ValueError("option contract identity is invalid or duplicated")
+        symbol = str(raw.get("symbol") or "").strip().upper()
+        option_type = str(raw.get("instrument_type") or "").strip().upper()
+        exchange = str(raw.get("exchange") or "").strip().upper()
+        expiry = _expiry_key(raw.get("expiry"))
+        if symbol not in _INDEX_SYMBOLS or option_type not in {"CE", "PE"}:
+            raise ValueError("option contract must identify a configured CE/PE index option")
+        expected_exchange = "BFO" if symbol == "SENSEX" else "NFO"
+        if exchange != expected_exchange or expiry is None:
+            raise ValueError("option contract exchange or expiry is invalid")
+        try:
+            strike = float(raw.get("strike"))
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError("option contract strike must be finite and positive") from exc
+        if not math.isfinite(strike) or strike <= 0:
+            raise ValueError("option contract strike must be finite and positive")
+        normalized[token] = OptionContractIdentity(
+            token=token,
+            symbol=symbol,
+            instrument_type=option_type,
+            exchange=exchange,
+            expiry=expiry,
+            strike=strike,
+        )
+    return normalized
+
+
+def record_desired_option_contracts(
+    contracts: Mapping[int, Mapping[str, Any]],
+    *,
+    expected_tokens: Sequence[int],
+    source: str,
+) -> int:
+    """Stage validated proposal identities without changing applied ownership.
+
+    ``expected_tokens`` must contain the builder's complete post-filter option
+    set. A mismatch is retained as incomplete metadata so downstream mutation
+    cannot turn missing CE/PE identity into applied ownership.
+    """
+    global _DESIRED_OPTION_CONTRACT_REVISION, _DESIRED_OPTION_CONTRACT_SNAPSHOT
+    frozen = _freeze_option_contracts(contracts)
+    expected = frozenset(_normalize_positive_tokens(expected_tokens))
+    source_text = str(source or "").strip()
+    if not source_text:
+        raise ValueError("desired option contract source is required")
+    complete = set(frozen) == set(expected)
+    with _OPTION_OWNERSHIP_LOCK:
+        _DESIRED_OPTION_CONTRACT_REVISION += 1
+        _DESIRED_OPTION_CONTRACT_SNAPSHOT = DesiredOptionContractSnapshot(
+            revision=_DESIRED_OPTION_CONTRACT_REVISION,
+            source=source_text,
+            expected_tokens=expected,
+            contracts=MappingProxyType(dict(frozen)),
+            complete=complete,
+        )
+        return _DESIRED_OPTION_CONTRACT_REVISION
+
+
+def get_desired_option_contract_snapshot() -> DesiredOptionContractSnapshot:
+    """Return one immutable proposal snapshot for a mutation transaction."""
+    with _OPTION_OWNERSHIP_LOCK:
+        return _DESIRED_OPTION_CONTRACT_SNAPSHOT
+
+
+def invalidate_desired_subscription_candidate(source: str) -> None:
+    """Retire any cached plan before a new/failed build can reuse it."""
+    global _DESIRED_SUBSCRIPTION_CANDIDATE_REVISION, _DESIRED_SUBSCRIPTION_CANDIDATE
+    global _LAST_DESIRED_TOKENS
+    with _OPTION_OWNERSHIP_LOCK:
+        _DESIRED_SUBSCRIPTION_CANDIDATE_REVISION += 1
+        _DESIRED_SUBSCRIPTION_CANDIDATE = DesiredSubscriptionCandidate(
+            revision=_DESIRED_SUBSCRIPTION_CANDIDATE_REVISION,
+            tokens=frozenset(),
+            option_revision=_DESIRED_OPTION_CONTRACT_REVISION,
+            configured_budget=0,
+            observation_enabled=False,
+            observation_verdict="UNAVAILABLE",
+            observation_final_union=frozenset(),
+            observation_plan_sha="",
+            observation_feed_session_id="",
+            observation_feed_epoch=0,
+            observation_reconnect_generation=0,
+            complete=False,
+            source=str(source or "candidate_invalidated"),
+        )
+        _LAST_DESIRED_TOKENS = None
+
+
+def record_desired_subscription_candidate(
+    tokens: Sequence[int],
+    *,
+    option_tokens: Sequence[int],
+    configured_budget: int,
+    source: str,
+    observation_required: bool | None = None,
+) -> int:
+    """Record only a complete post-filter, post-merge, post-budget target."""
+    global _DESIRED_SUBSCRIPTION_CANDIDATE_REVISION, _DESIRED_SUBSCRIPTION_CANDIDATE
+    global _LAST_DESIRED_TOKENS
+    raw_tokens = list(tokens or [])
+    normalized = _normalize_positive_tokens(raw_tokens)
+    expected_options = set(_normalize_positive_tokens(option_tokens))
+    desired_options = get_desired_option_contract_snapshot()
+    observation = _observation_state_payload()
+    try:
+        budget = int(configured_budget)
+        governed_budget = int(_GOVERNED_FEED_SUBSCRIPTION_BUDGET)
+    except (TypeError, ValueError, OverflowError):
+        budget = governed_budget = 0
+    observation_enabled = bool(observation.get("enabled"))
+    if observation_required is None:
+        observation_required = bool(
+            getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False)
+        )
+    observation_required = bool(observation_required)
+    observation_union = set(_normalize_positive_tokens(observation.get("final_union_tokens") or []))
+    observation_valid = observation_enabled == observation_required and (
+        not observation_required
+        or (
+        str(observation.get("verdict") or "") == "PASS_LIVE_SOURCE_PRESESSION_READINESS"
+        and bool(str(observation.get("plan_sha") or "").strip())
+        and observation_union == set(normalized)
+        )
+    )
+    non_option_tokens = set(normalized) - expected_options
+    explicit_non_options = {
+        token for token in non_option_tokens
+        if _is_underlying_token(token)
+        or str(_TOKEN_TO_SYMBOL.get(token) or "").strip().upper() == "STICKY"
+        or (observation_enabled and token in observation_union)
+    }
+    complete = bool(
+        normalized
+        and len(normalized) == len(raw_tokens)
+        and len(set(raw_tokens)) == len(raw_tokens)
+        and len(normalized) <= budget <= governed_budget
+        and expected_options
+        and expected_options.issubset(set(normalized))
+        and desired_options.complete
+        and set(desired_options.expected_tokens) == expected_options
+        and set(desired_options.contracts) == expected_options
+        and explicit_non_options == non_option_tokens
+        and observation_valid
+    )
+    with _OPTION_OWNERSHIP_LOCK:
+        _DESIRED_SUBSCRIPTION_CANDIDATE_REVISION += 1
+        _DESIRED_SUBSCRIPTION_CANDIDATE = DesiredSubscriptionCandidate(
+            revision=_DESIRED_SUBSCRIPTION_CANDIDATE_REVISION,
+            tokens=frozenset(normalized),
+            option_revision=desired_options.revision,
+            configured_budget=budget,
+            observation_enabled=observation_enabled,
+            observation_verdict=str(observation.get("verdict") or ""),
+            observation_final_union=frozenset(observation_union),
+            observation_plan_sha=str(observation.get("plan_sha") or ""),
+            observation_feed_session_id=str(observation.get("feed_session_id") or ""),
+            observation_feed_epoch=int(observation.get("feed_epoch") or 0),
+            observation_reconnect_generation=int(observation.get("reconnect_generation") or 0),
+            complete=complete,
+            source=str(source or "unknown"),
+        )
+        # Keep the proposal available for existing desired-count/rebalance
+        # diagnostics. Replay authority comes only from the separate
+        # `complete` snapshot checked by `_validated_desired_subscription_tokens`.
+        _LAST_DESIRED_TOKENS = list(normalized) if normalized else None
+        return _DESIRED_SUBSCRIPTION_CANDIDATE_REVISION
+
+
+def _validated_desired_subscription_tokens() -> tuple[list[int], str]:
+    candidate = _DESIRED_SUBSCRIPTION_CANDIDATE
+    desired_options = get_desired_option_contract_snapshot()
+    observation = _observation_state_payload()
+    valid = bool(
+        candidate.complete
+        and candidate.tokens
+        and bool(observation.get("enabled")) == candidate.observation_enabled
+        and candidate.option_revision == desired_options.revision
+        and desired_options.complete
+        and set(desired_options.expected_tokens) == set(desired_options.contracts)
+        and len(candidate.tokens) <= candidate.configured_budget <= _GOVERNED_FEED_SUBSCRIPTION_BUDGET
+    )
+    if candidate.observation_enabled:
+        valid = valid and bool(
+            observation.get("enabled")
+            and str(observation.get("verdict") or "") == "PASS_LIVE_SOURCE_PRESESSION_READINESS"
+            and str(observation.get("plan_sha") or "") == candidate.observation_plan_sha
+            and str(observation.get("feed_session_id") or "") == candidate.observation_feed_session_id
+            and int(observation.get("feed_epoch") or 0) == candidate.observation_feed_epoch
+            and int(observation.get("reconnect_generation") or 0) == candidate.observation_reconnect_generation
+            and frozenset(_normalize_positive_tokens(observation.get("final_union_tokens") or [])) == candidate.observation_final_union
+            and candidate.tokens == candidate.observation_final_union
+        )
+    if not valid:
+        return [], "desired_subscription_candidate_invalid_or_stale"
+    return sorted(candidate.tokens), "validated_desired_plan"
+
+
+def get_applied_option_ownership_snapshot() -> AppliedOptionOwnershipSnapshot:
+    """Return one immutable confirmed-local-API ownership snapshot."""
+    with _OPTION_OWNERSHIP_LOCK:
+        return _APPLIED_OPTION_OWNERSHIP_SNAPSHOT
+
+
+def _option_tokens_for_ownership(tokens: Sequence[int]) -> list[int]:
+    desired = get_desired_option_contract_snapshot()
+    applied = get_applied_option_ownership_snapshot()
+    known = set(desired.expected_tokens) | set(applied.contracts)
+    return sorted(set(_normalize_positive_tokens(tokens)) & known)
+
+
+def _serialize_option_ownership_mutation(function):
+    """Keep the ownership begin/apply/commit sequence atomic across callers."""
+    def serialized(*args, **kwargs):
+        with _OPTION_OWNERSHIP_MUTATION_LOCK:
+            return function(*args, **kwargs)
+    serialized.__name__ = getattr(function, "__name__", "serialized_mutation")
+    serialized.__doc__ = getattr(function, "__doc__", None)
+    return serialized
+
+
+def _is_known_non_option_subscription_token(token: int) -> bool:
+    token_int = int(token)
+    if _is_underlying_token(token_int):
+        return True
+    if str(_TOKEN_TO_SYMBOL.get(token_int) or "").strip().upper() == "STICKY":
+        return True
+    try:
+        registry = _load_observation_registry_for_subscription()
+        return registry is not None and token_int in set(int(item) for item in registry.all_tokens)
+    except Exception:
+        return False
+
+
+def _clear_option_freshness_for_symbols(symbols: set[str] | None = None) -> None:
+    if symbols is None:
+        _SYMBOL_LAST_OPTION_TICK_TS.clear()
+        return
+    for symbol in symbols:
+        _SYMBOL_LAST_OPTION_TICK_TS.pop(str(symbol or "").strip().upper(), None)
+
+
+def _record_option_freshness_if_current(
+    snapshot: AppliedOptionOwnershipSnapshot,
+    token: int,
+    tick_epoch: float,
+) -> bool:
+    """Fence an in-flight callback against an ownership transition."""
+    with _SOCKET_GENERATION_LOCK:
+        if int(snapshot.socket_generation) != int(_SOCKET_GENERATION):
+            return False
+        with _OPTION_OWNERSHIP_LOCK:
+            current = _APPLIED_OPTION_OWNERSHIP_SNAPSHOT
+            contract = current.contracts.get(int(token))
+            if (
+                current.state != "KNOWN"
+                or current.revision != snapshot.revision
+                or current.socket_generation != snapshot.socket_generation
+                or contract is None
+            ):
+                return False
+            _SYMBOL_LAST_OPTION_TICK_TS[contract.symbol] = float(tick_epoch)
+            return True
+
+
+def _invalidate_applied_option_ownership(
+    reason: str,
+    *,
+    socket_generation: int | None = None,
+    affected_tokens: Sequence[int] | None = None,
+) -> AppliedOptionOwnershipSnapshot:
+    """Invalidate uncertain ownership and clear affected option age evidence."""
+    global _APPLIED_OPTION_OWNERSHIP_REVISION, _APPLIED_OPTION_OWNERSHIP_SNAPSHOT
+    global _OPTION_OWNERSHIP_BOOTSTRAP_GENERATION
+    generation = (
+        int(socket_generation)
+        if socket_generation is not None
+        else _current_socket_generation()
+    )
+    with _OPTION_OWNERSHIP_LOCK:
+        previous = _APPLIED_OPTION_OWNERSHIP_SNAPSHOT
+        if affected_tokens is None:
+            symbols = None
+        else:
+            token_set = set(_normalize_positive_tokens(affected_tokens))
+            symbols = {
+                contract.symbol
+                for token, contract in previous.contracts.items()
+                if token in token_set
+            }
+            desired = _DESIRED_OPTION_CONTRACT_SNAPSHOT.contracts
+            symbols.update(
+                contract.symbol
+                for token, contract in desired.items()
+                if token in token_set
+            )
+        _clear_option_freshness_for_symbols(symbols)
+        _APPLIED_OPTION_OWNERSHIP_REVISION += 1
+        snapshot = AppliedOptionOwnershipSnapshot(
+            state="UNKNOWN",
+            socket_generation=generation,
+            revision=_APPLIED_OPTION_OWNERSHIP_REVISION,
+            provenance=str(reason or "ownership_uncertain"),
+            contracts=MappingProxyType({}),
+        )
+        _APPLIED_OPTION_OWNERSHIP_SNAPSHOT = snapshot
+        return snapshot
+
+
+def _invalidate_option_ownership_for_socket_loss(reason: str) -> AppliedOptionOwnershipSnapshot:
+    """Invalidate applied options and allow only a full replay to bootstrap them."""
+    global _OPTION_OWNERSHIP_BOOTSTRAP_GENERATION
+    with _SOCKET_GENERATION_LOCK:
+        generation = int(_SOCKET_GENERATION)
+        snapshot = _invalidate_applied_option_ownership(
+            reason, socket_generation=generation
+        )
+        _OPTION_OWNERSHIP_BOOTSTRAP_GENERATION = generation
+        return snapshot
+
+
+def _begin_applied_option_mutation(
+    reason: str, *, affected_tokens: Sequence[int]
+) -> tuple[AppliedOptionOwnershipSnapshot, AppliedOptionOwnershipSnapshot]:
+    """Capture prior truth and close readers while a mutation is unresolved."""
+    previous = get_applied_option_ownership_snapshot()
+    if not _option_tokens_for_ownership(affected_tokens):
+        return previous, previous
+    invalidated = _invalidate_applied_option_ownership(
+        f"mutation_in_progress:{reason}", affected_tokens=affected_tokens
+    )
+    return previous, invalidated
+
+
+def _commit_applied_option_ownership(
+    *,
+    socket_generation: int,
+    desired_revision: int,
+    base_snapshot: AppliedOptionOwnershipSnapshot,
+    invalidated_revision: int,
+    confirmed_tokens: Sequence[int],
+    subscribe_tokens: Sequence[int] = (),
+    unsubscribe_tokens: Sequence[int] = (),
+    fresh_socket: bool = False,
+    provenance: str,
+) -> bool:
+    """Commit only a fully confirmed local mutation for the active generation."""
+    global _APPLIED_OPTION_OWNERSHIP_REVISION, _APPLIED_OPTION_OWNERSHIP_SNAPSHOT
+    global _OPTION_OWNERSHIP_BOOTSTRAP_GENERATION
+    subscribe = set(_normalize_positive_tokens(subscribe_tokens))
+    unsubscribe = set(_normalize_positive_tokens(unsubscribe_tokens))
+    confirmed = set(_normalize_positive_tokens(confirmed_tokens))
+    with _SOCKET_GENERATION_LOCK:
+        if int(socket_generation) != int(_SOCKET_GENERATION):
+            return False
+        with _OPTION_OWNERSHIP_LOCK:
+            desired = _DESIRED_OPTION_CONTRACT_SNAPSHOT
+            current = _APPLIED_OPTION_OWNERSHIP_SNAPSHOT
+            if current.revision != int(invalidated_revision):
+                return False
+            ownership_tokens = (subscribe | unsubscribe) & (
+                set(desired.expected_tokens) | set(base_snapshot.contracts)
+            )
+            if not ownership_tokens:
+                return True
+            if (
+                current.state != "UNKNOWN"
+                or base_snapshot.socket_generation != int(socket_generation)
+            ):
+                return False
+            if desired.revision != int(desired_revision) or not desired.complete:
+                return False
+            if fresh_socket:
+                if _OPTION_OWNERSHIP_BOOTSTRAP_GENERATION != int(socket_generation):
+                    return False
+                if not desired.expected_tokens.issubset(confirmed):
+                    return False
+                next_contracts = dict(desired.contracts)
+            else:
+                if (
+                    base_snapshot.state != "KNOWN"
+                    or base_snapshot.socket_generation != int(socket_generation)
+                ):
+                    return False
+                next_contracts = dict(base_snapshot.contracts)
+                next_contracts = {
+                    token: contract
+                    for token, contract in next_contracts.items()
+                    if token not in unsubscribe
+                }
+                for token in subscribe & set(desired.expected_tokens):
+                    contract = desired.contracts.get(token)
+                    if contract is None:
+                        return False
+                    next_contracts[token] = contract
+                if not set(next_contracts).issubset(confirmed):
+                    return False
+
+            old_contracts = (
+                dict(base_snapshot.contracts)
+                if base_snapshot.state == "KNOWN"
+                else {}
+            )
+            changed_symbols = {
+                contract.symbol
+                for token, contract in old_contracts.items()
+                if next_contracts.get(token) != contract
+            }
+            changed_symbols.update(
+                contract.symbol
+                for token, contract in next_contracts.items()
+                if old_contracts.get(token) != contract
+            )
+            _clear_option_freshness_for_symbols(changed_symbols)
+            _APPLIED_OPTION_OWNERSHIP_REVISION += 1
+            _APPLIED_OPTION_OWNERSHIP_SNAPSHOT = AppliedOptionOwnershipSnapshot(
+                state="KNOWN",
+                socket_generation=int(socket_generation),
+                revision=_APPLIED_OPTION_OWNERSHIP_REVISION,
+                provenance=str(provenance or "local_api_calls_succeeded"),
+                contracts=MappingProxyType(dict(next_contracts)),
+            )
+            _OPTION_OWNERSHIP_BOOTSTRAP_GENERATION = 0
+            return True
+
+
 _UNDERLYING_LOGGED_MISSING = False
 _SYMBOL_LAST_LTP_TS: dict[str, float] = {}
 _SYMBOL_LAST_DEPTH_TS: dict[str, float] = {}
@@ -1411,14 +1955,15 @@ def _option_subscription_freshness_stats(
     now_epoch: float,
     tokens: list[int],
 ) -> dict[str, object]:
-    option_tokens = [
-        int(tok)
-        for tok in list(tokens or [])
-        if int(tok) > 0 and not _is_underlying_token(int(tok))
-    ]
+    ownership = get_applied_option_ownership_snapshot()
+    if ownership.state != "KNOWN" or ownership.socket_generation != _current_socket_generation():
+        option_tokens: list[int] = []
+    else:
+        option_tokens = sorted(set(_normalize_positive_tokens(tokens)) & set(ownership.contracts))
     urgent_max_age_sec = float(getattr(cfg, "FEED_STALE_OPTION_SUBSCRIPTION_URGENT_MAX_AGE_SEC", 8.0))
     if not option_tokens:
         return {
+            "ownership_state": ownership.state if ownership.socket_generation == _current_socket_generation() else "UNKNOWN",
             "option_count": 0,
             "fresh_count": 0,
             "stale_count": 0,
@@ -1451,7 +1996,7 @@ def _option_subscription_freshness_stats(
                 stale_samples.append(
                     {
                         "token": int(token),
-                        "symbol": str(_TOKEN_TO_SYMBOL.get(int(token)) or "").upper() or "UNKNOWN",
+                        "symbol": ownership.contracts[int(token)].symbol,
                         "age_sec": age_sec,
                         "db_epoch": db_epoch,
                         "memory_epoch": memory_epoch,
@@ -1464,6 +2009,7 @@ def _option_subscription_freshness_stats(
     option_count = int(len(option_tokens))
     fresh_ratio = float(fresh_count / option_count) if option_count > 0 else 1.0
     return {
+        "ownership_state": "KNOWN",
         "option_count": option_count,
         "fresh_count": int(fresh_count),
         "stale_count": int(stale_count),
@@ -1480,14 +2026,17 @@ def _option_subscription_freshness_by_symbol_stats(
     tokens: list[int],
 ) -> dict[str, dict[str, object]]:
     by_symbol: dict[str, dict[str, object]] = {}
-    for tok in list(tokens or []):
+    ownership = get_applied_option_ownership_snapshot()
+    if ownership.state != "KNOWN" or ownership.socket_generation != _current_socket_generation():
+        return by_symbol
+    for tok in sorted(set(_normalize_positive_tokens(tokens)) & set(ownership.contracts)):
         try:
             tok_int = int(tok)
         except Exception:
             continue
-        if tok_int <= 0 or _is_underlying_token(tok_int):
+        if tok_int <= 0:
             continue
-        symbol = str(_TOKEN_TO_SYMBOL.get(tok_int) or "").upper()
+        symbol = ownership.contracts[tok_int].symbol
         if not symbol or symbol == "STICKY":
             continue
         stats = by_symbol.setdefault(
@@ -1545,6 +2094,15 @@ def _maybe_refresh_stale_option_subscription_universe(
 ) -> tuple[bool, dict[str, object]]:
     if not bool(is_market_open_ist()):
         return False, {"reason": "market_closed", "refresh_applied": False, "freshness_urgent": False}
+    ownership = get_applied_option_ownership_snapshot()
+    if ownership.state != "KNOWN" or ownership.socket_generation != _current_socket_generation():
+        return False, {
+            "reason": "option_ownership_unknown",
+            "refresh_applied": False,
+            "freshness_urgent": True,
+            "ownership_state": "UNKNOWN",
+            "ownership_revision": int(ownership.revision),
+        }
     refresh_sec = float(getattr(cfg, "FEED_STALE_OPTION_SUBSCRIPTION_REFRESH_SEC", 20.0))
     drift_refresh_sec = float(getattr(cfg, "FEED_STALE_OPTION_SUBSCRIPTION_DRIFT_REFRESH_SEC", 45.0))
     min_fresh_ratio = float(getattr(cfg, "FEED_STALE_OPTION_SUBSCRIPTION_MIN_FRESH_RATIO", 0.8))
@@ -1757,34 +2315,34 @@ def _stale_option_mutation_guard_blocked(refresh_payload: dict[str, object] | No
 
 
 def _resubscribe_token_selection() -> tuple[list[int], dict[str, int | bool | str]]:
-    desired_tokens = _normalize_positive_tokens(_LAST_DESIRED_TOKENS)
+    desired_tokens, desired_reason = _validated_desired_subscription_tokens()
     fallback_tokens = _normalize_positive_tokens(_LAST_TOKENS)
     use_desired_tokens = _use_desired_tokens_for_resubscribe()
     desired_option_tokens_count = sum(1 for t in desired_tokens if not _is_underlying_token(t))
     fallback_option_tokens_count = sum(1 for t in fallback_tokens if not _is_underlying_token(t))
-    auto_recover_missing_options = bool(
-        desired_tokens
-        and desired_option_tokens_count > 0
-        and fallback_option_tokens_count <= 0
-    )
-    prefer_desired_tokens = bool((use_desired_tokens or auto_recover_missing_options) and desired_tokens)
-    tokens = desired_tokens if prefer_desired_tokens else fallback_tokens
+    # Applied option ownership alone cannot authorize the full replay set: it
+    # does not contain an immutable identity for every underlying, sticky, or
+    # observation token. Without a current validated full-plan snapshot, fail
+    # closed instead of rebuilding a potentially smaller set from raw caches.
+    tokens = desired_tokens
+    token_source = "validated_desired_plan" if desired_tokens else "blocked"
     return tokens, {
         "use_desired_tokens": use_desired_tokens,
         "desired_tokens_count": len(desired_tokens),
         "desired_option_tokens_count": desired_option_tokens_count,
         "fallback_tokens_count": len(fallback_tokens),
         "fallback_option_tokens_count": fallback_option_tokens_count,
-        "auto_recover_missing_options": auto_recover_missing_options,
+        "auto_recover_missing_options": False,
         "resubscribe_tokens_count": len(tokens),
-        "token_source": (
-            "desired"
-            if use_desired_tokens and desired_tokens
-            else ("desired_auto_recovery" if auto_recover_missing_options and desired_tokens else "last_tokens")
-        ),
+        "token_source": token_source,
+        "selection_block_reason": "" if tokens else desired_reason,
+        "fallback_ownership_state": str(get_applied_option_ownership_snapshot().state),
+        "fallback_socket_generation": int(get_applied_option_ownership_snapshot().socket_generation),
+        "active_socket_generation": int(_current_socket_generation()),
     }
 
 
+@_serialize_option_ownership_mutation
 def _soft_resubscribe_current(reason: str) -> bool:
     global _PENDING_SUBSCRIBE_TOKENS, _LAST_TOKENS
     can_mutate, guard_reason, guard_payload = _can_mutate_ws_subscriptions(reason=reason)
@@ -1795,7 +2353,13 @@ def _soft_resubscribe_current(reason: str) -> bool:
         ws_obj = _KITE_TICKER
         tokens, selection_payload = _resubscribe_token_selection()
         log_payload = {"reason": reason, **selection_payload}
-        if ws_obj is None or not tokens:
+        if not tokens:
+            _log_ws(
+                "FEED_SOFT_RESUBSCRIBE_BLOCKED",
+                {**log_payload, "detail": "no_validated_or_current_applied_subscription_set"},
+            )
+            return False
+        if ws_obj is None:
             _PENDING_SUBSCRIBE_TOKENS = set(tokens)
             _log_ws("FEED_MUTATION_QUEUED", {**log_payload, "detail": "ws_missing_queued", "token_count": len(tokens)})
             return False
@@ -1803,12 +2367,21 @@ def _soft_resubscribe_current(reason: str) -> bool:
         from core.feed.ws_mutation_queue import _check_socket_health
         present, connected, fail_reason = _check_socket_health(ws_obj)
         if not present or connected is False:
+            _invalidate_option_ownership_for_socket_loss(
+                f"soft_resubscribe_disconnected:{reason}"
+            )
             _PENDING_SUBSCRIBE_TOKENS = set(tokens)
             _log_ws("FEED_MUTATION_QUEUED", {**log_payload, "detail": "ws_disconnected_queued", "token_count": len(tokens)})
             return False
 
+        generation = _current_socket_generation()
+        base_snapshot, invalidated = _begin_applied_option_mutation(
+            reason, affected_tokens=tokens
+        )
+        desired_snapshot = get_desired_option_contract_snapshot()
+        fresh_socket = _is_option_ownership_bootstrap_generation(generation)
         try:
-            from core.feed.ws_mutation_queue import safe_subscribe_full_mode
+            from core.feed.ws_mutation_queue import safe_subscribe_full_mode_observed
             now_epoch = now_utc_epoch()
 
             def on_applied():
@@ -1817,9 +2390,26 @@ def _soft_resubscribe_current(reason: str) -> bool:
                 _PENDING_SUBSCRIBE_TOKENS.difference_update(tokens)
                 _log_ws("FEED_MUTATION_APPLIED", log_payload)
 
-            res_sub, res_mode = safe_subscribe_full_mode(ws_obj, tokens, reason, now_epoch, on_applied_callback=on_applied)
+            res_sub, res_mode = safe_subscribe_full_mode_observed(
+                ws_obj, tokens, reason, now_epoch,
+                socket_generation=generation,
+                active_generation=_current_socket_generation,
+                on_applied_callback=on_applied,
+            )
 
-            if res_sub.applied and res_mode.applied:
+            if res_sub.applied and res_mode.applied and not res_sub.queued and not res_mode.queued:
+                if not _commit_applied_option_ownership(
+                    socket_generation=generation,
+                    desired_revision=desired_snapshot.revision,
+                    base_snapshot=base_snapshot,
+                    invalidated_revision=invalidated.revision,
+                    confirmed_tokens=_LAST_TOKENS,
+                    subscribe_tokens=tokens,
+                    fresh_socket=fresh_socket,
+                    provenance=f"soft_resubscribe:{reason}",
+                ):
+                    _log_ws("FEED_OPTION_OWNERSHIP_UNCONFIRMED", {"reason": reason})
+                    return False
                 return True
             elif res_sub.queued or res_mode.queued:
                 _PENDING_SUBSCRIBE_TOKENS = set(tokens)
@@ -1831,6 +2421,7 @@ def _soft_resubscribe_current(reason: str) -> bool:
         except Exception as exc:
             _log_ws("FEED_MUTATION_FAILED", {**log_payload, "error": str(exc)})
             return False
+@_serialize_option_ownership_mutation
 def _refresh_subscription_tokens(tokens: list[int], reason: str) -> bool:
     refresh_tokens = _normalize_positive_tokens(tokens)
     if not refresh_tokens:
@@ -1851,12 +2442,20 @@ def _refresh_subscription_tokens(tokens: list[int], reason: str) -> bool:
         from core.feed.ws_mutation_queue import _check_socket_health
         present, connected, fail_reason = _check_socket_health(ws_obj)
         if not present or connected is False:
+            _invalidate_option_ownership_for_socket_loss(
+                f"refresh_disconnected:{reason}"
+            )
             _log_ws(
                 "FEED_REFRESH_SKIPPED",
                 {"reason": reason, "detail": "ws_disconnected", "token_count": len(refresh_tokens)},
             )
             return False
 
+        generation = _current_socket_generation()
+        base_snapshot, invalidated = _begin_applied_option_mutation(
+            reason, affected_tokens=refresh_tokens
+        )
+        desired_snapshot = get_desired_option_contract_snapshot()
         try:
             from core.feed.ws_mutation_queue import safe_unsubscribe
             now_epoch = now_utc_epoch()
@@ -1867,19 +2466,18 @@ def _refresh_subscription_tokens(tokens: list[int], reason: str) -> bool:
                 phase="before_unsubscribe",
             )
             res_unsub = safe_unsubscribe(ws_obj, refresh_tokens, reason, now_epoch)
-            if not res_unsub.applied and res_unsub.failure_reason != "ws_method_missing":
-                if res_unsub.queued:
-                    # just log queued
-                    _log_ws("FEED_REFRESH_UNSUBSCRIBE_QUEUED", {"reason": reason, "tokens": len(refresh_tokens)})
-                else:
-                    _log_ws("FEED_REFRESH_UNSUBSCRIBE_ERROR", {"reason": reason, "tokens": len(refresh_tokens), "error": res_unsub.failure_reason})
-                    return False
+            if res_unsub.queued or not res_unsub.applied:
+                _log_ws(
+                    "FEED_REFRESH_UNSUBSCRIBE_QUEUED" if res_unsub.queued else "FEED_REFRESH_UNSUBSCRIBE_ERROR",
+                    {"reason": reason, "tokens": len(refresh_tokens), "error": res_unsub.failure_reason},
+                )
+                return False
         except Exception as exc:
             _log_ws("FEED_REFRESH_UNSUBSCRIBE_ERROR", {"reason": reason, "tokens": len(refresh_tokens), "error": str(exc)})
             return False
 
         try:
-            from core.feed.ws_mutation_queue import safe_subscribe_full_mode
+            from core.feed.ws_mutation_queue import safe_subscribe_full_mode_observed
             now_epoch = now_utc_epoch()
 
             def on_refresh_applied():
@@ -1887,7 +2485,12 @@ def _refresh_subscription_tokens(tokens: list[int], reason: str) -> bool:
                 _LAST_TOKENS = list(sorted(set(_LAST_TOKENS or []).union(set(refresh_tokens))))
                 _PENDING_SUBSCRIBE_TOKENS.difference_update(refresh_tokens)
 
-            res_sub, res_mode = safe_subscribe_full_mode(ws_obj, refresh_tokens, reason, now_epoch, on_applied_callback=on_refresh_applied)
+            res_sub, res_mode = safe_subscribe_full_mode_observed(
+                ws_obj, refresh_tokens, reason, now_epoch,
+                socket_generation=generation,
+                active_generation=_current_socket_generation,
+                on_applied_callback=on_refresh_applied,
+            )
 
             _log_subscription_mutation_diagnostic(
                 action="refresh",
@@ -1911,6 +2514,21 @@ def _refresh_subscription_tokens(tokens: list[int], reason: str) -> bool:
                 return False
             elif not res_sub.applied or not res_mode.applied:
                 _log_ws("FEED_REFRESH_SUBSCRIBE_ERROR", {"reason": reason, "count": len(refresh_tokens), "error": res_sub.failure_reason or res_mode.failure_reason})
+                return False
+
+            final_tokens = set(_LAST_TOKENS or [])
+            final_tokens.difference_update(refresh_tokens)
+            final_tokens.update(refresh_tokens)
+            if not _commit_applied_option_ownership(
+                socket_generation=generation,
+                desired_revision=desired_snapshot.revision,
+                base_snapshot=base_snapshot,
+                invalidated_revision=invalidated.revision,
+                confirmed_tokens=final_tokens,
+                subscribe_tokens=refresh_tokens,
+                unsubscribe_tokens=refresh_tokens,
+                provenance=f"refresh:{reason}",
+            ):
                 return False
 
             _log_ws("FEED_REFRESH_OK", {"reason": reason, "count": len(refresh_tokens)})
@@ -2242,6 +2860,10 @@ def activate_market_event_graph_launch_plan(plan: Mapping[str, Any]) -> dict[str
     }
     _TOKEN_TO_SYMBOL = dict(option_token_to_symbol)
     _TOKEN_TO_SYMBOL.update(_UNDERLYING_TOKEN_TO_SYMBOL)
+    _stage_option_contracts_from_resolution(
+        plan.get("production_resolution") or (),
+        source="launch_plan_instrument_master",
+    )
     return res
 
 
@@ -2970,8 +3592,8 @@ def _ws1006_fault_category(*, code: int | None, reason_text: str | None) -> str:
 
 def _new_ws_recovery_proof_context(*, disconnect_started_at: float) -> dict[str, Any]:
     """Snapshot exact subscription and critical underlying evidence at disconnect."""
-    resub_tokens, _ = _resubscribe_token_selection()
-    expected_tokens = _normalize_positive_tokens(resub_tokens or _LAST_TOKENS)
+    resub_tokens, selection_payload = _resubscribe_token_selection()
+    expected_tokens = _normalize_positive_tokens(resub_tokens)
     required_tokens = sorted({int(token) for token in (_UNDERLYING_TOKENS or set()) if int(token) > 0})
     symbol_by_token = {
         str(int(token)): str(symbol or "").strip().upper()
@@ -2985,6 +3607,11 @@ def _new_ws_recovery_proof_context(*, disconnect_started_at: float) -> dict[str,
     invalid = []
     if not expected_tokens:
         invalid.append("expected_subscription_set_missing")
+        selection_reason = str(selection_payload.get("selection_block_reason") or "").strip()
+        invalid.append(
+            "replay_candidate_invalid"
+            + (f":{selection_reason}" if selection_reason else "")
+        )
     if not required_tokens:
         invalid.append("required_underlying_identity_set_missing")
     if set(required_tokens) - set(expected_tokens):
@@ -3747,7 +4374,21 @@ def _transition_partial_activity_recovery(
     option_threshold_sec: float,
 ) -> dict[str, object]:
     global _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _PARTIAL_RECOVERY_VERIFICATION
-    previous_cycles = int(dict(_PARTIAL_RECOVERY_VERIFICATION or {}).get("stable_cycles") or 0)
+    active_generation = _current_socket_generation()
+    prior_verification = dict(_PARTIAL_RECOVERY_VERIFICATION or {})
+    prior_generation = prior_verification.get("socket_generation")
+    try:
+        prior_generation_matches = (
+            prior_generation is not None
+            and int(prior_generation) == int(active_generation)
+        )
+    except (TypeError, ValueError):
+        prior_generation_matches = False
+    previous_cycles = (
+        int(prior_verification.get("stable_cycles") or 0)
+        if prior_generation_matches and _ws_connected_state() is True
+        else 0
+    )
     verification = _build_partial_recovery_verification(
         now_epoch=now_epoch,
         current_tokens=current_tokens,
@@ -3757,7 +4398,23 @@ def _transition_partial_activity_recovery(
         option_threshold_sec=option_threshold_sec,
         previous_stable_cycles=previous_cycles,
     )
-    _PARTIAL_RECOVERY_VERIFICATION = dict(verification)
+    # The proof is scoped to one connected socket generation.  A generation
+    # change during verification invalidates this cycle and prevents stale
+    # evidence from being committed as recovery success.
+    verification["socket_generation"] = int(active_generation)
+    # Socket transitions drain the callback owner before advancing generation,
+    # so commit the proof atomically against that monotonic generation value.
+    # If an out-of-band transition nevertheless raced this evaluation, discard
+    # its cycle rather than publishing success from an obsolete socket.
+    transport_still_connected = _ws_connected_state() is True
+    with _SOCKET_GENERATION_LOCK:
+        if int(active_generation) != int(_SOCKET_GENERATION) or not transport_still_connected:
+            verification["stable_cycles"] = 0
+            verification["verified"] = False
+            verification["failure_reasons"] = list(verification.get("failure_reasons") or [])
+            if "socket_generation_changed_during_verification" not in verification["failure_reasons"]:
+                verification["failure_reasons"].append("socket_generation_changed_during_verification")
+        _PARTIAL_RECOVERY_VERIFICATION = dict(verification)
     verified_local_activity = bool(verification.get("verified"))
     restart_required_blocked = _reconnect_recovery_blocked_active()
     clearance_allowed = False
@@ -3950,6 +4607,7 @@ def _reconcile_rebalance_intended_tokens(
     return desired, True
 
 
+@_serialize_option_ownership_mutation
 def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_tokens: list[int], reason: str):
     global _LAST_TOKENS, _PENDING_SUBSCRIBE_TOKENS, _PENDING_UNSUBSCRIBE_TOKENS, _PENDING_MODE_FULL_TOKENS, _LAST_MUTATION_RESULT, _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _INTENDED_TOKEN_COUNT, _INTENDED_TOKENS
     old_tokens = sorted({int(token) for token in (_LAST_TOKENS or []) if int(token) > 0})
@@ -3967,16 +4625,26 @@ def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_token
     from core.feed.ws_mutation_queue import _check_socket_health
     present, connected, fail_reason = _check_socket_health(ws)
     if not present or connected is False:
+        _invalidate_option_ownership_for_socket_loss(
+            f"subscription_delta_disconnected:{reason}"
+        )
         _log_ws(
             "FEED_REBALANCE_SKIPPED",
             {"reason": reason, "detail": "ws_disconnected"},
         )
         return False
 
+    mutation_tokens = sorted(set(to_subscribe + to_unsubscribe))
+    generation = _current_socket_generation()
+    base_snapshot, invalidated = _begin_applied_option_mutation(
+        reason, affected_tokens=mutation_tokens
+    )
+    desired_snapshot = get_desired_option_contract_snapshot()
+
     all_applied = True
 
     try:
-        from core.feed.ws_mutation_queue import safe_subscribe_full_mode, safe_unsubscribe
+        from core.feed.ws_mutation_queue import safe_subscribe_full_mode_observed, safe_unsubscribe
         now_epoch = now_utc_epoch()
         _log_subscription_mutation_diagnostic(
             action="delta",
@@ -3992,7 +4660,12 @@ def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_token
                 _PENDING_SUBSCRIBE_TOKENS.difference_update(to_subscribe)
                 _log_ws("FEED_MUTATION_APPLIED", {"action": "subscribe", "count": len(to_subscribe), "reason": reason})
 
-            res_sub, res_mode = safe_subscribe_full_mode(ws, to_subscribe, reason, now_epoch, on_applied_callback=on_sub_applied)
+            res_sub, res_mode = safe_subscribe_full_mode_observed(
+                ws, to_subscribe, reason, now_epoch,
+                socket_generation=generation,
+                active_generation=_current_socket_generation,
+                on_applied_callback=on_sub_applied,
+            )
 
             if res_sub.queued or res_mode.queued:
                 _PENDING_SUBSCRIBE_TOKENS.update(to_subscribe)
@@ -4041,6 +4714,18 @@ def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_token
         result={"all_applied": bool(all_applied)},
     )
     if all_applied:
+        if not _commit_applied_option_ownership(
+            socket_generation=generation,
+            desired_revision=desired_snapshot.revision,
+            base_snapshot=base_snapshot,
+            invalidated_revision=invalidated.revision,
+            confirmed_tokens=_LAST_TOKENS,
+            subscribe_tokens=to_subscribe,
+            unsubscribe_tokens=to_unsubscribe,
+            provenance=f"subscription_delta:{reason}",
+        ):
+            _log_ws("FEED_OPTION_OWNERSHIP_UNCONFIRMED", {"reason": reason})
+            return False
         _record_completed_subscription_delta(
             old_tokens=old_tokens,
             new_tokens=sorted({int(token) for token in (_LAST_TOKENS or []) if int(token) > 0}),
@@ -4098,7 +4783,22 @@ def _runtime_transport_truth_fields(
     last_depth_age_sec: float | None,
     reconnect_blocked_reason: str | None,
 ) -> dict[str, object]:
-    verification = dict(_PARTIAL_RECOVERY_VERIFICATION or {})
+    raw_verification = dict(_PARTIAL_RECOVERY_VERIFICATION or {})
+    active_generation = _current_socket_generation()
+    try:
+        verification_generation_matches = (
+            raw_verification.get("socket_generation") is not None
+            and int(raw_verification["socket_generation"]) == int(active_generation)
+        )
+    except (TypeError, ValueError):
+        verification_generation_matches = False
+    # Only a proof from this connected generation may inform recovery truth.
+    # Missing or stale proof stays unknown and fails closed in derived fields.
+    verification = (
+        raw_verification
+        if verification_generation_matches and ws_connected is True
+        else {}
+    )
     callback_epoch = None
     callback_candidates = [float(_LAST_WS_TICK_EPOCH or 0.0)]
     callback_candidates.extend(float(epoch) for epoch in dict(_LAST_MSG_TS_BY_TOKEN or {}).values())
@@ -4126,9 +4826,9 @@ def _runtime_transport_truth_fields(
     )
     subscription_truth_complete = subscription_registry_consistent
     mode_full_truth_complete = subscription_registry_consistent and len(_PENDING_MODE_FULL_TOKENS or set()) == 0
-    critical_feed_fresh = bool(verification.get("critical_feed_fresh", True))
-    core_feed_fresh_ratio = float(verification.get("core_fresh_ratio", 1.0) or 0.0)
-    depth_ratio = float(verification.get("depth_feed_fresh_ratio", 1.0 if last_depth_age_sec is not None else 0.0) or 0.0)
+    critical_feed_fresh = bool(verification.get("critical_feed_fresh", False))
+    core_feed_fresh_ratio = float(verification.get("core_fresh_ratio", 0.0) or 0.0)
+    depth_ratio = float(verification.get("depth_feed_fresh_ratio", 0.0) or 0.0)
     state_text = str(runtime_state or "").strip().upper()
     blocked_reason = str(reconnect_blocked_reason or "").strip().lower()
     execution_feed_ready = bool(
@@ -4620,13 +5320,23 @@ def _tick_option_feed_verification(*, now_epoch: float) -> None:
     ticks_by_symbol: dict[str, int] = {}
     verified_symbols: list[str] = []
     missing_symbols: list[str] = []
+    ownership = get_applied_option_ownership_snapshot()
+    ownership_known = bool(
+        ownership.state == "KNOWN"
+        and ownership.socket_generation == _current_socket_generation()
+    )
+    owned_tokens_by_symbol: dict[str, set[int]] = {}
+    if ownership_known:
+        for token, contract in ownership.contracts.items():
+            owned_tokens_by_symbol.setdefault(contract.symbol, set()).add(int(token))
     for symbol in required_symbols:
         sym = str(symbol or "").upper()
         if not sym:
             continue
-        subscribed_count = int(subscribed_by_symbol.get(sym, 0) or 0)
+        owned_tokens = owned_tokens_by_symbol.get(sym, set()) if ownership_known else set()
+        subscribed_count = len(owned_tokens & set(_normalize_positive_tokens(_LAST_TOKENS or [])))
         requested_count = int(requested_by_symbol.get(sym, 0) or 0)
-        if subscribed_count <= 0 and requested_count <= 0:
+        if not ownership_known or subscribed_count <= 0:
             missing_symbols.append(sym)
             continue
         fresh_token_count = 0
@@ -4635,19 +5345,11 @@ def _tick_option_feed_verification(*, now_epoch: float) -> None:
                 token_int = int(token)
             except (TypeError, ValueError):
                 continue
-            if str(_TOKEN_TO_SYMBOL.get(token_int) or "").upper() != sym:
-                continue
-            if token_int not in set(int(item) for item in (_LAST_TOKENS or [])):
+            if token_int not in owned_tokens or token_int not in set(_normalize_positive_tokens(_LAST_TOKENS or [])):
                 continue
             tick_epoch = _coerce_epoch(raw_tick_epoch)
             if tick_epoch is not None and tick_epoch >= start_epoch:
                 fresh_token_count += 1
-        if fresh_token_count == 0:
-            # Legacy symbol-level evidence can prove at least one post-start
-            # delivery, but cannot satisfy a multi-tick threshold.
-            symbol_tick_epoch = _coerce_epoch(_SYMBOL_LAST_OPTION_TICK_TS.get(sym))
-            if symbol_tick_epoch is not None and symbol_tick_epoch >= start_epoch and min_ticks == 1:
-                fresh_token_count = 1
         ticks_by_symbol[sym] = fresh_token_count
         if fresh_token_count >= min_ticks:
             verified_symbols.append(sym)
@@ -4885,18 +5587,25 @@ def _restart_verify_ticks_by_symbol(
     now_epoch: float,
     max_age_sec: float,
 ) -> dict[str, int]:
+    ownership = get_applied_option_ownership_snapshot()
+    if (
+        ownership.state != "KNOWN"
+        or ownership.socket_generation != _current_socket_generation()
+    ):
+        return {}
     ticks_by_symbol: dict[str, int] = {}
     for token_raw, receipt_raw in tick_epochs_by_token.items():
         token = int(token_raw)
         receipt_epoch = float(receipt_raw)
+        contract = ownership.contracts.get(token)
         if (
-            token in _UNDERLYING_TOKENS
+            contract is None
             or receipt_epoch < float(after_epoch)
             or receipt_epoch > float(now_epoch)
             or float(now_epoch) - receipt_epoch > float(max_age_sec)
         ):
             continue
-        symbol = str(_TOKEN_TO_SYMBOL.get(token) or "").strip().upper()
+        symbol = contract.symbol
         if symbol:
             ticks_by_symbol[symbol] = int(ticks_by_symbol.get(symbol, 0)) + 1
     return ticks_by_symbol
@@ -5292,15 +6001,14 @@ def _effective_runtime_state_for_snapshot(runtime_state: str, *, now_epoch: floa
 
 def _subscribed_tokens_count_by_symbol(tokens: list[int] | None) -> dict[str, int]:
     counts: dict[str, int] = {}
-    for tok in list(tokens or []):
-        try:
-            tok_int = int(tok)
-        except Exception:
+    ownership = get_applied_option_ownership_snapshot()
+    if ownership.state != "KNOWN" or ownership.socket_generation != _current_socket_generation():
+        return counts
+    confirmed = set(_normalize_positive_tokens(tokens))
+    for token, contract in ownership.contracts.items():
+        if int(token) not in confirmed:
             continue
-        symbol = str(_TOKEN_TO_SYMBOL.get(tok_int) or "").upper()
-        if not symbol or symbol == "STICKY":
-            continue
-        counts[symbol] = int(counts.get(symbol, 0)) + 1
+        counts[contract.symbol] = int(counts.get(contract.symbol, 0)) + 1
     return counts
 
 
@@ -5330,20 +6038,21 @@ def _missing_option_tokens_stats() -> tuple[int, dict[str, int]]:
 def _subscribed_option_token_stats(
     *, now_epoch: float, tokens: list[int] | None, sample_limit: int = 10
 ) -> tuple[int, dict[str, float | None], list[dict[str, float | int | str | None]]]:
+    ownership = get_applied_option_ownership_snapshot()
+    if (
+        ownership.state != "KNOWN"
+        or ownership.socket_generation != _current_socket_generation()
+    ):
+        return 0, {}, []
+    requested_tokens = set(_normalize_positive_tokens(tokens or []))
     option_count = 0
     latest_tick_ts_by_symbol: dict[str, float | None] = {}
     age_by_symbol: dict[str, float | None] = {}
     sample_rows: list[dict[str, float | int | str | None]] = []
-    for tok in list(tokens or []):
-        try:
-            tok_int = int(tok)
-        except Exception:
+    for tok_int, contract in ownership.contracts.items():
+        if tok_int not in requested_tokens:
             continue
-        if _is_underlying_token(tok_int):
-            continue
-        symbol = str(_TOKEN_TO_SYMBOL.get(tok_int) or "").upper()
-        if not symbol or symbol == "STICKY":
-            continue
+        symbol = contract.symbol
         option_count += 1
         last_epoch = _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(tok_int))
         age_sec = None if last_epoch is None else max(0.0, float(now_epoch) - float(last_epoch))
@@ -5382,22 +6091,22 @@ def _option_runtime_state(
     ws_connected: bool | None = None,
     sample_limit: int = 10,
 ) -> dict[str, object]:
+    ownership = get_applied_option_ownership_snapshot()
+    ownership_known = bool(
+        ownership.state == "KNOWN"
+        and ownership.socket_generation == _current_socket_generation()
+    )
+    requested_tokens = set(_normalize_positive_tokens(tokens or []))
     subscribed_count_by_symbol: dict[str, int] = {}
     ticks_received_count_by_symbol: dict[str, int] = {}
     last_tick_ts_by_symbol: dict[str, float | None] = {}
     option_age_by_symbol: dict[str, float | None] = {}
     sample_rows: list[dict[str, float | int | str | None]] = []
     option_count = 0
-    for tok in list(tokens or []):
-        try:
-            tok_int = int(tok)
-        except Exception:
+    for tok_int, contract in ownership.contracts.items() if ownership_known else ():
+        if tok_int not in requested_tokens:
             continue
-        if _is_underlying_token(tok_int):
-            continue
-        symbol = str(_TOKEN_TO_SYMBOL.get(tok_int) or "").upper()
-        if not symbol or symbol == "STICKY":
-            continue
+        symbol = contract.symbol
         option_count += 1
         subscribed_count_by_symbol[symbol] = int(subscribed_count_by_symbol.get(symbol, 0)) + 1
         last_epoch = _coerce_epoch(_LAST_MSG_TS_BY_TOKEN.get(tok_int))
@@ -5486,6 +6195,9 @@ def _option_runtime_state(
     registry.prune_invalid_owners(now_ts=float(now_epoch), scope="feed_symbol", valid_owner_keys=valid_owner_keys)
     registry.expire_stale(float(now_epoch), scope="feed_symbol")
     return {
+        "applied_option_ownership_state": "KNOWN" if ownership_known else "UNKNOWN",
+        "applied_option_ownership_generation": int(ownership.socket_generation),
+        "applied_option_ownership_revision": int(ownership.revision),
         "option_count": int(option_count),
         "option_age_by_symbol": option_age_by_symbol,
         "sample_rows": sample_rows[: max(1, int(sample_limit))],
@@ -6712,6 +7424,66 @@ def _load_option_token_meta(symbol: str, exchange: str, expiry) -> dict[int, dic
     return out
 
 
+def _stage_option_contracts_from_resolution(
+    resolution: Sequence[Mapping[str, Any]], *, source: str
+) -> int:
+    """Stage only option identities explicitly represented by resolver rows."""
+    expected: set[int] = set()
+    contracts: dict[int, dict[str, Any]] = {}
+    malformed = False
+    for row in resolution:
+        if not isinstance(row, Mapping):
+            malformed = True
+            continue
+        symbol = str(row.get("symbol") or "").strip().upper()
+        exchange = str(row.get("exchange") or ("BFO" if symbol == "SENSEX" else "NFO")).strip().upper()
+        index_token = _normalize_positive_tokens([row.get("index_token")])
+        if symbol not in _INDEX_SYMBOLS or not index_token:
+            malformed = True
+            continue
+        row_tokens = set(_normalize_positive_tokens(row.get("tokens") or ()))
+        option_tokens = row_tokens - set(index_token)
+        try:
+            declared_count = int(row.get("final_option_count", row.get("option_count", -1)))
+        except (TypeError, ValueError, OverflowError):
+            malformed = True
+            continue
+        if declared_count != len(option_tokens):
+            malformed = True
+            continue
+        expected.update(option_tokens)
+        metadata = _load_option_token_meta(symbol, exchange, row.get("expiry"))
+        for token in option_tokens:
+            meta = metadata.get(token)
+            if not meta:
+                continue
+            contracts[token] = {
+                "symbol": symbol,
+                "instrument_type": meta.get("instrument_type"),
+                "exchange": exchange,
+                "expiry": row.get("expiry"),
+                "strike": meta.get("strike"),
+            }
+    if not resolution:
+        # A missing resolver row is not proof of an empty option universe.
+        expected.update(
+            int(token)
+            for token, symbol in dict(_TOKEN_TO_SYMBOL or {}).items()
+            if str(symbol or "").strip().upper() in _INDEX_SYMBOLS
+            and int(token) not in set(_UNDERLYING_TOKENS)
+        )
+        malformed = bool(expected)
+    if malformed:
+        # Retain every explicit expected option token. The exact-key check in
+        # record_desired_option_contracts keeps this proposal incomplete.
+        contracts = {token: identity for token, identity in contracts.items() if token in expected}
+    return record_desired_option_contracts(
+        contracts,
+        expected_tokens=sorted(expected),
+        source=source,
+    )
+
+
 def _maybe_raise_option_token_incident(
     *,
     symbol: str,
@@ -6906,6 +7678,9 @@ def _build_subscription_tokens_impl(
     global _UNDERLYING_TOKENS, _UNDERLYING_TOKEN_TO_SYMBOL, _UNDERLYING_LOGGED_MISSING, _TOKEN_TO_SYMBOL, _LAST_ATM_BY_SYMBOL
     global _LAST_DESIRED_TOKENS
     global _LAST_OPTION_COUNTS_BY_SYMBOL, _LAST_OPTION_MIN_REQUIRED_BY_SYMBOL
+    invalidate_desired_subscription_candidate(
+        "kite_depth_ws._build_subscription_tokens_impl.build_started"
+    )
     symbols = [str(symbol).strip().upper() for symbol in list(symbols or list(getattr(cfg, "SYMBOLS", []) or []))]
     if bool(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False)):
         symbols = [symbol for symbol in symbols if symbol in _INDEX_SYMBOLS]
@@ -6923,6 +7698,7 @@ def _build_subscription_tokens_impl(
     underlying_token_to_symbol: dict[int, str] = {}
     token_to_symbol: dict[int, str] = {}
     option_rank_by_token: dict[int, tuple[float, int, float, int, int]] = {}
+    option_contracts_by_token: dict[int, dict[str, Any]] = {}
     token_exchange_hint: dict[int, str] = {}
     if max_tokens is None:
         max_tokens = getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", _GOVERNED_FEED_SUBSCRIPTION_BUDGET)
@@ -7014,7 +7790,16 @@ def _build_subscription_tokens_impl(
             option_tokens.append(tok_int)
         option_tokens.sort(key=lambda t: _option_distance_rank(option_meta.get(int(t)), atm, step, int(t)))
         for tok in option_tokens:
-            option_rank_by_token[int(tok)] = _option_distance_rank(option_meta.get(int(tok)), atm, step, int(tok))
+            tok_int = int(tok)
+            meta = option_meta.get(tok_int) or {}
+            option_rank_by_token[tok_int] = _option_distance_rank(meta, atm, step, tok_int)
+            option_contracts_by_token[tok_int] = {
+                "symbol": sym_upper,
+                "instrument_type": str(meta.get("instrument_type") or "").upper(),
+                "exchange": exchange,
+                "expiry": _expiry_key(expiry),
+                "strike": meta.get("strike"),
+            }
         option_fail_reason = None
         option_coverage_status = "FULL"
         option_coverage_reason = "full_coverage"
@@ -7428,6 +8213,39 @@ def _build_subscription_tokens_impl(
     )
     desired_tokens = _normalize_positive_tokens(tokens)
     _LAST_DESIRED_TOKENS = desired_tokens or None
+    desired_option_tokens = sorted(set(desired_tokens) & set(option_rank_by_token))
+    try:
+        record_desired_option_contracts(
+            {
+                token: option_contracts_by_token[token]
+                for token in desired_option_tokens
+                if token in option_contracts_by_token
+            },
+            expected_tokens=desired_option_tokens,
+            source="kite_instrument_master_resolver",
+        )
+    except (TypeError, ValueError) as exc:
+        # A rejected proposal does not prove that the currently applied
+        # subscription changed. Preserve applied truth, but make the candidate
+        # incomplete so it cannot be committed as ownership.
+        record_desired_option_contracts(
+            {},
+            expected_tokens=desired_option_tokens,
+            source="kite_instrument_master_resolver.invalid_candidate",
+        )
+        _log_ws(
+            "FEED_OPTION_OWNERSHIP_METADATA_REJECTED",
+            {"reason": str(exc), "expected_token_count": len(desired_option_tokens)},
+        )
+    record_desired_subscription_candidate(
+        desired_tokens,
+        option_tokens=desired_option_tokens,
+        configured_budget=max_tokens,
+        source="kite_depth_ws._build_subscription_tokens_impl",
+        observation_required=bool(
+            getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False)
+        ),
+    )
     return tokens, resolution
 
 
@@ -7809,6 +8627,7 @@ def _compute_rebalance_decision(
     }
 
 
+@_serialize_option_ownership_mutation
 def ensure_subscribed_tokens(tokens: list[int], reason: str = "on_demand", symbol: str | None = None) -> bool:
     global _LAST_TOKENS, _TOKEN_TO_SYMBOL
     if not tokens:
@@ -7824,12 +8643,33 @@ def ensure_subscribed_tokens(tokens: list[int], reason: str = "on_demand", symbo
         socket_generation = _current_socket_generation()
         with _KITE_TICKER_LOCK:
             if _KITE_TICKER is None:
+                _invalidate_option_ownership_for_socket_loss(
+                    f"ensure_subscribed_ws_missing:{reason}"
+                )
                 _log_ws("FEED_SUBSCRIBE_SKIPPED", {"reason": reason, "detail": "ws_not_running"})
                 return False
             existing = set(int(t) for t in (_LAST_TOKENS or []))
             new_tokens = [t for t in tokens if t not in existing]
             if not new_tokens:
                 return True
+            base_snapshot, invalidated = _begin_applied_option_mutation(
+                reason, affected_tokens=new_tokens
+            )
+            desired_snapshot = get_desired_option_contract_snapshot()
+            known_option_tokens = set(desired_snapshot.expected_tokens) | set(base_snapshot.contracts)
+            unclassified_tokens = [
+                token for token in new_tokens
+                if token not in known_option_tokens
+                and not _is_known_non_option_subscription_token(token)
+            ]
+            if unclassified_tokens:
+                invalidated = _invalidate_applied_option_ownership(
+                    "unclassified_on_demand_subscription", socket_generation=socket_generation
+                )
+                _log_ws(
+                    "FEED_OPTION_OWNERSHIP_UNKNOWN",
+                    {"reason": reason, "unclassified_token_count": len(unclassified_tokens)},
+                )
             try:
                 client_mode_before = _client_mode_for_token(_KITE_TICKER, 256265)
                 _record_ws_subscription_operation(
@@ -7883,9 +8723,19 @@ def ensure_subscribed_tokens(tokens: list[int], reason: str = "on_demand", symbo
                     socket_generation=int(_SOCKET_GENERATION),
                 )
                 _LAST_TOKENS = list(existing.union(set(new_tokens)))
-                if symbol:
-                    for tok in new_tokens:
-                        _TOKEN_TO_SYMBOL.setdefault(int(tok), str(symbol))
+                if unclassified_tokens:
+                    return True
+                if not _commit_applied_option_ownership(
+                    socket_generation=socket_generation,
+                    desired_revision=desired_snapshot.revision,
+                    base_snapshot=base_snapshot,
+                    invalidated_revision=invalidated.revision,
+                    confirmed_tokens=_LAST_TOKENS,
+                    subscribe_tokens=new_tokens,
+                    provenance=f"ensure_subscribed_tokens:{reason}",
+                ):
+                    _log_ws("FEED_OPTION_OWNERSHIP_UNCONFIRMED", {"reason": reason, "symbol_hint_ignored": bool(symbol)})
+                    return False
                 _log_ws("FEED_SUBSCRIBE_OK", {"reason": reason, "tokens": len(new_tokens)})
                 return True
             except Exception as exc:
@@ -8348,6 +9198,11 @@ def _process_on_ticks(
         return
     callback_socket_generation = int(socket_generation)
     callback_sequence = int(callback_sequence or 0)
+    applied_option_ownership = get_applied_option_ownership_snapshot()
+    callback_option_ownership_known = bool(
+        applied_option_ownership.state == "KNOWN"
+        and applied_option_ownership.socket_generation == callback_socket_generation
+    )
     now_epoch = float(callback_receive_epoch) if callback_receive_epoch is not None else float(time.time())
     record_fd_trace(
         "on_ticks.callback_entry",
@@ -8453,11 +9308,16 @@ def _process_on_ticks(
             max_tick_epoch = float(freshness_tick_epoch)
         depth = t.get("depth")
         last_price = t.get("last_price")
+        parsed_last_price = _safe_float(last_price)
+        valid_ltp = bool(
+            parsed_last_price is not None
+            and math.isfinite(parsed_last_price)
+            and parsed_last_price > 0.0
+        )
         if token_int is not None:
-            _LAST_MSG_TS_BY_TOKEN[int(token_int)] = float(freshness_tick_epoch)
-            _record_ws_recovery_tick_receipt(token=int(token_int), receipt_epoch=float(now_epoch))
-            parsed_last_price = _safe_float(last_price)
-            if parsed_last_price is not None and math.isfinite(parsed_last_price) and parsed_last_price > 0.0:
+            if valid_ltp:
+                _LAST_MSG_TS_BY_TOKEN[int(token_int)] = float(freshness_tick_epoch)
+                _record_ws_recovery_tick_receipt(token=int(token_int), receipt_epoch=float(now_epoch))
                 _record_feed_restart_verify_tick(
                     token=int(token_int),
                     receipt_epoch=float(now_epoch),
@@ -8536,7 +9396,7 @@ def _process_on_ticks(
                     ask=ask,
                     mid=mid,
                     ts_epoch=freshness_tick_epoch,
-                    last_price=last_price,
+                    last_price=parsed_last_price if valid_ltp else None,
                     volume=t.get("volume") if t.get("volume") is not None else t.get("volume_traded"),
                 )
         if observation_token_allowed:
@@ -8589,23 +9449,41 @@ def _process_on_ticks(
         option_freshness_symbol = None
         if _is_index_symbol(symbol) and not underlying_tick:
             freshness_symbol = None
-        if (not underlying_tick) and symbol and last_price is not None:
-            option_freshness_symbol = symbol
+        # Option freshness is scoped to the production option universe. The
+        # launch builder merges observation cash tokens into _TOKEN_TO_SYMBOL
+        # and _UNDERLYING_TOKEN_TO_SYMBOL before callbacks arrive; they must
+        # keep their ordinary/shadow routing without satisfying option age.
+        applied_option_contract = (
+            applied_option_ownership.contracts.get(token_int)
+            if callback_option_ownership_known and token_int is not None
+            else None
+        )
+        if (
+            token_int is not None
+            and not underlying_tick
+            and applied_option_contract is not None
+            and valid_ltp
+        ):
+            option_freshness_symbol = applied_option_contract.symbol
         record_fd_trace(
             "on_ticks.pre_symbol_freshness",
             row_index=_FEED_ON_TICKS_ROW_SEQ,
             queue_depth=write_queue_depth(),
             pending_writes=max(0, write_enqueue_count() - write_flush_count()),
             runtime_store_writes=_FEED_RUNTIME_SNAPSHOT_WRITE_COUNT,
-            extra={"token": token_int, "symbol": symbol, "has_depth": has_depth, "has_ltp": last_price is not None},
+            extra={"token": token_int, "symbol": symbol, "has_depth": has_depth, "has_ltp": valid_ltp},
         )
         _update_symbol_freshness(
             freshness_symbol,
             freshness_tick_epoch,
-            has_ltp=last_price is not None,
+            has_ltp=valid_ltp,
             has_depth=has_depth,
-            option_symbol=option_freshness_symbol,
+            option_symbol=None,
         )
+        if option_freshness_symbol and token_int is not None:
+            _record_option_freshness_if_current(
+                applied_option_ownership, token_int, freshness_tick_epoch
+            )
         try:
             record_tick(
                 token=token_int,
@@ -8911,7 +9789,7 @@ def _stop_depth_ws_impl(reason: str = "manual_stop"):
     """
     Stop watchdog and close existing KiteTicker instance.
     """
-    global _KITE_TICKER, _WATCHDOG_STOP, _WATCHDOG_THREAD, _STALE_STRIKES, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _SYMBOL_LAST_OPTION_TICK_TS
+    global _KITE_TICKER, _WATCHDOG_STOP, _WATCHDOG_THREAD, _STALE_STRIKES, _STOP_REQUESTED, _LAST_WS_TICK_EPOCH, _LAST_MSG_TS_BY_TOKEN, _LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN, _LAST_PAYLOAD_TS_BY_TOKEN, _LAST_FEED_TICK_LOG_MINUTE, _LAST_FEED_HEALTH_STATE, _RUNTIME_STATE, _SYMBOL_LAST_OPTION_TICK_TS, _PARTIAL_RECOVERY_VERIFICATION
     transition = _begin_socket_transition(f"stop_depth_ws:{reason}")
     if transition is None:
         return False
@@ -8930,10 +9808,23 @@ def _stop_depth_ws_impl(reason: str = "manual_stop"):
                 _STOP_REQUESTED = True
                 _LAST_FEED_HEALTH_STATE = None
                 _RUNTIME_STATE = "STOPPED"
+                # Even when the socket resources are already absent, replace
+                # the latest artifact after retiring proof. Otherwise an old
+                # verified recovery record remains visible as current state.
+                _PARTIAL_RECOVERY_VERIFICATION = {}
+                _persist_runtime_snapshot_row(
+                    ws_connected=False,
+                    source=f"stop_depth_ws:{reason}",
+                    runtime_state="STOPPED",
+                    last_error=str(reason),
+                )
                 return True
         # Retire callbacks before close/disconnect. The barrier above has
         # already drained every callback admitted under the previous generation.
         _advance_socket_generation()
+        # Generation advancement follows the acknowledged callback barrier.
+        # Clear proof only now, before any terminal snapshot can serialize it.
+        _PARTIAL_RECOVERY_VERIFICATION = {}
         with _KITE_TICKER_LOCK:
             has_active_ticker = _KITE_TICKER is not None
             has_active_watchdog = _WATCHDOG_THREAD is not None or _WATCHDOG_STOP is not None
@@ -9822,6 +10713,7 @@ def _start_depth_ws_impl(
         )
         return False
 
+    @_serialize_option_ownership_mutation
     def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_tokens: list[int], reason: str):
         global _LAST_TOKENS, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
         old_tokens = sorted({int(token) for token in (_LAST_TOKENS or []) if int(token) > 0})
@@ -9831,8 +10723,18 @@ def _start_depth_ws_impl(
         if not can_mutate:
             _log_ws("FEED_REBALANCE_SKIPPED", {**guard_payload, "guard_reason": guard_reason, "subscribe_count": len(to_subscribe), "unsubscribe_count": len(to_unsubscribe)})
             return False
+        generation = _current_socket_generation()
+        base_snapshot, invalidated = _begin_applied_option_mutation(
+            reason, affected_tokens=sorted(set(to_subscribe + to_unsubscribe))
+        )
+        desired_snapshot = get_desired_option_contract_snapshot()
+        fresh_socket = _is_option_ownership_bootstrap_generation(generation)
+        def generation_is_current() -> bool:
+            return int(generation) == _current_socket_generation()
         try:
             if to_subscribe:
+                if not generation_is_current():
+                    raise RuntimeError("stale_socket_generation_before_subscribe")
                 _record_subscription_requested(to_subscribe)
                 client_mode_before = _client_mode_for_token(ws, 256265)
                 _record_ws_subscription_operation(
@@ -9860,6 +10762,8 @@ def _start_depth_ws_impl(
                     socket_generation=socket_generation,
                 )
                 client_mode_before_mode = _client_mode_for_token(ws, 256265)
+                if not generation_is_current():
+                    raise RuntimeError("stale_socket_generation_before_mode")
                 _record_ws_subscription_operation(
                     ws,
                     to_subscribe,
@@ -9901,8 +10805,11 @@ def _start_depth_ws_impl(
             return False
         if to_unsubscribe:
             try:
-                if hasattr(ws, "unsubscribe"):
-                    ws.unsubscribe(to_unsubscribe)
+                if not hasattr(ws, "unsubscribe"):
+                    raise RuntimeError("unsubscribe_method_missing")
+                if not generation_is_current():
+                    raise RuntimeError("stale_socket_generation_before_unsubscribe")
+                ws.unsubscribe(to_unsubscribe)
             except Exception as exc:
                 _RUNTIME_STATE = "SUBSCRIBE_FAILED"
                 _LAST_RUNTIME_ERROR = f"unsubscribe_delta:{exc}"[:1000]
@@ -9934,6 +10841,8 @@ def _start_depth_ws_impl(
         )
         if _LAST_TOKENS:
             try:
+                if not generation_is_current():
+                    raise RuntimeError("stale_socket_generation_before_final_mode")
                 client_mode_before_final = _client_mode_for_token(ws, 256265)
                 _record_ws_subscription_operation(
                     ws,
@@ -10003,6 +10912,20 @@ def _start_depth_ws_impl(
             reason=reason,
             socket_generation=socket_generation,
         )
+        if not generation_is_current() or not _commit_applied_option_ownership(
+            socket_generation=generation,
+            desired_revision=desired_snapshot.revision,
+            base_snapshot=base_snapshot,
+            invalidated_revision=invalidated.revision,
+            confirmed_tokens=_LAST_TOKENS,
+            subscribe_tokens=to_subscribe,
+            unsubscribe_tokens=to_unsubscribe,
+            fresh_socket=fresh_socket,
+            provenance=f"connect_subscription_delta:{reason}",
+        ):
+            _RUNTIME_STATE = "SUBSCRIBE_FAILED"
+            _LAST_RUNTIME_ERROR = "option_ownership_unconfirmed"
+            return False
         # _advance_completed_transition remains the closure compatibility name;
         # the canonical owner above prevents duplicate epoch advancement.
         _log_ws(
@@ -10042,23 +10965,43 @@ def _start_depth_ws_impl(
         )
         return True
 
+    @_serialize_option_ownership_mutation
     def _resubscribe_full(ws, reason: str):
         global _RUNTIME_STATE, _LAST_RUNTIME_ERROR
         _log_ws("subscription_replay_requested", {"reason": reason})
         old_tokens = sorted({int(token) for token in (_LAST_TOKENS or []) if int(token) > 0})
         desired, selection_payload = _resubscribe_token_selection()
-        if not desired:
-            desired = sorted(set(int(t) for t in (tokens or []) if int(t) > 0))
         desired = sorted({int(token) for token in (desired or []) if int(token) > 0})
         if not desired:
+            selection_reason = str(
+                selection_payload.get("selection_block_reason") or "candidate_empty"
+            ).strip()
+            failure_reason = f"replay_candidate_invalid:{selection_reason}"[:1000]
+            _RUNTIME_STATE = "SUBSCRIBE_FAILED"
+            _LAST_RUNTIME_ERROR = failure_reason
+            _log_ws(
+                "FEED_SUBSCRIPTION_REPLAY_BLOCKED",
+                {
+                    "reason": failure_reason,
+                    "token_source": str(selection_payload.get("token_source") or "blocked"),
+                    "fallback_tokens_count": int(selection_payload.get("fallback_tokens_count") or 0),
+                    "socket_generation": int(socket_generation),
+                },
+            )
             return {
                 "success": False,
                 "changed": False,
                 "status": "FAILED",
-                "reason": "no_tokens",
+                "reason": failure_reason,
                 "old_tokens": old_tokens,
                 "new_tokens": old_tokens,
             }
+        generation = _current_socket_generation()
+        base_snapshot, invalidated = _begin_applied_option_mutation(
+            reason, affected_tokens=desired
+        )
+        desired_snapshot = get_desired_option_contract_snapshot()
+        fresh_socket = _is_option_ownership_bootstrap_generation(generation)
         if desired:
             event_base = {
                 "socket_generation": socket_generation,
@@ -10130,6 +11073,26 @@ def _start_depth_ws_impl(
         )
         _LAST_TOKENS[:] = desired
         tokens[:] = desired
+        if not _commit_applied_option_ownership(
+            socket_generation=generation,
+            desired_revision=desired_snapshot.revision,
+            base_snapshot=base_snapshot,
+            invalidated_revision=invalidated.revision,
+            confirmed_tokens=desired,
+            subscribe_tokens=desired,
+            fresh_socket=fresh_socket,
+            provenance=f"resubscribe_full:{reason}",
+        ):
+            _RUNTIME_STATE = "SUBSCRIBE_FAILED"
+            _LAST_RUNTIME_ERROR = "option_ownership_unconfirmed"
+            return {
+                "success": False,
+                "changed": False,
+                "status": "FAILED",
+                "reason": "option_ownership_unconfirmed",
+                "old_tokens": old_tokens,
+                "new_tokens": list(desired),
+            }
         logger.info(
             "depth_ws_subscribe_apply subscribe_count=%d unsubscribe_count=%d final_count=%d",
             len(desired),
@@ -10241,6 +11204,32 @@ def _start_depth_ws_impl(
                     book["ts_epoch"] = None
                     book["ts"] = None
             resubscribe_result = _resubscribe_full(ws, reason="connect")
+            applied_ownership = get_applied_option_ownership_snapshot()
+            if (
+                not bool(resubscribe_result.get("success"))
+                or applied_ownership.state != "KNOWN"
+                or applied_ownership.socket_generation != int(socket_generation)
+            ):
+                _RUNTIME_STATE = "SUBSCRIBE_FAILED"
+                _LAST_RUNTIME_ERROR = str(
+                    resubscribe_result.get("reason") or "applied_option_ownership_unconfirmed"
+                )[:1000]
+                _log_ws(
+                    "FEED_CONNECT_SUBSCRIPTION_UNCONFIRMED",
+                    {
+                        "socket_generation": int(socket_generation),
+                        "resubscribe_status": str(resubscribe_result.get("status") or "FAILED"),
+                        "ownership_state": applied_ownership.state,
+                        "ownership_generation": int(applied_ownership.socket_generation),
+                    },
+                )
+                _persist_runtime_snapshot_row(
+                    ws_connected=True,
+                    source="on_connect:subscription_unconfirmed",
+                    runtime_state="SUBSCRIBE_FAILED",
+                    last_error=_LAST_RUNTIME_ERROR,
+                )
+                return
             if bool(resubscribe_result.get("success")):
                 _record_ws_recovery_reconnect(
                     now_epoch=float(now_utc_epoch()),
@@ -10288,6 +11277,7 @@ def _start_depth_ws_impl(
         try:
             if not _generation_is_current("on_reconnect"):
                 return
+            _invalidate_option_ownership_for_socket_loss("socket_reconnecting")
             _log_ws("ws_reconnect_attempt", {"attempts": attempts, "ws_lifecycle_state": "RECONNECTING"})
             _log_ws("FEED_RECONNECTING", {"attempts": attempts})
         except Exception as exc:
@@ -10300,6 +11290,7 @@ def _start_depth_ws_impl(
         global _RUNTIME_STATE, _LAST_RUNTIME_ERROR
         if not _generation_is_current("on_error"):
             return
+        _invalidate_option_ownership_for_socket_loss("socket_error")
         campaign_raw_diagnostics.observe_protocol("error", code=code, reason=reason)
         reason_text = str(reason)
         code_int = None
@@ -10409,6 +11400,7 @@ def _start_depth_ws_impl(
         global _RUNTIME_STATE, _LAST_RUNTIME_ERROR
         if not _generation_is_current("on_close"):
             return
+        _invalidate_option_ownership_for_socket_loss("socket_closed")
         campaign_raw_diagnostics.observe_protocol("close", code=code, reason=reason)
         code_int = None
         try:

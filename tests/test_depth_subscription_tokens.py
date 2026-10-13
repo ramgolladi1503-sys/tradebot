@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from config import config as cfg
+from core import depth_subscription_engine as sidecar
 from core import kite_depth_ws as ws
 from core.market_event_graph_live_launch_plan import build_launch_plan
 
@@ -406,6 +407,25 @@ def test_production_only_subscription_builder_excludes_observation_ids(monkeypat
     assert ctx["index_tokens"]["NIFTY"] in production_tokens
 
 
+def test_meg_disabled_builder_caps_budget_and_keeps_replay_candidate_valid(monkeypatch):
+    _setup_depth_window_mocks(monkeypatch)
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 123, raising=False)
+
+    tokens, _resolution = sidecar.build_subscription_tokens(
+        symbols=["NIFTY", "BANKNIFTY", "SENSEX"],
+        max_tokens=150,
+    )
+
+    candidate = ws._DESIRED_SUBSCRIPTION_CANDIDATE
+    replay_tokens, replay_reason = ws._validated_desired_subscription_tokens()
+    assert len(tokens) <= 123
+    assert candidate.configured_budget == 123
+    assert candidate.complete is True
+    assert replay_reason == "validated_desired_plan"
+    assert replay_tokens == sorted(tokens)
+
+
 def test_meg_builder_filters_cash_symbols_and_publishes_only_merged_identities(monkeypatch):
     ctx = _setup_depth_window_mocks(monkeypatch)
     cash_symbols = [f"CASH{i:02d}" for i in range(50)]
@@ -513,6 +533,39 @@ def test_degraded_coverage_blocks_until_fresh_option_tick_proves_recovery(monkey
     )
     assert option_state["feed_block_reason_by_symbol"]["NIFTY"] == "NO_LIVE_OPTION_FEED"
 
+    # This test's recovery assertion requires authoritative applied option
+    # ownership; resolver output alone is only a proposal.
+    identities = {
+        token: {
+            "symbol": "NIFTY",
+            "instrument_type": token_meta[token]["instrument_type"],
+            "exchange": "NFO",
+            "expiry": "2026-03-05",
+            "strike": token_meta[token]["strike"],
+        }
+        for token in option_tokens
+    }
+    generation = ws._current_socket_generation()
+    ws._OPTION_OWNERSHIP_BOOTSTRAP_GENERATION = generation
+    ws._invalidate_applied_option_ownership(
+        "test_reset", socket_generation=generation
+    )
+    revision = ws.record_desired_option_contracts(
+        identities, expected_tokens=option_tokens, source="test_instrument_master"
+    )
+    base, invalidated = ws._begin_applied_option_mutation(
+        "test_local_subscription", affected_tokens=option_tokens
+    )
+    assert ws._commit_applied_option_ownership(
+        socket_generation=generation,
+        desired_revision=revision,
+        base_snapshot=base,
+        invalidated_revision=invalidated.revision,
+        confirmed_tokens=option_tokens,
+        subscribe_tokens=option_tokens,
+        fresh_socket=True,
+        provenance="test_local_api_success",
+    )
     monkeypatch.setattr(ws, "_LAST_MSG_TS_BY_TOKEN", {int(option_tokens[0]): 199.5}, raising=False)
     option_state = ws._option_runtime_state(
         now_epoch=200.0,

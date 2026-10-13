@@ -13,11 +13,12 @@ import core.kite_depth_ws as ws
 from core.feed_recovery_coordinator import FeedRecoveryCoordinator
 import core.tick_store as tick_store
 class _DummyThread:
-    def __init__(self, target=None, daemon=None, args=(), kwargs=None):
+    def __init__(self, target=None, daemon=None, args=(), kwargs=None, name=None):
         self.target = target
         self.args = args
         self.kwargs = kwargs or {}
         self.daemon = daemon
+        self.name = name
         self.started = False
     def start(self):
         self.started = True
@@ -76,6 +77,8 @@ def _patch_common(monkeypatch):
     monkeypatch.setattr(depth_hook_cleanup, "_maybe_reapply_depth_engine", lambda: None, raising=False)
     monkeypatch.setattr(depth_hook_cleanup, "_reapply_depth_engine", lambda *args, **kwargs: None, raising=False)
     importlib.reload(ws)
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False, raising=False)
+    ws.reset_market_event_graph_observation_plan_state()
     reset_kite_runtime_credentials_guard()
     monkeypatch.setattr(ws, "_FEED_RECOVERY_COORDINATOR", FeedRecoveryCoordinator(), raising=False)
     monkeypatch.setattr(ws, "_KITE_TICKER", None, raising=False)
@@ -151,15 +154,64 @@ def _patch_common(monkeypatch):
     tick_store.set_replay_pressure_immediate_flush_enabled(True)
     tick_store.set_replay_pressure_read_flush_enabled(True)
     monkeypatch.setattr(auth_module, "resolve_access_token", lambda **kwargs: "TOKEN123")
-    monkeypatch.setattr(ws.threading, "Thread", _DummyThread)
+    # Keep the mocked WebSocket watchdog threads local to this module.  The
+    # feed runtime and tick-store persistence workers need real threads to
+    # flush their queues, and the threading module object is otherwise shared
+    # across every importer.
+    import threading as threading_module
+    from types import SimpleNamespace
+    monkeypatch.setattr(
+        ws,
+        "threading",
+        SimpleNamespace(
+            Thread=_DummyThread,
+            Event=threading_module.Event,
+            Lock=threading_module.Lock,
+            RLock=threading_module.RLock,
+            current_thread=threading_module.current_thread,
+        ),
+    )
     rest = _DummyRestClient()
     monkeypatch.setattr(ws.kite_client, "ensure", lambda: rest, raising=False)
     monkeypatch.setattr(ws.kite_client, "kite", rest, raising=False)
     monkeypatch.setattr(ws.kite_client, "_active_api_key", "api_key_1234", raising=False)
     monkeypatch.setattr(ws.kite_client, "_active_access_token", "TOKEN123", raising=False)
+
+
+def _commit_known_test_options(tokens, *, symbol="NIFTY"):
+    """Fixture valid local applied ownership for tests that assert option health."""
+    identities = {
+        int(token): {
+            "symbol": symbol,
+            "instrument_type": "CE" if index % 2 == 0 else "PE",
+            "exchange": "NFO",
+            "expiry": "2026-08-06",
+            "strike": 25000 + (index // 2) * 50,
+        }
+        for index, token in enumerate(tokens)
+    }
+    generation = ws._current_socket_generation()
+    ws._OPTION_OWNERSHIP_BOOTSTRAP_GENERATION = generation
+    desired_revision = ws.record_desired_option_contracts(
+        identities, expected_tokens=sorted(identities), source="test_instrument_master"
+    )
+    base, invalidated = ws._begin_applied_option_mutation(
+        "test_local_subscription", affected_tokens=sorted(identities)
+    )
+    assert ws._commit_applied_option_ownership(
+        socket_generation=generation,
+        desired_revision=desired_revision,
+        base_snapshot=base,
+        invalidated_revision=invalidated.revision,
+        confirmed_tokens=sorted(identities),
+        subscribe_tokens=sorted(identities),
+        fresh_socket=True,
+        provenance="test_local_api_success",
+    )
 def _fresh_refresh_stale_symbol_state(monkeypatch, *, fresh_ratio: float = 0.25, stale_count: int = 6, fresh_count: int = 2):
     monkeypatch.setattr(ws, "_LAST_TOKENS", [101, 102, 103, 104, 105, 106, 107, 108], raising=False)
     monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {token: "BANKNIFTY" for token in range(101, 109)}, raising=False)
+    _commit_known_test_options(range(101, 109), symbol="BANKNIFTY")
     monkeypatch.setattr(
         ws,
         "build_subscription_tokens",
@@ -590,6 +642,7 @@ def test_runtime_ws_recovery_requires_complete_identity_proof_and_healthy_window
     monkeypatch.setattr(ws, "_LAST_TOKENS", [101, 202])
     monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {101})
     monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {101: "NIFTY"})
+    _record_test_replay_candidate([101, 202], [202])
     monkeypatch.setattr(ws, "_LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN", {101: 999.0})
     monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
     monkeypatch.setattr(reliability_cfg, "FEED_RECOVERY_HEALTH_WINDOW_SEC", 2.0, raising=False)
@@ -934,6 +987,7 @@ def test_on_ticks_uses_receipt_time_for_option_freshness(monkeypatch, tmp_path):
     tick_store._LAST_TICK_BY_TOKEN.clear()
     try:
         ws.start_depth_ws([555], skip_lock=True, skip_guard=True)
+        _commit_known_test_options([555])
         ticker = captured["ticker"]
         ticker.on_ticks(
             ticker,
@@ -1023,6 +1077,7 @@ def test_on_ticks_newer_same_symbol_option_tick_refreshes_symbol_age(monkeypatch
     current_epoch = {"value": 100.0}
     monkeypatch.setattr(ws, "now_utc_epoch", lambda: current_epoch["value"])
     ws.start_depth_ws([555, 556], skip_lock=True, skip_guard=True)
+    _commit_known_test_options([555, 556])
     ticker = captured["ticker"]
     ticker.on_ticks(ticker, [{"instrument_token": 555, "last_price": 101.0, "exchange_timestamp": datetime(2026, 2, 19, 9, 30, tzinfo=timezone.utc)}])
     current_epoch["value"] = 105.0
@@ -1485,15 +1540,18 @@ def test_option_feed_verification_logs_begin_and_ok(monkeypatch):
     events: list[tuple[str, dict]] = []
     monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     ws._reset_option_feed_verification(reason="unit_test")
+    _commit_known_test_options([201, 202])
     ws._begin_option_feed_verification(
         reason="connect",
         start_epoch=1000.0,
         requested_by_symbol={"NIFTY": 2},
         subscribed_by_symbol={"NIFTY": 2},
     )
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [201, 202], raising=False)
     assert events[-1][0] == "FEED_OPTION_VERIFY_BEGIN"
     assert ws._option_feed_verification_overlay_payload()["state"] == "PENDING"
-    monkeypatch.setitem(ws._SYMBOL_LAST_OPTION_TICK_TS, "NIFTY", 1001.0)
+    monkeypatch.setitem(ws._LAST_MSG_TS_BY_TOKEN, 201, 1001.0)
+    monkeypatch.setitem(ws._LAST_MSG_TS_BY_TOKEN, 202, 1001.0)
     ws._tick_option_feed_verification(now_epoch=1002.0)
     assert any(event == "FEED_OPTION_VERIFY_OK" for event, _ in events)
     assert ws._option_feed_verification_overlay_payload()["state"] == "OK"
@@ -1608,6 +1666,7 @@ def test_launch_plan_activation_preserves_sticky_identity_and_zero_option_block(
     }
 
     ws.activate_market_event_graph_launch_plan(plan)
+    _commit_known_test_options([201])
     state = ws._option_runtime_state(
         now_epoch=100.0,
         tokens=plan["production_tokens"],
@@ -1772,7 +1831,7 @@ def test_apply_subscription_delta_queued_mutation_returns_false_and_no_last_toke
         res = WsMutationResult(ok=False, action="subscribe", tokens_count=2, socket_present=True, ws_connected=True, scheduled=True, queued=True, applied=False, failure_reason="scheduled", reason="unit_test", ts_epoch=0.0)
         return res, res
     import core.feed.ws_mutation_queue as wmq
-    monkeypatch.setattr(wmq, "safe_subscribe_full_mode", mock_safe)
+    monkeypatch.setattr(wmq, "safe_subscribe_full_mode_observed", mock_safe)
     assert ws._apply_subscription_delta(ticker, [301, 302], [], reason="unit_test") is False
     assert ws._LAST_TOKENS == [101]
     assert any(e == "FEED_MUTATION_QUEUED" for e, _ in events)
@@ -1799,7 +1858,7 @@ def test_refresh_subscription_tokens_queued_returns_false_no_raise(monkeypatch):
         res = WsMutationResult(ok=False, action="subscribe", tokens_count=2, socket_present=True, ws_connected=True, scheduled=True, queued=True, applied=False, failure_reason="scheduled", reason="unit_test", ts_epoch=0.0)
         return res, res
     import core.feed.ws_mutation_queue as wmq
-    monkeypatch.setattr(wmq, "safe_subscribe_full_mode", mock_safe)
+    monkeypatch.setattr(wmq, "safe_subscribe_full_mode_observed", mock_safe)
     assert ws._refresh_subscription_tokens([301, 302], reason="unit_test") is False
     assert ws._LAST_TOKENS == []
     assert any(e == "FEED_MUTATION_QUEUED" for e, _ in events)
@@ -1906,6 +1965,122 @@ def _setup_mock_ticker_and_start(monkeypatch):
     ws.start_depth_ws([101, 102], skip_lock=True, skip_guard=True)
     return captured.get("ticker")
 
+
+def _establish_test_applied_option(ws, token=201):
+    generation = ws._current_socket_generation()
+    identity = {
+        token: {
+            "symbol": "NIFTY", "instrument_type": "CE", "exchange": "NFO",
+            "expiry": "2026-08-06", "strike": 25000,
+        }
+    }
+    revision = ws.record_desired_option_contracts(
+        identity, expected_tokens=[token], source="test_instrument_master"
+    )
+    base, invalidated = ws._begin_applied_option_mutation(
+        "test_initial_apply", affected_tokens=[token]
+    )
+    assert ws._commit_applied_option_ownership(
+        socket_generation=generation,
+        desired_revision=revision,
+        base_snapshot=base,
+        invalidated_revision=invalidated.revision,
+        confirmed_tokens=[token],
+        subscribe_tokens=[token],
+        fresh_socket=True,
+        provenance="test_local_api_success",
+    )
+
+
+def _record_test_replay_candidate(tokens, option_tokens):
+    """Publish a complete desired-plan snapshot for reconnect-only fixtures."""
+    contracts = {
+        int(token): {
+            "symbol": "NIFTY",
+            "instrument_type": "CE" if index % 2 == 0 else "PE",
+            "exchange": "NFO",
+            "expiry": "2026-12-31",
+            "strike": 25000 + index * 50,
+        }
+        for index, token in enumerate(option_tokens)
+    }
+    revision = ws.record_desired_option_contracts(
+        contracts, expected_tokens=list(option_tokens), source="test_reconnect_plan"
+    )
+    assert revision > 0
+    return ws.record_desired_subscription_candidate(
+        tokens,
+        option_tokens=list(option_tokens),
+        configured_budget=123,
+        source="test_reconnect_plan",
+        observation_required=False,
+    )
+
+
+def test_reconnect_callback_invalidates_applied_option_ownership(monkeypatch):
+    _patch_common(monkeypatch)
+    ticker = _setup_mock_ticker_and_start(monkeypatch)
+    _establish_test_applied_option(ws)
+    monkeypatch.setattr(
+        ws,
+        "_resubscribe_token_selection",
+        lambda: ([201], {"token_source": "test_option_replay"}),
+    )
+    generation = ws._current_socket_generation()
+    assert ws.get_applied_option_ownership_snapshot().state == "KNOWN"
+
+    ticker.on_reconnect(ticker, 1)
+
+    snapshot = ws.get_applied_option_ownership_snapshot()
+    assert snapshot.state == "UNKNOWN"
+    assert snapshot.socket_generation == generation
+    assert ws._OPTION_OWNERSHIP_BOOTSTRAP_GENERATION == generation
+
+
+def test_on_connect_does_not_overwrite_failed_option_replay(monkeypatch):
+    _patch_common(monkeypatch)
+    ticker = _setup_mock_ticker_and_start(monkeypatch)
+    _establish_test_applied_option(ws)
+    monkeypatch.setattr(
+        ws,
+        "_resubscribe_token_selection",
+        lambda: ([201], {"token_source": "test_option_replay"}),
+    )
+    monkeypatch.setattr(
+        ws, "_commit_applied_option_ownership", lambda **_kwargs: False
+    )
+
+    ticker.on_connect(ticker, "mock_response")
+
+    assert ws._RUNTIME_STATE == "SUBSCRIBE_FAILED"
+    assert ws.get_applied_option_ownership_snapshot().state == "UNKNOWN"
+    assert "unconfirmed" in ws._LAST_RUNTIME_ERROR or "unconfirmed" in ws._LAST_RUNTIME_ERROR.lower()
+
+
+def test_on_connect_blocks_raw_closure_tokens_when_replay_candidate_is_invalid(monkeypatch):
+    _patch_common(monkeypatch)
+    ticker = _setup_mock_ticker_and_start(monkeypatch)
+    ws._LAST_TOKENS = [101, 102]
+    replay_calls = []
+    monkeypatch.setattr(
+        ws,
+        "_resubscribe_token_selection",
+        lambda: ([], {
+            "token_source": "blocked",
+            "fallback_tokens_count": 2,
+            "selection_block_reason": "desired_subscription_candidate_invalid_or_stale",
+        }),
+    )
+    monkeypatch.setattr(ticker, "subscribe", lambda tokens: replay_calls.append(("subscribe", list(tokens))))
+    monkeypatch.setattr(ticker, "set_mode", lambda mode, tokens: replay_calls.append(("set_mode", mode, list(tokens))))
+
+    ticker.on_connect(ticker, "mock_response")
+
+    assert replay_calls == []
+    assert ws._RUNTIME_STATE == "SUBSCRIBE_FAILED"
+    assert "replay_candidate_invalid" in ws._LAST_RUNTIME_ERROR
+    assert ws.get_applied_option_ownership_snapshot().state != "KNOWN"
+
 def test_b_concurrent_reconnect_requests(monkeypatch):
     """
     Test B — Concurrent reconnect requests
@@ -1960,7 +2135,10 @@ def test_b_concurrent_reconnect_requests(monkeypatch):
     counted_lock = CountedLock()
     monkeypatch.setattr(ws, "_RESTART_LOCK", counted_lock)
 
-    ws._LAST_TOKENS = [101]
+    ws._UNDERLYING_TOKENS = {101}
+    ws._UNDERLYING_TOKEN_TO_SYMBOL = {101: "NIFTY"}
+    ws._LAST_TOKENS = [101, 102]
+    _record_test_replay_candidate([101, 102], [102])
 
     reconnect_attempts = []
     def mock_start_depth_ws(*args, **kwargs):
@@ -2006,6 +2184,8 @@ def test_c_complete_resubscription(monkeypatch):
 
     ws._LAST_TOKENS = [101, 102, 103]
     ws._UNDERLYING_TOKENS = {101}
+    ws._UNDERLYING_TOKEN_TO_SYMBOL = {101: "NIFTY"}
+    _record_test_replay_candidate([101, 102, 103], [102, 103])
 
     # old websocket disconnects
     ticker.close()
@@ -2181,6 +2361,157 @@ def test_partial_recovery_requires_three_stable_cycles(monkeypatch):
     assert ws._RUNTIME_STATE == "LIVE"
 
 
+def test_partial_recovery_does_not_carry_cycles_across_socket_generation(monkeypatch):
+    _patch_common(monkeypatch)
+    ticker = _setup_mock_ticker_and_start(monkeypatch)
+    ticker.on_connect(ticker, "mock_response")
+    monkeypatch.setattr(ws, "_SOCKET_GENERATION", 2, raising=False)
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [101, 102, 103], raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {101}, raising=False)
+    monkeypatch.setattr(ws, "_PENDING_SUBSCRIBE_TOKENS", set(), raising=False)
+    monkeypatch.setattr(ws, "_PENDING_UNSUBSCRIBE_TOKENS", set(), raising=False)
+    monkeypatch.setattr(ws, "_PENDING_MODE_FULL_TOKENS", set(), raising=False)
+    monkeypatch.setattr(ws, "_PARTIAL_RECOVERY_VERIFICATION", {
+        "socket_generation": 1,
+        "stable_cycles": 2,
+        "verified": False,
+    }, raising=False)
+
+    result = ws._transition_partial_activity_recovery(
+        now_epoch=100.0,
+        current_tokens={101, 102, 103},
+        underlying_tokens={101},
+        last_msg_by_token={101: 100.0, 102: 100.0, 103: 100.0},
+        index_threshold_sec=5.0,
+        option_threshold_sec=5.0,
+    )
+
+    assert result["socket_generation"] == 2
+    assert result["stable_cycles"] == 1
+    assert result["verified"] is False
+
+
+def test_partial_recovery_legacy_proof_without_generation_starts_at_one(monkeypatch):
+    _patch_common(monkeypatch)
+    ticker = _setup_mock_ticker_and_start(monkeypatch)
+    ticker.on_connect(ticker, "mock_response")
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [101, 102, 103], raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {101}, raising=False)
+    monkeypatch.setattr(ws, "_PENDING_SUBSCRIBE_TOKENS", set(), raising=False)
+    monkeypatch.setattr(ws, "_PENDING_UNSUBSCRIBE_TOKENS", set(), raising=False)
+    monkeypatch.setattr(ws, "_PENDING_MODE_FULL_TOKENS", set(), raising=False)
+    monkeypatch.setattr(ws, "_PARTIAL_RECOVERY_VERIFICATION", {
+        "stable_cycles": 2,
+        "verified": False,
+    }, raising=False)
+
+    result = ws._transition_partial_activity_recovery(
+        now_epoch=100.0,
+        current_tokens={101, 102, 103},
+        underlying_tokens={101},
+        last_msg_by_token={101: 100.0, 102: 100.0, 103: 100.0},
+        index_threshold_sec=5.0,
+        option_threshold_sec=5.0,
+    )
+
+    assert result["socket_generation"] == ws._current_socket_generation()
+    assert result["stable_cycles"] == 1
+    assert result["verified"] is False
+
+
+def test_missing_or_stale_partial_recovery_proof_serializes_unknown_fail_closed(monkeypatch):
+    _patch_common(monkeypatch)
+    generation = ws._current_socket_generation()
+    monkeypatch.setattr(ws, "_PARTIAL_RECOVERY_VERIFICATION", {
+        "socket_generation": generation - 1,
+        "stable_cycles": 3,
+        "verified": True,
+        "critical_feed_fresh": True,
+        "core_fresh_ratio": 1.0,
+        "depth_feed_fresh_ratio": 1.0,
+    }, raising=False)
+
+    stale = ws._runtime_transport_truth_fields(
+        now_epoch=100.0,
+        ws_connected=True,
+        runtime_state="RUNNING",
+        last_ws_tick_epoch=100.0,
+        last_tick_age_sec=0.0,
+        last_depth_age_sec=0.0,
+        reconnect_blocked_reason=None,
+    )
+    monkeypatch.setattr(ws, "_PARTIAL_RECOVERY_VERIFICATION", {}, raising=False)
+    missing = ws._runtime_transport_truth_fields(
+        now_epoch=100.0,
+        ws_connected=True,
+        runtime_state="RUNNING",
+        last_ws_tick_epoch=100.0,
+        last_tick_age_sec=0.0,
+        last_depth_age_sec=0.0,
+        reconnect_blocked_reason=None,
+    )
+
+    for snapshot in (stale, missing):
+        assert snapshot["recovery_verification"] is None
+        assert snapshot["critical_feed_fresh"] is False
+        assert snapshot["core_feed_fresh_ratio"] == 0.0
+        assert snapshot["depth_feed_fresh_ratio"] == 0.0
+        assert snapshot["execution_feed_ready"] is False
+
+
+def test_acknowledged_stop_does_not_serialize_old_verified_partial_recovery(monkeypatch):
+    _patch_common(monkeypatch)
+    ticker = _setup_mock_ticker_and_start(monkeypatch)
+    generation = ws._current_socket_generation()
+    monkeypatch.setattr(ws, "_PARTIAL_RECOVERY_VERIFICATION", {
+        "socket_generation": generation,
+        "stable_cycles": 3,
+        "verified": True,
+    }, raising=False)
+
+    assert ws.stop_depth_ws(reason="verified_recovery_stop") is True
+    from core.feed import runtime_store
+    runtime_store._RUNTIME_WRITE_QUEUE.join()
+    payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
+
+    assert payload["runtime_state"] == "STOPPED"
+    assert payload.get("recovery_verification") is None
+    assert ws._PARTIAL_RECOVERY_VERIFICATION == {}
+
+
+def test_acknowledged_stop_without_resources_replaces_old_recovery_artifact(monkeypatch):
+    _patch_common(monkeypatch)
+    generation = ws._current_socket_generation()
+    monkeypatch.setattr(ws, "_KITE_TICKER", None, raising=False)
+    monkeypatch.setattr(ws, "_WATCHDOG_THREAD", None, raising=False)
+    monkeypatch.setattr(ws, "_WATCHDOG_STOP", None, raising=False)
+    monkeypatch.setattr(ws, "_PARTIAL_RECOVERY_VERIFICATION", {
+        "socket_generation": generation,
+        "stable_cycles": 3,
+        "verified": True,
+    }, raising=False)
+
+    assert ws.stop_depth_ws(reason="verified_recovery_without_resources") is True
+    from core.feed import runtime_store
+    runtime_store._RUNTIME_WRITE_QUEUE.join()
+    payload = json.loads((ws.logs_dir() / "feed_runtime_latest.json").read_text(encoding="utf-8"))
+
+    assert payload["runtime_state"] == "STOPPED"
+    assert payload.get("recovery_verification") is None
+    assert ws._PARTIAL_RECOVERY_VERIFICATION == {}
+
+
+def test_unacknowledged_stop_barrier_preserves_partial_recovery_proof(monkeypatch):
+    _patch_common(monkeypatch)
+    _setup_mock_ticker_and_start(monkeypatch)
+    proof = {"socket_generation": ws._current_socket_generation(), "stable_cycles": 3, "verified": True}
+    monkeypatch.setattr(ws, "_PARTIAL_RECOVERY_VERIFICATION", dict(proof), raising=False)
+    monkeypatch.setattr(ws, "_begin_socket_transition", lambda reason: None)
+
+    assert ws.stop_depth_ws(reason="barrier_not_acknowledged") is False
+    assert ws._PARTIAL_RECOVERY_VERIFICATION == proof
+
+
 def test_partial_recovery_stale_critical_stays_degraded(monkeypatch):
     _patch_common(monkeypatch)
     ticker = _setup_mock_ticker_and_start(monkeypatch)
@@ -2330,6 +2661,14 @@ def test_g_repeated_reconnect_cycles(monkeypatch):
 
     ws._LAST_TOKENS = [101, 102]
     ws._UNDERLYING_TOKENS = {101}
+    ws._TOKEN_TO_SYMBOL[101] = "NIFTY"
+    ws._UNDERLYING_TOKEN_TO_SYMBOL[101] = "NIFTY"
+    ws.record_desired_option_contracts(
+        {102: {"symbol": "NIFTY", "instrument_type": "CE", "exchange": "NFO", "expiry": "2026-08-06", "strike": 25000}},
+        expected_tokens=[102],
+        source="test_instrument_master",
+    )
+    _record_test_replay_candidate([101, 102], [102])
 
     for i in range(20):
         # Stop existing
@@ -2392,10 +2731,38 @@ def test_ws_recovery_proof_context_aligns_with_resubscribe_selection(monkeypatch
     ws._LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN[underlying] = 100.0
 
     # Desired has underlying + option; last tokens has only underlying
-    ws._LAST_DESIRED_TOKENS = [underlying, option_token]
+    ws._TOKEN_TO_SYMBOL = {option_token: "NIFTY"}
     ws._LAST_TOKENS = [underlying]
+    _record_test_replay_candidate([underlying, option_token], [option_token])
 
     context = ws._new_ws_recovery_proof_context(disconnect_started_at=105.0)
     # Proof context expected tokens should contain both tokens (aligned with what resubscribe will apply)
     assert set(context["expected_tokens"]) == {str(underlying), str(option_token)}
     assert "expected_subscription_set_missing" not in context["invalid_reasons"]
+
+
+def test_ws_recovery_proof_rejects_raw_last_tokens_when_candidate_is_invalid(monkeypatch):
+    _patch_common(monkeypatch)
+    underlying = 256265
+    ws._UNDERLYING_TOKENS = {underlying}
+    ws._UNDERLYING_TOKEN_TO_SYMBOL = {underlying: "NIFTY"}
+    ws._LAST_CALLBACK_RECEIPT_EPOCH_BY_TOKEN[underlying] = 100.0
+    ws._LAST_TOKENS = [underlying, 100001]
+    monkeypatch.setattr(
+        ws,
+        "_resubscribe_token_selection",
+        lambda: ([], {
+            "token_source": "blocked",
+            "fallback_tokens_count": 2,
+            "selection_block_reason": "desired_subscription_candidate_invalid_or_stale",
+        }),
+    )
+
+    context = ws._new_ws_recovery_proof_context(disconnect_started_at=105.0)
+
+    assert context["expected_tokens"] == []
+    assert "expected_subscription_set_missing" in context["invalid_reasons"]
+    assert any(
+        reason.startswith("replay_candidate_invalid:")
+        for reason in context["invalid_reasons"]
+    )
