@@ -736,9 +736,38 @@ def test_packet_driven_completed_bars_export_live_source_meg_row(monkeypatch, tm
     token_by_symbol = {"NIFTY": registry.index_token, **registry.token_by_symbol}
     feed._TOKEN_TO_SYMBOL.update(token_by_symbol)
     feed._UNDERLYING_TOKENS.add(registry.index_token)
-    tokens = list(registry.all_tokens)
+    # The observer union includes the reference index/equity universe plus a
+    # synthetic option pair. Supplying complete option identities lets the
+    # normal callback establish applied ownership through its local subscribe
+    # and FULL-mode calls, as it must in a real governed plan.
+    option_tokens = [9_900_001, 9_900_002]
+    tokens = list(registry.all_tokens) + option_tokens
     plan = {"final_union_tokens": tokens, "observation_tokens": tokens, "production_tokens": [registry.index_token], "launch_plan_sha256": registry.canonical_sha256}
-    feed._set_observation_plan_state(enabled=True, verdict="PASS_LIVE_SOURCE_PRESESSION_READINESS", production_tokens=[registry.index_token], observation_tokens=tokens, final_union_tokens=tokens, configured_budget=150)
+    feed._TOKEN_TO_SYMBOL.update({token: "NIFTY" for token in option_tokens})
+    feed.record_desired_option_contracts(
+        {
+            option_tokens[0]: {"symbol": "NIFTY", "instrument_type": "CE", "exchange": "NFO", "expiry": "2026-12-31", "strike": 25000},
+            option_tokens[1]: {"symbol": "NIFTY", "instrument_type": "PE", "exchange": "NFO", "expiry": "2026-12-31", "strike": 25000},
+        },
+        expected_tokens=option_tokens,
+        source="test_governed_observer_plan",
+    )
+    feed._set_observation_plan_state(
+        enabled=True,
+        verdict="PASS_LIVE_SOURCE_PRESESSION_READINESS",
+        production_tokens=[registry.index_token],
+        observation_tokens=tokens,
+        final_union_tokens=tokens,
+        configured_budget=123,
+        plan_sha=registry.canonical_sha256,
+    )
+    feed.record_desired_subscription_candidate(
+        tokens,
+        option_tokens=option_tokens,
+        configured_budget=123,
+        source="test_governed_observer_plan",
+        observation_required=True,
+    )
 
     export_path = tmp_path / "captured_live_source.jsonl"
     rejection_path = tmp_path / "rejections.jsonl"

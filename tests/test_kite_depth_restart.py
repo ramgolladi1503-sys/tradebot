@@ -10,6 +10,65 @@ import threading
 
 _REAL_THREAD = threading.Thread
 
+
+def _commit_test_option_ownership(contracts):
+    """Model completed local subscribe + FULL-mode application for test tokens."""
+    generation = ws._current_socket_generation()
+    ws._OPTION_OWNERSHIP_BOOTSTRAP_GENERATION = generation
+    ws._invalidate_applied_option_ownership(
+        "test_restart_setup", socket_generation=generation
+    )
+    expected = sorted(int(token) for token in contracts)
+    desired_revision = ws.record_desired_option_contracts(
+        contracts, expected_tokens=expected, source="test_instrument_master"
+    )
+    base, invalidated = ws._begin_applied_option_mutation(
+        "test_confirmed_subscription", affected_tokens=expected
+    )
+    assert ws._commit_applied_option_ownership(
+        socket_generation=generation,
+        desired_revision=desired_revision,
+        base_snapshot=base,
+        invalidated_revision=invalidated.revision,
+        confirmed_tokens=expected,
+        subscribe_tokens=expected,
+        fresh_socket=True,
+        provenance="test_local_api_success",
+    )
+
+
+def _ensure_test_restart_candidate():
+    """Keep restart-policy tests focused on their policy gate, not raw caches."""
+    tokens = list(ws._LAST_TOKENS or [])
+    underlying = set(ws._UNDERLYING_TOKENS or set())
+    option_tokens = [token for token in tokens if token not in underlying]
+    if option_tokens:
+        _record_validated_candidate(tokens, option_tokens)
+
+
+def _record_validated_candidate(tokens, option_tokens, *, budget=123):
+    contracts = {
+        int(token): {
+            "symbol": "NIFTY",
+            "instrument_type": "CE" if index % 2 == 0 else "PE",
+            "exchange": "NFO",
+            "expiry": "2026-12-31",
+            "strike": 25000 + index * 50,
+        }
+        for index, token in enumerate(option_tokens)
+    }
+    ws.record_desired_option_contracts(
+        contracts, expected_tokens=list(option_tokens), source="test_validated_plan"
+    )
+    return ws.record_desired_subscription_candidate(
+        tokens,
+        option_tokens=list(option_tokens),
+        configured_budget=budget,
+        source="test_validated_plan",
+        observation_required=False,
+    )
+
+
 @pytest.fixture(autouse=True)
 def mock_check_socket_health(monkeypatch):
     monkeypatch.setattr("core.feed.ws_mutation_queue._check_socket_health", lambda ws: (True, True, None))
@@ -19,6 +78,19 @@ from types import SimpleNamespace
 
 @pytest.fixture(autouse=True)
 def _reset_ws_runtime_state(monkeypatch):
+    # These tests exercise ordinary production-feed restart policy unless a
+    # test opts into observer mode explicitly.
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False, raising=False)
+    generation = ws._current_socket_generation()
+    ws.invalidate_desired_subscription_candidate("test_isolation")
+    ws.reset_market_event_graph_observation_plan_state()
+    ws.record_desired_option_contracts(
+        {}, expected_tokens=[], source="test_isolation"
+    )
+    ws._invalidate_applied_option_ownership(
+        "test_isolation", socket_generation=generation
+    )
+    ws._OPTION_OWNERSHIP_BOOTSTRAP_GENERATION = 0
     for name, value in {
         "_KITE_TICKER": None,
         "_WATCHDOG_THREAD": None,
@@ -162,6 +234,7 @@ def test_restart_verification_state_blocks_restart_before_side_effects(monkeypat
         ws._FEED_RESTART_VERIFY_FAILURE_DETAIL = "verification_timeout" if state == "FAILED" else ""
         ws._FEED_RESTART_VERIFY_DEADLINE_EPOCH = 1234.0
 
+    _ensure_test_restart_candidate()
     assert ws.restart_depth_ws(reason="retry", ignore_cooldown=True, force_full_restart=True) is False
     assert ws._schedule_restart_depth_ws(
         reason="watchdog_retry", ignore_cooldown=True, force_full_restart=True, source="test"
@@ -184,6 +257,7 @@ def test_restart_verification_block_preserves_auth_latch_priority(monkeypatch):
     with ws._RESTART_VERIFY_LOCK:
         ws._FEED_RESTART_VERIFY_STATE = "PENDING"
 
+    _ensure_test_restart_candidate()
     assert ws.restart_depth_ws(reason="auth_latched") is False
     assert "FEED_RESTART_BLOCKED_AUTH_REQUIRED" in events
     assert "FEED_RESTART_BLOCKED_BY_VERIFICATION" not in events
@@ -274,6 +348,7 @@ def test_soft_resubscribe_rechecks_verification_after_token_selection(monkeypatc
 
     monkeypatch.setattr(ws, "_resubscribe_token_selection", _transition_during_token_selection)
 
+    _ensure_test_restart_candidate()
     assert ws.restart_depth_ws(reason="racing_soft_restart") is False
     assert calls == []
 
@@ -289,6 +364,7 @@ def test_restart_verification_gate_preserves_idle_ok_and_disabled_compatibility(
     with ws._RESTART_VERIFY_LOCK:
         ws._FEED_RESTART_VERIFY_STATE = state
 
+    _ensure_test_restart_candidate()
     assert ws.restart_depth_ws(reason="compatibility_check") is False
     assert calls == ["resolve"]
 
@@ -317,6 +393,7 @@ def test_restart_skips_without_cached_tokens(monkeypatch):
         "_persist_runtime_snapshot_row",
         lambda **kwargs: calls.__setitem__("persist", calls["persist"] + 1),
     )
+    _ensure_test_restart_candidate()
     assert ws.restart_depth_ws(reason="unit_test_no_tokens") is False
     assert calls == {"stop": 0, "start": 0, "persist": 0}
 
@@ -349,6 +426,7 @@ def test_restart_skips_without_tokens_even_with_stale_ticker(monkeypatch):
         lambda reason: calls.__setitem__("soft", calls["soft"] + 1) or True,
     )
 
+    _ensure_test_restart_candidate()
     assert ws.restart_depth_ws(reason="unit_test_no_tokens_stale_ticker") is False
     assert calls == {"stop": 0, "start": 0, "persist": 0, "soft": 0}
 
@@ -382,7 +460,7 @@ def test_stop_depth_ws_noop_without_ticker_or_watchdog(monkeypatch):
 
     ws.stop_depth_ws(reason="unit_test_noop")
 
-    assert calls == {"persist": 0, "close": 0, "join_thread": 0, "join_ticker": 0}
+    assert calls == {"persist": 1, "close": 0, "join_thread": 0, "join_ticker": 0}
 
 
 def test_restart_respects_cooldown(monkeypatch):
@@ -407,11 +485,13 @@ def test_restart_respects_cooldown(monkeypatch):
     monkeypatch.setattr(ws, "start_depth_ws", _start)
     monkeypatch.setattr(ws, "stop_depth_ws", _stop)
 
+    _ensure_test_restart_candidate()
     assert ws.restart_depth_ws(reason="first") is True
     assert calls["start"] == 1
     assert calls["stop"] == 1
 
     # Immediate second restart should be blocked by cooldown.
+    _ensure_test_restart_candidate()
     assert ws.restart_depth_ws(reason="second") is False
     assert calls["start"] == 1
     assert calls["stop"] == 1
@@ -442,8 +522,11 @@ def test_restart_ignore_cooldown_allows_immediate_restart(monkeypatch):
     monkeypatch.setattr(ws, "start_depth_ws", _start)
     monkeypatch.setattr(ws, "stop_depth_ws", _stop)
 
+    _ensure_test_restart_candidate()
     assert ws.restart_depth_ws(reason="first") is True
+    _ensure_test_restart_candidate()
     assert ws.restart_depth_ws(reason="second_blocked") is False
+    _ensure_test_restart_candidate()
     assert ws.restart_depth_ws(reason="third_ignored", ignore_cooldown=True) is True
     assert calls["start"] == 2
     assert calls["stop"] == 2
@@ -505,6 +588,7 @@ def test_restart_uses_soft_path_when_internal_reconnect_enabled(monkeypatch):
     )
     monkeypatch.setattr(ws, "_log_ws", lambda *args, **kwargs: None)
 
+    _ensure_test_restart_candidate()
     assert ws.restart_depth_ws(reason="unit_soft_path") is True
     assert calls["soft"] == 1
 
@@ -980,6 +1064,7 @@ def test_restart_depth_ws_does_not_start_duplicate_recovery_when_coordinator_in_
     monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     monkeypatch.setattr(ws, "stop_depth_ws", lambda reason="manual_stop": calls.__setitem__("stop", calls["stop"] + 1))
 
+    _ensure_test_restart_candidate()
     assert ws.restart_depth_ws(reason="duplicate_recovery_request") is False
     assert calls["stop"] == 0
     assert any(event == "FEED_RECOVERY_ALREADY_IN_PROGRESS" for event, _ in events)
@@ -1073,6 +1158,7 @@ def test_restart_depth_ws_stops_retrying_when_reactor_recovery_is_blocked(monkey
     monkeypatch.setattr(ws, "start_depth_ws", lambda *args, **kwargs: calls.__setitem__("start", calls["start"] + 1))
     monkeypatch.setattr(ws, "_persist_runtime_snapshot_row", lambda **kwargs: calls.__setitem__("persist", calls["persist"] + 1))
 
+    _ensure_test_restart_candidate()
     assert ws.restart_depth_ws(reason="unit_test_reactor_blocked") is False
     assert calls == {"stop": 0, "start": 0, "persist": 1}
 
@@ -1158,6 +1244,7 @@ def test_reactor_terminal_state_blocks_followup_start_restart_and_schedule(monke
         lambda *args, **kwargs: calls.__setitem__("start", calls["start"] + 1) or True,
         raising=True,
     )
+    _ensure_test_restart_candidate()
     assert ws.restart_depth_ws(reason="unit_test_terminal_reactor") is False
     assert (
         ws._schedule_restart_depth_ws(
@@ -1215,6 +1302,7 @@ def test_restart_skips_soft_path_when_ws_tick_is_stale_even_if_socket_connected(
         lambda reason="manual_stop": calls.__setitem__("stop", calls["stop"] + 1),
     )
 
+    _ensure_test_restart_candidate()
     assert ws.restart_depth_ws(reason="feed_health:watchdog_down:no_ws_messages_for_10s") is True
     assert calls == {"soft": 0, "start": 1, "stop": 1}
 
@@ -1316,6 +1404,7 @@ def test_restart_skips_soft_path_for_hard_feed_repair_reason(monkeypatch):
         lambda reason="manual_stop": calls.__setitem__("stop", calls["stop"] + 1),
     )
 
+    _ensure_test_restart_candidate()
     assert ws.restart_depth_ws(reason="auto_repair:SENSEX:ltp_stale") is True
     assert calls == {"soft": 0, "start": 1, "stop": 1}
 
@@ -1353,6 +1442,7 @@ def test_restart_forces_full_path_when_explicitly_requested(monkeypatch):
         lambda reason="manual_stop": calls.__setitem__("stop", calls["stop"] + 1),
     )
 
+    _ensure_test_restart_candidate()
     assert ws.restart_depth_ws(reason="unit_force_full_path", force_full_restart=True) is True
     assert calls == {"soft": 0, "start": 1, "stop": 1}
 
@@ -1390,6 +1480,7 @@ def test_restart_falls_back_to_full_restart_when_ticker_is_disconnected(monkeypa
         lambda reason="manual_stop": calls.__setitem__("stop", calls["stop"] + 1),
     )
 
+    _ensure_test_restart_candidate()
     assert ws.restart_depth_ws(reason="unit_restart_disconnected_ticker") is True
     assert calls == {"soft": 0, "start": 1, "stop": 1}
 
@@ -1401,18 +1492,17 @@ def test_soft_resubscribe_uses_desired_tokens_when_flag_enabled(monkeypatch):
     class _DummyTicker:
         MODE_FULL = "full"
         connected = True
+        ws = object()
+
+        def subscribe(self, tokens):
+            calls["subscribe"].append(list(tokens))
+
+        def set_mode(self, mode, tokens):
+            assert mode == self.MODE_FULL
+            calls["set_mode"].append(list(tokens))
 
         def is_connected(self):
             return True
-
-    def mock_safe_subscribe_full_mode(ws_obj, tokens, reason, now_epoch, on_applied_callback=None):
-            calls["subscribe"].append(list(tokens))
-            calls["set_mode"].append(list(tokens))
-            if on_applied_callback: on_applied_callback()
-            res = type("WsMutationResult", (), {"ok": True, "applied": True, "queued": False, "failure_reason": ""})()
-            return res, res
-        
-    monkeypatch.setattr("core.feed.ws_mutation_queue.safe_subscribe_full_mode", mock_safe_subscribe_full_mode)
 
     monkeypatch.setattr(ws, "_KITE_TICKER", _DummyTicker(), raising=False)
     monkeypatch.setattr(ws, "_LAST_TOKENS", [1, 2, 3], raising=False)
@@ -1421,6 +1511,8 @@ def test_soft_resubscribe_uses_desired_tokens_when_flag_enabled(monkeypatch):
     monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 100.0, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {1, 2, 3}, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {1: "NIFTY", 2: "BANKNIFTY", 3: "SENSEX"}, raising=False)
+    _record_validated_candidate(list(range(1, 40)), list(range(4, 40)))
+    ws._OPTION_OWNERSHIP_BOOTSTRAP_GENERATION = ws._current_socket_generation()
     monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     monkeypatch.setenv("FEED_USE_DESIRED_TOKENS", "1")
 
@@ -1440,26 +1532,32 @@ def test_soft_resubscribe_uses_last_tokens_when_flag_disabled(monkeypatch):
     class _DummyTicker:
         MODE_FULL = "full"
         connected = True
+        ws = object()
+
+        def subscribe(self, tokens):
+            calls["subscribe"].append(list(tokens))
+
+        def set_mode(self, mode, tokens):
+            assert mode == self.MODE_FULL
+            calls["set_mode"].append(list(tokens))
 
         def is_connected(self):
             return True
 
-    def mock_safe_subscribe_full_mode(ws_obj, tokens, reason, now_epoch, on_applied_callback=None):
-            calls["subscribe"].append(list(tokens))
-            calls["set_mode"].append(list(tokens))
-            if on_applied_callback: on_applied_callback()
-            res = type("WsMutationResult", (), {"ok": True, "applied": True, "queued": False, "failure_reason": ""})()
-            return res, res
-        
-    monkeypatch.setattr("core.feed.ws_mutation_queue.safe_subscribe_full_mode", mock_safe_subscribe_full_mode)
-
     monkeypatch.setattr(ws, "_KITE_TICKER", _DummyTicker(), raising=False)
     monkeypatch.setattr(ws, "_LAST_TOKENS", [11, 22, 33, 44], raising=False)
-    monkeypatch.setattr(ws, "_LAST_DESIRED_TOKENS", list(range(1, 40)), raising=False)
+    ws.invalidate_desired_subscription_candidate("test_desired_unavailable")
     monkeypatch.setattr(ws, "_RUNTIME_STATE", "RUNNING", raising=False)
     monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 100.0, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {11, 22, 33}, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {11: "NIFTY", 22: "BANKNIFTY", 33: "SENSEX"}, raising=False)
+    _commit_test_option_ownership({
+        44: {"symbol": "NIFTY", "instrument_type": "CE", "exchange": "NFO", "expiry": "2026-12-31", "strike": 25000},
+    })
+    _record_validated_candidate(
+        [11, 22, 33, 44], [44], budget=123
+    )
+    ws._OPTION_OWNERSHIP_BOOTSTRAP_GENERATION = -1
     monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     monkeypatch.delenv("FEED_USE_DESIRED_TOKENS", raising=False)
 
@@ -1467,7 +1565,7 @@ def test_soft_resubscribe_uses_last_tokens_when_flag_disabled(monkeypatch):
     assert calls["subscribe"] == [[11, 22, 33, 44]]
     assert calls["set_mode"] == [[11, 22, 33, 44]]
     assert events[-1][0] == "FEED_MUTATION_APPLIED"
-    assert events[-1][1]["desired_tokens_count"] == 39
+    assert events[-1][1]["desired_tokens_count"] == 4
     assert events[-1][1]["fallback_option_tokens_count"] == 1
     assert events[-1][1]["auto_recover_missing_options"] is False
     assert events[-1][1]["resubscribe_tokens_count"] == 4
@@ -1480,26 +1578,27 @@ def test_soft_resubscribe_auto_recovers_desired_tokens_when_current_is_underlyin
     class _DummyTicker:
         MODE_FULL = "full"
         connected = True
+        ws = object()
+
+        def subscribe(self, tokens):
+            calls["subscribe"].append(list(tokens))
+
+        def set_mode(self, mode, tokens):
+            assert mode == self.MODE_FULL
+            calls["set_mode"].append(list(tokens))
 
         def is_connected(self):
             return True
 
-    def mock_safe_subscribe_full_mode(ws_obj, tokens, reason, now_epoch, on_applied_callback=None):
-            calls["subscribe"].append(list(tokens))
-            calls["set_mode"].append(list(tokens))
-            if on_applied_callback: on_applied_callback()
-            res = type("WsMutationResult", (), {"ok": True, "applied": True, "queued": False, "failure_reason": ""})()
-            return res, res
-        
-    monkeypatch.setattr("core.feed.ws_mutation_queue.safe_subscribe_full_mode", mock_safe_subscribe_full_mode)
-
     monkeypatch.setattr(ws, "_KITE_TICKER", _DummyTicker(), raising=False)
-    monkeypatch.setattr(ws, "_LAST_TOKENS", [11, 22, 33], raising=False)
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [1, 2, 3], raising=False)
     monkeypatch.setattr(ws, "_LAST_DESIRED_TOKENS", list(range(1, 40)), raising=False)
     monkeypatch.setattr(ws, "_RUNTIME_STATE", "RUNNING", raising=False)
     monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 100.0, raising=False)
-    monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {11, 22, 33}, raising=False)
-    monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {11: "NIFTY", 22: "BANKNIFTY", 33: "SENSEX"}, raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {1, 2, 3}, raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {1: "NIFTY", 2: "BANKNIFTY", 3: "SENSEX"}, raising=False)
+    _record_validated_candidate(list(range(1, 40)), list(range(4, 40)))
+    ws._OPTION_OWNERSHIP_BOOTSTRAP_GENERATION = ws._current_socket_generation()
     monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     monkeypatch.delenv("FEED_USE_DESIRED_TOKENS", raising=False)
 
@@ -1508,14 +1607,17 @@ def test_soft_resubscribe_auto_recovers_desired_tokens_when_current_is_underlyin
     assert calls["set_mode"] == [list(range(1, 40))]
     assert events[-1][0] == "FEED_MUTATION_APPLIED"
     assert events[-1][1]["fallback_option_tokens_count"] == 0
-    assert events[-1][1]["auto_recover_missing_options"] is True
-    assert events[-1][1]["token_source"] == "desired_auto_recovery"
+    assert events[-1][1]["auto_recover_missing_options"] is False
+    assert events[-1][1]["token_source"] == "validated_desired_plan"
     assert events[-1][1]["resubscribe_tokens_count"] == 39
 
 
 def test_full_restart_uses_desired_tokens_when_flag_enabled(monkeypatch):
     monkeypatch.setattr(ws, "_LAST_TOKENS", [1, 2, 3], raising=False)
     monkeypatch.setattr(ws, "_LAST_DESIRED_TOKENS", list(range(1, 40)), raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {1, 2, 3}, raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {1: "NIFTY", 2: "BANKNIFTY", 3: "SENSEX"}, raising=False)
+    _record_validated_candidate(list(range(1, 40)), list(range(4, 40)))
     monkeypatch.setattr(ws, "_FULL_RESTARTS", [], raising=False)
     monkeypatch.setattr(ws, "_LAST_FULL_RESTART_EPOCH", 0.0, raising=False)
     monkeypatch.setattr(ws, "_STALE_STRIKES", 0, raising=False)
@@ -1537,6 +1639,7 @@ def test_full_restart_uses_desired_tokens_when_flag_enabled(monkeypatch):
     )
     monkeypatch.setattr(ws, "stop_depth_ws", lambda reason="manual_stop": None)
 
+    _ensure_test_restart_candidate()
     assert ws.restart_depth_ws(reason="unit_full_restart") is True
     assert calls["tokens"] == list(range(1, 40))
 
@@ -1567,6 +1670,11 @@ def test_option_runtime_state_marks_live_symbol_fresh_without_cross_symbol_leak(
         },
         raising=False,
     )
+    _commit_test_option_ownership({
+        101: {"symbol": "NIFTY", "instrument_type": "CE", "exchange": "NFO", "expiry": "2026-12-31", "strike": 25000},
+        102: {"symbol": "NIFTY", "instrument_type": "PE", "exchange": "NFO", "expiry": "2026-12-31", "strike": 25000},
+        201: {"symbol": "BANKNIFTY", "instrument_type": "CE", "exchange": "NFO", "expiry": "2026-12-31", "strike": 50000},
+    })
 
     state = ws._option_runtime_state(
         now_epoch=102.0,
@@ -1592,6 +1700,9 @@ def test_option_runtime_state_distinguishes_no_token_no_live_and_stale(monkeypat
     monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {1: "NIFTY", 101: "NIFTY"}, raising=False)
 
     monkeypatch.setattr(ws, "_LAST_MSG_TS_BY_TOKEN", {}, raising=False)
+    _commit_test_option_ownership({
+        101: {"symbol": "NIFTY", "instrument_type": "CE", "exchange": "NFO", "expiry": "2026-12-31", "strike": 25000},
+    })
     no_token = ws._option_runtime_state(
         now_epoch=100.0,
         tokens=[1],
@@ -1651,6 +1762,7 @@ def test_restart_returns_false_when_start_fails_after_stop(monkeypatch):
     monkeypatch.setattr(ws, "stop_depth_ws", _stop)
     monkeypatch.setattr(ws, "start_depth_ws", _start)
 
+    _ensure_test_restart_candidate()
     assert ws.restart_depth_ws(
         reason="ws_error:1006",
         ignore_cooldown=True,
@@ -1698,6 +1810,7 @@ def test_restart_writes_start_requested_before_ok_when_start_handoff_succeeds(mo
     monkeypatch.setattr(ws, "stop_depth_ws", _stop)
     monkeypatch.setattr(ws, "start_depth_ws", _start)
 
+    _ensure_test_restart_candidate()
     assert ws.restart_depth_ws(
         reason="ws_error:1006",
         ignore_cooldown=True,
@@ -1762,6 +1875,7 @@ def test_restart_verification_pending_when_start_handoff_succeeds_but_no_connect
 
     monkeypatch.setattr(ws, "start_depth_ws", _start)
 
+    _ensure_test_restart_candidate()
     assert ws.restart_depth_ws(reason="ws_error:1006", ignore_cooldown=True, force_full_restart=True) is True
 
     ws._write_feed_runtime_snapshot(
@@ -1812,6 +1926,9 @@ def test_restart_verification_emits_verified_ok_only_after_connect_subscribe_and
     monkeypatch.setattr(ws, "_RUNTIME_STATE", "RUNNING", raising=False)
 
     monkeypatch.setattr(ws, "_SOCKET_GENERATION", 20, raising=False)
+    _commit_test_option_ownership({
+        101: {"symbol": "NIFTY", "instrument_type": "CE", "exchange": "NFO", "expiry": "2026-12-31", "strike": 25000},
+    })
     ws._begin_feed_restart_verification(reason="ws_error:1006", start_epoch=1000.0, now_epoch=1000.0, socket_generation=20)
     ws._record_feed_restart_verify_connect(now_epoch=1000.5, socket_generation=20)
     ws._record_feed_restart_verify_subscribe(now_epoch=1000.6, socket_generation=20)
@@ -1917,6 +2034,9 @@ def test_restart_verification_failed_state_can_recover_after_fresh_proof(monkeyp
     monkeypatch.setattr(ws, "_RUNTIME_STATE", "RUNNING", raising=False)
 
     monkeypatch.setattr(ws, "_SOCKET_GENERATION", 20, raising=False)
+    _commit_test_option_ownership({
+        101: {"symbol": "NIFTY", "instrument_type": "CE", "exchange": "NFO", "expiry": "2026-12-31", "strike": 25000},
+    })
     ws._begin_feed_restart_verification(reason="ws_error:1006", start_epoch=1000.0, now_epoch=1000.0, socket_generation=20)
     ws._tick_feed_restart_verification(now_epoch=1001.0)
     assert ws._FEED_RESTART_VERIFY_STATE == "FAILED"
@@ -2470,6 +2590,7 @@ def test_hard_feed_dead_no_ticks_ignores_cooldown_and_forces_full_restart(monkey
     )
     monkeypatch.setattr(ws.time, "time", lambda: 1001.0)
 
+    _ensure_test_restart_candidate()
     assert (
         ws.restart_depth_ws(
             reason="no_ticks_age=11.0s",
@@ -2529,6 +2650,7 @@ def test_hard_feed_dead_depth_stale_ignores_cooldown_and_forces_full_restart(mon
     )
     monkeypatch.setattr(ws.time, "time", lambda: 1001.0)
 
+    _ensure_test_restart_candidate()
     assert (
         ws.restart_depth_ws(
             reason="depth_stale_age=9.9s",
@@ -2587,6 +2709,7 @@ def test_market_open_option_subscriptions_missing_forces_full_restart(monkeypatc
     monkeypatch.setattr(ws, "_soft_resubscribe_current", _soft)
     monkeypatch.setattr(ws.time, "time", lambda: 1001.0)
 
+    _ensure_test_restart_candidate()
     assert (
         ws.restart_depth_ws(
             reason="market_open_option_subscriptions_missing",
@@ -2624,6 +2747,7 @@ def test_repeated_hard_restarts_trip_storm_breaker(monkeypatch):
     monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     monkeypatch.setattr(ws.time, "time", lambda: 902.0)
 
+    _ensure_test_restart_candidate()
     assert (
         ws.restart_depth_ws(
             reason="no_ticks_age=20.0s",
@@ -2664,8 +2788,11 @@ def test_breaker_blocked_restart_logging_uses_storm_cooldown(monkeypatch):
     monkeypatch.setattr(ws, "now_utc_epoch", lambda: next(times))
     events = []
 
+    _ensure_test_restart_candidate()
     assert ws.restart_depth_ws(reason="tick_stalled", force_full_restart=True) is False
+    _ensure_test_restart_candidate()
     assert ws.restart_depth_ws(reason="tick_stalled", force_full_restart=True) is False
+    _ensure_test_restart_candidate()
     assert ws.restart_depth_ws(reason="depth_stale", force_full_restart=True) is False
 
     blocked = [payload for event, payload in events if event == "FEED_RESTART_BLOCKED_BY_BREAKER"]
@@ -2701,6 +2828,7 @@ def test_breaker_trip_after_preflight_still_blocks_socket_restart(monkeypatch):
         lambda *args, **kwargs: calls.__setitem__("start", calls["start"] + 1),
     )
 
+    _ensure_test_restart_candidate()
     assert ws.restart_depth_ws(reason="tick_stalled", force_full_restart=True) is False
     assert calls == {"stop": 0, "start": 0}
     assert any(event == "FEED_RESTART_BLOCKED_BY_BREAKER" for event, _payload in events)
@@ -2744,6 +2872,7 @@ def test_auth_required_latch_blocks_hard_restart(monkeypatch):
     events = []
     monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
 
+    _ensure_test_restart_candidate()
     assert (
         ws.restart_depth_ws(
             reason="depth_stale_age=99.0s",
@@ -2787,6 +2916,7 @@ def test_storm_breaker_trips_on_velocity(monkeypatch):
     monkeypatch.setattr(ws.time, "time", lambda: 299.0)
 
     # 5th restart attempt should fail because there are already 4 in the 300s window.
+    _ensure_test_restart_candidate()
     assert ws.restart_depth_ws(reason="velocity_trip", ignore_cooldown=True, force_full_restart=True) is False
     assert "FEED_RESTART_STORM_TRIP" in [event for event, _payload in events]
     assert calls["breaker"] == 1
@@ -2798,6 +2928,7 @@ def test_storm_breaker_allows_restarts_over_long_window(monkeypatch):
 
     monkeypatch.setattr(ws, "_LAST_TOKENS", [123, 456], raising=False)
     monkeypatch.setattr(ws, "_LAST_DESIRED_TOKENS", [123, 456], raising=False)
+    _record_validated_candidate([123, 456], [123, 456])
     monkeypatch.setattr(ws, "_AUTH_REQUIRED_LATCH", False, raising=False)
     monkeypatch.setattr(ws, "_STOP_REQUESTED", False, raising=False)
     monkeypatch.setattr(ws, "_STALE_STRIKES", 0, raising=False)
@@ -2867,6 +2998,7 @@ def test_hourly_cap_rate_limits_safely(monkeypatch):
     # But total in last hour (3600s) is 6, which >= max_per_hour (6).
     monkeypatch.setattr(ws.time, "time", lambda: 2510.0)
 
+    _ensure_test_restart_candidate()
     assert ws.restart_depth_ws(reason="hourly_cap", ignore_cooldown=True, force_full_restart=True) is False
     assert "FEED_RESTART_STORM_TRIP" not in [event for event, _payload in events]
     assert calls["breaker"] == 0

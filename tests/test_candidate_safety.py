@@ -4,24 +4,41 @@ import json
 import time
 from unittest.mock import patch, MagicMock
 
-def test_subscription_delta_uses_safe_mutation_interface():
+def test_subscription_delta_uses_observed_mutation_interface():
     from core.kite_depth_ws import _apply_subscription_delta
     ws = MagicMock()
-    with patch("core.feed.ws_mutation_queue.safe_subscribe_full_mode") as mock_sub, \
+    with patch("core.feed.ws_mutation_queue.safe_subscribe_full_mode_observed") as mock_sub, \
          patch("core.feed.ws_mutation_queue.safe_unsubscribe") as mock_unsub, \
          patch("core.kite_depth_ws._can_mutate_ws_subscriptions", return_value=(True, "ok", {})):
         
         # mock return values (WsMutationResult mock)
         mock_res = MagicMock()
         mock_res.ok = True
+        mock_res.applied = True
+        mock_res.queued = False
+        mock_res.failure_reason = None
         mock_sub.return_value = (mock_res, mock_res)
         mock_unsub.return_value = mock_res
+
+        # A healthy local mutation invokes the application callback only after
+        # subscribe and FULL mode have both been confirmed by the adapter.
+        def apply_locally(_ws, _tokens, _reason, _now_epoch, on_applied_callback=None, **_kwargs):
+            if on_applied_callback:
+                on_applied_callback()
+            return mock_res, mock_res
+
+        mock_sub.side_effect = apply_locally
+        mock_unsub.side_effect = lambda _ws, _tokens, _reason, _now_epoch, on_applied_callback=None: (
+            on_applied_callback() if on_applied_callback else None
+        ) or mock_res
         
         _apply_subscription_delta(ws, [123], [456], "test")
         
         assert mock_sub.call_count == 1
         assert mock_sub.call_args[0][0] == ws
         assert mock_sub.call_args[0][1] == [123]
+        assert mock_sub.call_args.kwargs["socket_generation"] is not None
+        assert callable(mock_sub.call_args.kwargs["active_generation"])
         
         assert mock_unsub.call_count == 1
         assert mock_unsub.call_args[0][0] == ws

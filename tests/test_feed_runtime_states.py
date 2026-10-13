@@ -14,8 +14,42 @@ import pytest
 from core.runtime_truth_integrity import truth_hash_from_mapping
 
 
+def _commit_test_option_ownership(contracts):
+    """Give healthy snapshot fixtures generation-bound applied identities."""
+    generation = depth_ws._current_socket_generation()
+    depth_ws._OPTION_OWNERSHIP_BOOTSTRAP_GENERATION = generation
+    depth_ws._invalidate_applied_option_ownership(
+        "test_snapshot_setup", socket_generation=generation
+    )
+    expected = sorted(int(token) for token in contracts)
+    desired_revision = depth_ws.record_desired_option_contracts(
+        contracts, expected_tokens=expected, source="test_instrument_master"
+    )
+    base, invalidated = depth_ws._begin_applied_option_mutation(
+        "test_confirmed_subscription", affected_tokens=expected
+    )
+    assert depth_ws._commit_applied_option_ownership(
+        socket_generation=generation,
+        desired_revision=desired_revision,
+        base_snapshot=base,
+        invalidated_revision=invalidated.revision,
+        confirmed_tokens=expected,
+        subscribe_tokens=expected,
+        fresh_socket=True,
+        provenance="test_local_api_success",
+    )
+
+
 def _reset_depth_ws_test_state(monkeypatch):
     reset_blocker_registries()
+    generation = depth_ws._current_socket_generation()
+    depth_ws.record_desired_option_contracts(
+        {}, expected_tokens=[], source="test_isolation"
+    )
+    depth_ws._invalidate_applied_option_ownership(
+        "test_isolation", socket_generation=generation
+    )
+    depth_ws._OPTION_OWNERSHIP_BOOTSTRAP_GENERATION = 0
     for name, value in {
         "_KITE_TICKER": None,
         "_WATCHDOG_THREAD": None,
@@ -236,6 +270,9 @@ def test_persist_runtime_snapshot_row_updates_json_artifact(monkeypatch, tmp_pat
     monkeypatch.setattr(depth_ws, "_PENDING_SUBSCRIBE_TOKENS", set(), raising=False)
     monkeypatch.setattr(depth_ws, "_PENDING_UNSUBSCRIBE_TOKENS", set(), raising=False)
     monkeypatch.setattr(depth_ws, "_PENDING_MODE_FULL_TOKENS", set(), raising=False)
+    _commit_test_option_ownership({
+        101: {"symbol": "NIFTY", "instrument_type": "CE", "exchange": "NFO", "expiry": "2026-12-31", "strike": 25000},
+    })
 
     depth_ws._persist_runtime_snapshot_row(
         ws_connected=True,
@@ -544,6 +581,15 @@ def test_write_feed_runtime_snapshot_uses_atomic_writer(monkeypatch, tmp_path):
     monkeypatch.setattr(depth_ws, "_UNDERLYING_TOKENS", {1}, raising=False)
     monkeypatch.setattr(depth_ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {1: "NIFTY"}, raising=False)
     monkeypatch.setattr(depth_ws, "_TOKEN_TO_SYMBOL", {1: "NIFTY", 101: "NIFTY"}, raising=False)
+    _commit_test_option_ownership({
+        101: {
+            "symbol": "NIFTY",
+            "instrument_type": "CE",
+            "exchange": "NFO",
+            "expiry": "2026-12-31",
+            "strike": 25000,
+        }
+    })
     monkeypatch.setattr(depth_ws, "_LAST_OPTION_COUNTS_BY_SYMBOL", {"NIFTY": 1}, raising=False)
     monkeypatch.setattr(depth_ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {"NIFTY": 1}, raising=False)
     monkeypatch.setattr(depth_ws, "_LAST_MSG_TS_BY_TOKEN", {101: 199.0}, raising=False)
@@ -588,7 +634,8 @@ def test_write_feed_runtime_snapshot_uses_atomic_writer(monkeypatch, tmp_path):
         ),
     )
     assert payload["feed_ok"] is False
-    assert payload["execution_feed_ready"] is True
+    assert payload["execution_feed_ready"] is False
+    assert payload["canonical_feed_state"] == "DEGRADED_LOCAL"
     assert (logs_path / "feed_runtime_latest.json").exists()
 
 
@@ -678,6 +725,10 @@ def test_persist_runtime_snapshot_uses_latest_option_tick_for_symbol_freshness(m
     monkeypatch.setattr(depth_ws, "_latest_db_tick_epoch", lambda: 199.0, raising=False)
     monkeypatch.setattr(depth_ws, "_STALE_STRIKES", 0, raising=False)
     monkeypatch.setattr(depth_ws, "_INTENDED_TOKEN_COUNT", 3, raising=False)
+    _commit_test_option_ownership({
+        101: {"symbol": "NIFTY", "instrument_type": "CE", "exchange": "NFO", "expiry": "2026-12-31", "strike": 25000},
+        102: {"symbol": "NIFTY", "instrument_type": "PE", "exchange": "NFO", "expiry": "2026-12-31", "strike": 25000},
+    })
 
     depth_ws._persist_runtime_snapshot_row(
         ws_connected=True,
@@ -709,12 +760,19 @@ def test_persist_runtime_snapshot_keeps_symbol_ok_with_fresh_option_tick_cache(m
     monkeypatch.setattr(depth_ws, "_LAST_OPTION_COUNTS_BY_SYMBOL", {"NIFTY": 2}, raising=False)
     monkeypatch.setattr(depth_ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {"NIFTY": 1}, raising=False)
     monkeypatch.setattr(depth_ws, "_LAST_MSG_TS_BY_TOKEN", {101: 100.0, 102: 110.0}, raising=False)
-    monkeypatch.setattr(depth_ws, "_SYMBOL_LAST_OPTION_TICK_TS", {"NIFTY": 199.0}, raising=False)
+    monkeypatch.setattr(depth_ws, "_SYMBOL_LAST_OPTION_TICK_TS", {}, raising=False)
     monkeypatch.setattr(depth_ws, "_LAST_WS_TICK_EPOCH", 199.0, raising=False)
     monkeypatch.setattr(depth_ws, "_latest_depth_epoch_from_store", lambda: 199.0, raising=False)
     monkeypatch.setattr(depth_ws, "_latest_db_tick_epoch", lambda: 199.0, raising=False)
     monkeypatch.setattr(depth_ws, "_STALE_STRIKES", 0, raising=False)
     monkeypatch.setattr(depth_ws, "_INTENDED_TOKEN_COUNT", 3, raising=False)
+    _commit_test_option_ownership({
+        101: {"symbol": "NIFTY", "instrument_type": "CE", "exchange": "NFO", "expiry": "2026-12-31", "strike": 25000},
+        102: {"symbol": "NIFTY", "instrument_type": "PE", "exchange": "NFO", "expiry": "2026-12-31", "strike": 25000},
+    })
+    # This cache value represents a later option tick under the established
+    # ownership snapshot; the ownership transition correctly clears old ages.
+    monkeypatch.setattr(depth_ws, "_SYMBOL_LAST_OPTION_TICK_TS", {"NIFTY": 199.0}, raising=False)
 
     depth_ws._persist_runtime_snapshot_row(
         ws_connected=True,
@@ -807,6 +865,9 @@ def test_recovery_blocked_snapshot_sets_executable_false_everywhere(monkeypatch,
     monkeypatch.setattr(depth_ws, "_UNDERLYING_TOKENS", {1}, raising=False)
     monkeypatch.setattr(depth_ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {1: "NIFTY"}, raising=False)
     monkeypatch.setattr(depth_ws, "_TOKEN_TO_SYMBOL", {1: "NIFTY", 101: "NIFTY"}, raising=False)
+    _commit_test_option_ownership({
+        101: {"symbol": "NIFTY", "instrument_type": "CE", "exchange": "NFO", "expiry": "2026-12-31", "strike": 25000},
+    })
     monkeypatch.setattr(depth_ws, "_LAST_OPTION_COUNTS_BY_SYMBOL", {"NIFTY": 1}, raising=False)
     monkeypatch.setattr(depth_ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {"NIFTY": 1}, raising=False)
     monkeypatch.setattr(depth_ws, "_LAST_MSG_TS_BY_TOKEN", {101: 199.0}, raising=False)
@@ -867,6 +928,9 @@ def test_healthy_runtime_snapshot_still_reports_executable_true_everywhere(monke
     monkeypatch.setattr(depth_ws, "_UNDERLYING_TOKENS", {1}, raising=False)
     monkeypatch.setattr(depth_ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {1: "NIFTY"}, raising=False)
     monkeypatch.setattr(depth_ws, "_TOKEN_TO_SYMBOL", {1: "NIFTY", 101: "NIFTY"}, raising=False)
+    _commit_test_option_ownership({
+        101: {"symbol": "NIFTY", "instrument_type": "CE", "exchange": "NFO", "expiry": "2026-12-31", "strike": 25000},
+    })
     monkeypatch.setattr(depth_ws, "_LAST_OPTION_COUNTS_BY_SYMBOL", {"NIFTY": 1}, raising=False)
     monkeypatch.setattr(depth_ws, "_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {"NIFTY": 1}, raising=False)
     monkeypatch.setattr(depth_ws, "_LAST_MSG_TS_BY_TOKEN", {101: 199.0}, raising=False)

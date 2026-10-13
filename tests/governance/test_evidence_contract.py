@@ -839,6 +839,39 @@ def test_current_pr_paths_are_material_and_assessed_by_evs_001():
     )
 
 
+def test_live_option_freshness_claim_covers_its_material_callback_test():
+    evidence_root = evidence_tool.ROOT / "governance/evidence"
+    matrix = json.loads((evidence_root / "VERIFICATION_MATRIX.json").read_text())
+    registry = json.loads((evidence_root / "CLAIM_REGISTRY.json").read_text())
+    item = json.loads(
+        (evidence_root / "work_items/LIVE-OBS-EQ-OPTION-FRESHNESS-20261013.json").read_text()
+    )
+    callback_test = "tests/test_kite_depth_ws_observation_on_ticks.py"
+    covered_paths = (
+        "core/kite_depth_ws.py",
+        callback_test,
+        "governance/evidence/VERIFICATION_MATRIX.json",
+        "tests/governance/test_evidence_contract.py",
+        "governance/evidence/CLAIM_REGISTRY.json",
+        "governance/evidence/work_items/LIVE-OBS-EQ-OPTION-FRESHNESS-20261013.json",
+    )
+    claim_id = "LIVE_OBSERVATION_OPTION_FRESHNESS_ATTRIBUTION"
+    registered_claim = next(row for row in registry["claims"] if row["claim_id"] == claim_id)
+    work_item_claim = item["extensions"]["evidence_standard"]["claims"][0]
+
+    assert callback_test in matrix["material_path_prefixes"]
+    assert callback_test not in matrix["protected_material_path_prefixes"]
+    for path in covered_paths:
+        assert evidence_tool._path_matches(path, item["extensions"]["evidence_standard"]["assessed_paths"])
+        assert evidence_tool._path_matches(path, registered_claim["scope_paths"])
+    assert registered_claim["status"] == "UNVERIFIED"
+    assert work_item_claim["claim_id"] == claim_id
+    assert work_item_claim["status"] == "UNVERIFIED"
+    assert work_item_claim["source_ids"] == []
+    assert work_item_claim["gate_evidence"] == {}
+    assert "overall feed readiness" in work_item_claim["limitation"]
+
+
 def test_summary_marks_strict_and_blocking_findings_accurately():
     strict_report = {"candidate_sha": SUBJECT_SHA, "material_path_count": 1,
                      "finding_count": 2, "mode": "STRICT", "blocking_finding_count": 2,
