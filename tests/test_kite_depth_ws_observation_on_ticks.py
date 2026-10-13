@@ -273,10 +273,12 @@ def test_stale_option_refresh_decision_excludes_observation_sticky_and_unknown_t
         [101, 201, 202], [{"symbol": "NIFTY", "tokens": [101, 201, 202], "stale_option_pruned_count": 0}]
     ))
     monkeypatch.setattr(ws, "get_latest_tick_rows_db", lambda _tokens: {}, raising=False)
-    monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {101: "NIFTY", 201: "NIFTY", 202: "NIFTY"}, raising=False)
+    monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {101: "NIFTY", 201: "NIFTY", 202: "NIFTY", 301: "RELIANCE"}, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {101}, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {101: "NIFTY"}, raising=False)
-    monkeypatch.setattr(ws, "_LAST_TOKENS", [101, 201], raising=False)
+    # The current stream includes an observation equity and an unknown token;
+    # neither belongs to the generation-bound option ownership snapshot.
+    monkeypatch.setattr(ws, "_LAST_TOKENS", [101, 201, 301, 401], raising=False)
     monkeypatch.setattr(ws, "_LAST_MSG_TS_BY_TOKEN", {201: 70.0, 301: 1.0, 401: 1.0}, raising=False)
     monkeypatch.setattr(ws, "_SYMBOL_LAST_OPTION_TICK_TS", {"RELIANCE": 1.0}, raising=False)
     monkeypatch.setattr(ws, "_STALE_OPTION_MUTATION_WINDOW_STATE", {}, raising=False)
@@ -285,16 +287,7 @@ def test_stale_option_refresh_decision_excludes_observation_sticky_and_unknown_t
         202: {"symbol": "NIFTY", "instrument_type": "PE", "exchange": "NFO", "expiry": "2026-08-06", "strike": 25000},
     })
 
-    mutation_candidates = []
-    monkeypatch.setattr(
-        ws,
-        "_should_mutate_stale_option_symbol_subscription",
-        lambda **kwargs: mutation_candidates.append(kwargs["symbol"])
-        or (True, {"diagnostic_urgent": True, "mutation_skip_reason": "", "mutation_window_count_by_symbol": 1}, {}),
-    )
-    monkeypatch.setattr(ws, "_can_mutate_ws_subscriptions", lambda **_kwargs: (True, "ok", {}))
-
-    _applied, decision = ws._maybe_refresh_stale_option_subscription_universe(
+    refresh_requested, decision = ws._maybe_refresh_stale_option_subscription_universe(
         now_epoch=100.0,
         refresh_state={"last_refresh_epoch": 0.0, "last_freshness_refresh_epoch": 0.0},
     )
@@ -302,8 +295,9 @@ def test_stale_option_refresh_decision_excludes_observation_sticky_and_unknown_t
     assert decision["freshness_urgent"] is True
     assert decision["freshness_urgent_symbols"] == ["NIFTY"]
     assert decision["freshness_by_symbol"].keys() == {"NIFTY"}
-    assert mutation_candidates == ["NIFTY"]
-    assert "RELIANCE" not in decision["mutation_eligible_symbols"]
+    assert refresh_requested is True
+    assert decision["refresh_tokens"] == [201]
+    assert decision["subscribe_tokens"] == []
     assert decision["option_count"] == 1
 
 
