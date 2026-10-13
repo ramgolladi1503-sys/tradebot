@@ -1,0 +1,2 @@
+{"id":"AIXION-TB-D001","date":"2026-09-18","decision":"Use repository-backed compact context and bounded task packets for agent-assisted TradeBot work; chat history is not a source of truth.","status":"active","evidence":["AGENTS.md","README.md",".aixion/project.yaml"]}
+{"id":"AIXION-TB-D002","date":"2026-09-18","decision":"TradeBot agent work remains subordinate to AGENTS.md safety rules; the Aixion harness cannot weaken broker, order, risk, feed-freshness, kill-switch, or SIM/PAPER/LIVE boundaries.","status":"active","evidence":["AGENTS.md"]}
