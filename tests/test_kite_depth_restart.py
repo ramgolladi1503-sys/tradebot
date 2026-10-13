@@ -76,6 +76,154 @@ def mock_check_socket_health(monkeypatch):
 from types import SimpleNamespace
 
 
+def test_stale_generation_callback_queues_old_ticker_close_once(monkeypatch):
+    class _Ticker:
+        def __init__(self):
+            self.close_calls = 0
+
+        def close(self):
+            self.close_calls += 1
+
+    old_ticker = _Ticker()
+    active_ticker = _Ticker()
+    queued_calls = []
+    fake_reactor = SimpleNamespace(running=True, callFromThread=queued_calls.append)
+    monkeypatch.setattr("twisted.internet.reactor", fake_reactor)
+    monkeypatch.setattr(ws, "_KITE_TICKER", active_ticker)
+
+    assert ws._request_stale_ticker_retirement(
+        old_ticker, socket_generation=2, active_generation=8
+    ) is True
+    assert ws._request_stale_ticker_retirement(
+        old_ticker, socket_generation=2, active_generation=8
+    ) is False
+    assert old_ticker.close_calls == 0
+    assert active_ticker.close_calls == 0
+    assert len(queued_calls) == 1
+
+    queued_calls[0]()
+
+    assert old_ticker.close_calls == 1
+    assert active_ticker.close_calls == 0
+
+
+def test_stale_ticker_close_is_skipped_if_it_becomes_active(monkeypatch):
+    class _Ticker:
+        def __init__(self):
+            self.close_calls = 0
+
+        def close(self):
+            self.close_calls += 1
+
+    old_ticker = _Ticker()
+    queued_calls = []
+    fake_reactor = SimpleNamespace(running=True, callFromThread=queued_calls.append)
+    monkeypatch.setattr("twisted.internet.reactor", fake_reactor)
+    monkeypatch.setattr(ws, "_KITE_TICKER", _Ticker())
+
+    assert ws._request_stale_ticker_retirement(
+        old_ticker, socket_generation=2, active_generation=8
+    ) is True
+    monkeypatch.setattr(ws, "_KITE_TICKER", old_ticker)
+
+    queued_calls[0]()
+
+    assert old_ticker.close_calls == 0
+
+
+def test_ticker_ownership_lock_covers_identity_check_and_close(monkeypatch):
+    close_started = threading.Event()
+    release_close = threading.Event()
+    activation_attempted = threading.Event()
+    activation_completed = threading.Event()
+
+    class _Ticker:
+        def __init__(self, *, block_close=False):
+            self.close_calls = 0
+            self.block_close = block_close
+
+        def close(self):
+            self.close_calls += 1
+            if self.block_close:
+                close_started.set()
+                assert release_close.wait(timeout=2.0)
+
+    old_ticker = _Ticker(block_close=True)
+    queued_calls = []
+    fake_reactor = SimpleNamespace(running=True, callFromThread=queued_calls.append)
+    monkeypatch.setattr("twisted.internet.reactor", fake_reactor)
+    monkeypatch.setattr(ws, "_KITE_TICKER", _Ticker())
+
+    assert ws._request_stale_ticker_retirement(
+        old_ticker, socket_generation=2, active_generation=8
+    ) is True
+
+    close_thread = _REAL_THREAD(target=queued_calls[0])
+    close_thread.start()
+    assert close_started.wait(timeout=2.0)
+
+    def _activate_old_ticker():
+        activation_attempted.set()
+        with ws._KITE_TICKER_LOCK:
+            ws._KITE_TICKER = old_ticker
+        activation_completed.set()
+
+    activation_thread = _REAL_THREAD(target=_activate_old_ticker)
+    activation_thread.start()
+    try:
+        assert activation_attempted.wait(timeout=2.0)
+        assert not activation_completed.wait(timeout=0.05)
+    finally:
+        release_close.set()
+        close_thread.join(timeout=2.0)
+        activation_thread.join(timeout=2.0)
+
+    assert not close_thread.is_alive()
+    assert not activation_thread.is_alive()
+    assert activation_completed.is_set()
+    assert old_ticker.close_calls == 1
+
+
+def test_active_ticker_is_never_queued_for_stale_retirement(monkeypatch):
+    active_ticker = SimpleNamespace(close_calls=0)
+    queued_calls = []
+    fake_reactor = SimpleNamespace(running=True, callFromThread=queued_calls.append)
+    monkeypatch.setattr("twisted.internet.reactor", fake_reactor)
+    monkeypatch.setattr(ws, "_KITE_TICKER", active_ticker)
+
+    assert ws._request_stale_ticker_retirement(
+        active_ticker, socket_generation=8, active_generation=9
+    ) is False
+    assert queued_calls == []
+    assert active_ticker.close_calls == 0
+
+
+def test_stale_ticker_retirement_fails_closed_without_running_reactor(monkeypatch):
+    class _Ticker:
+        def __init__(self):
+            self.close_calls = 0
+
+        def close(self):
+            self.close_calls += 1
+
+    old_ticker = _Ticker()
+    queued_calls = []
+    fake_reactor = SimpleNamespace(running=False, callFromThread=queued_calls.append)
+    monkeypatch.setattr("twisted.internet.reactor", fake_reactor)
+    monkeypatch.setattr(ws, "_KITE_TICKER", _Ticker())
+    events = []
+    monkeypatch.setattr(ws, "_log_ws", lambda event, payload: events.append(event))
+
+    assert ws._request_stale_ticker_retirement(
+        old_ticker, socket_generation=2, active_generation=8
+    ) is False
+
+    assert old_ticker.close_calls == 0
+    assert queued_calls == []
+    assert not hasattr(old_ticker, "_tradebot_stale_retirement_queued")
+    assert "FEED_STALE_GENERATION_RETIREMENT_ERROR" in events
+
+
 @pytest.fixture(autouse=True)
 def _reset_ws_runtime_state(monkeypatch):
     # These tests exercise ordinary production-feed restart policy unless a
