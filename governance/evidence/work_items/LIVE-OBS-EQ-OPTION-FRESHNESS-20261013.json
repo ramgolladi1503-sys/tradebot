@@ -5,19 +5,23 @@
   "parent_feature": "FEED-TOKEN-OWNERSHIP",
   "title": "Prevent observation equity tokens from satisfying option freshness",
   "schema_version": 1,
-  "current_state": "IN_DEVELOPMENT",
+  "current_state": "BACKLOG",
   "priority": "P1",
   "business_goal": "Exclude the sampled cash observation equity ticks from option-feed freshness attribution while preserving their ordinary LTP and shadow-observation routing.",
   "current_behavior": "The tick callback uses a general token-to-symbol map for option freshness; this map also contains cash observation equities, so those equity ticks can be attributed as option freshness.",
   "expected_behavior": "The callback updates option freshness only for non-underlying tokens classified to a production index option symbol; observation equities continue updating ordinary LTP and observation evidence.",
-  "implementation_contract": "Option freshness and option health statistics derive only from an immutable KNOWN applied-local-subscription ownership snapshot bound to the active socket generation. Snapshot ownership is published only after synchronous successful local subscribe, FULL-mode, and unsubscribe reconciliation; queued, partial, stale-generation, or uncertain mutations remain UNKNOWN. This is local API application evidence, not exchange-delivery confirmation.",
   "in_scope": [
     "core/kite_depth_ws.py",
+    "core/depth_subscription_engine.py",
     "tests/test_kite_depth_ws_observation_on_ticks.py",
+    "tests/test_kite_depth_ws_stability.py",
+    "tests/test_depth_subscription_refresh_contract.py",
+    "tests/test_depth_subscription_tokens.py",
     "governance/evidence/VERIFICATION_MATRIX.json",
     "governance/evidence/CLAIM_REGISTRY.json",
     "tests/governance/test_evidence_contract.py",
     "governance/evidence/work_items/LIVE-OBS-EQ-OPTION-FRESHNESS-20261013.json",
+    "docs/agent_reviews/pr976_live_option_freshness_ownership.md",
     "generation-bound applied option ownership snapshot",
     "subscription mutation reconciliation and option freshness readers"
   ],
@@ -41,6 +45,8 @@
     "observation equity tokens classified to their cash symbol do not update option freshness",
     "option freshness statistics include only contracts in a KNOWN snapshot for the active socket generation",
     "ownership snapshot remains UNKNOWN after queued, failed, partial, or stale-generation mutation",
+    "installed sidecar stages the exact post-prune and post-budget production CE/PE set while keeping cash observations separate",
+    "socket loss invalidates ownership and failed connect replay cannot report RUNNING or KNOWN",
     "index-only subscription mutations do not invalidate option ownership",
     "ownership changes clear option freshness for affected symbols",
     "callback classification tests distinguish cash observation ticks from selected option tokens",
@@ -55,11 +61,16 @@
   "architecture_impact": "Option freshness and health attribution use validated CE/PE instrument identities from the instrument master and an immutable applied-local-subscription snapshot. Candidate resolver maps remain proposals; only synchronous local API reconciliation can establish KNOWN ownership. Generation transitions and uncertain mutations fail closed. This does not prove broker/exchange delivery or overall feed readiness.",
   "allowed_paths": [
     "core/kite_depth_ws.py",
+    "core/depth_subscription_engine.py",
     "tests/test_kite_depth_ws_observation_on_ticks.py",
+    "tests/test_kite_depth_ws_stability.py",
+    "tests/test_depth_subscription_refresh_contract.py",
+    "tests/test_depth_subscription_tokens.py",
     "governance/evidence/VERIFICATION_MATRIX.json",
     "governance/evidence/CLAIM_REGISTRY.json",
     "tests/governance/test_evidence_contract.py",
-    "governance/evidence/work_items/LIVE-OBS-EQ-OPTION-FRESHNESS-20261013.json"
+    "governance/evidence/work_items/LIVE-OBS-EQ-OPTION-FRESHNESS-20261013.json",
+    "docs/agent_reviews/pr976_live_option_freshness_ownership.md"
   ],
   "forbidden_paths": [
     "main.py",
@@ -73,17 +84,20 @@
     "runtime/live/"
   ],
   "expected_tests": [
-    "pytest -q tests/test_kite_depth_ws_observation_on_ticks.py tests/governance/test_evidence_contract.py",
-    "pytest -q tests/test_kite_depth_ws_stability.py tests/test_kite_depth_restart.py -k 'apply_subscription_delta or refresh_subscription_tokens or soft_resubscribe_current or ensure_subscribed'",
-    "git diff --check"
+    "pytest -q tests/test_kite_depth_ws_observation_on_ticks.py tests/test_kite_depth_ws_stability.py tests/test_depth_subscription_refresh_contract.py tests/test_depth_subscription_tokens.py tests/test_subscription_universe_123_contract.py tests/governance/test_evidence_contract.py --tb=short",
+    "python3 -m py_compile core/kite_depth_ws.py core/depth_subscription_engine.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_kite_depth_ws_stability.py tests/test_depth_subscription_refresh_contract.py tests/test_depth_subscription_tokens.py tests/governance/test_evidence_contract.py",
+    "git diff --check",
+    "Parse all changed governance evidence JSON documents."
   ],
   "qa_attack_plan": [
     "cash equity with stale prior option-age entry",
     "selected CE and PE ticks",
     "underlying, sticky, unselected, and unknown token ticks",
     "completed production token-build ownership excludes observation tokens",
+    "post-prune launch-plan metadata preserves only selected production option and underlying identities",
     "unknown and invalid LTP values do not refresh option freshness",
-    "resolver errors and launch-plan updates do not claim applied-subscription reconciliation"
+    "resolver errors and launch-plan updates do not claim applied-subscription reconciliation",
+    "reconnect invalidates applied ownership and failed on_connect replay remains SUBSCRIBE_FAILED"
   ],
   "uat_criteria": [
     "offline callback tests preserve LTP/shadow routing and keep observation equities out of option freshness"
@@ -109,11 +123,16 @@
       "applicability_reason": "This work changes material feed attribution behavior and its focused regression coverage.",
       "assessed_paths": [
         "core/kite_depth_ws.py",
+        "core/depth_subscription_engine.py",
         "tests/test_kite_depth_ws_observation_on_ticks.py",
+        "tests/test_kite_depth_ws_stability.py",
+        "tests/test_depth_subscription_refresh_contract.py",
+        "tests/test_depth_subscription_tokens.py",
         "governance/evidence/VERIFICATION_MATRIX.json",
         "tests/governance/test_evidence_contract.py",
         "governance/evidence/CLAIM_REGISTRY.json",
-        "governance/evidence/work_items/LIVE-OBS-EQ-OPTION-FRESHNESS-20261013.json"
+        "governance/evidence/work_items/LIVE-OBS-EQ-OPTION-FRESHNESS-20261013.json",
+        "docs/agent_reviews/pr976_live_option_freshness_ownership.md"
       ],
       "subject_commit_sha": null,
       "claims": [

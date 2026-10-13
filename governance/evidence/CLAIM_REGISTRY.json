@@ -99,11 +99,16 @@
       "claim_kind": "implementation",
       "scope_paths": [
         "core/kite_depth_ws.py",
+        "core/depth_subscription_engine.py",
         "tests/test_kite_depth_ws_observation_on_ticks.py",
+        "tests/test_kite_depth_ws_stability.py",
+        "tests/test_depth_subscription_refresh_contract.py",
+        "tests/test_depth_subscription_tokens.py",
         "governance/evidence/VERIFICATION_MATRIX.json",
         "tests/governance/test_evidence_contract.py",
         "governance/evidence/CLAIM_REGISTRY.json",
-        "governance/evidence/work_items/LIVE-OBS-EQ-OPTION-FRESHNESS-20261013.json"
+        "governance/evidence/work_items/LIVE-OBS-EQ-OPTION-FRESHNESS-20261013.json",
+        "docs/agent_reviews/pr976_live_option_freshness_ownership.md"
       ],
       "status": "UNVERIFIED",
       "source_ids": [],
