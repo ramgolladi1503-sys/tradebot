@@ -1,0 +1,125 @@
+{
+  "work_item_id": "LIVE-OBS-SHUTDOWN-DRAIN-20261013",
+  "type": "BUG",
+  "parent_epic": "LIVE-OBSERVATION-RELIABILITY",
+  "parent_feature": "PERSISTENCE-SHUTDOWN",
+  "title": "Reserve bounded persistence shutdown budgets from shared deadline",
+  "schema_version": 1,
+  "current_state": "BACKLOG",
+  "priority": "P1",
+  "business_goal": "Ensure each persisted observation worker receives a bounded shutdown attempt within the shared drain deadline.",
+  "current_behavior": "The optional pre-drain loop may consume the shared deadline before sequential worker shutdown APIs run; observed shutdown artifact recorded zero budgets for tick, depth, and runtime workers.",
+  "expected_behavior": "Bound pre-drain waiting and allocate remaining shared time across workers; report incomplete shutdown as failed/partial when work remains.",
+  "in_scope": [
+    "core/kite_read_only_observation_runtime.py",
+    "tests/test_kite_read_only_observation_runtime.py"
+  ],
+  "out_of_scope": [
+    "tick WAL checkpoint root cause",
+    "tick worker failure root cause",
+    "feed recovery behavior",
+    "broker/order/risk behavior",
+    "live restart or runtime operation"
+  ],
+  "dependencies": [
+    "shutdown_drain.json from 2026-10-13 captured run"
+  ],
+  "acceptance_criteria": [
+    "pre-drain wait is bounded below shared deadline",
+    "each persistence shutdown API receives a positive computed budget while time remains",
+    "remaining work or unjoined workers keep shutdown status FAILED/PARTIAL",
+    "tests cover fast return and full allotted-slice consumption",
+    "no broker API, order action, or LIVE enablement is introduced"
+  ],
+  "safety_constraints": [
+    "read_only=true",
+    "is_order_action=false",
+    "broker_api_called=false",
+    "allowed_for_live_execution=false",
+    "no runtime restart or live operation"
+  ],
+  "architecture_impact": "Changes only shared-deadline allocation in the existing read-only observation lifecycle; no new persistence mechanism.",
+  "allowed_paths": [
+    "core/kite_read_only_observation_runtime.py",
+    "tests/test_kite_read_only_observation_runtime.py",
+    "governance/evidence/work_items/LIVE-OBS-SHUTDOWN-DRAIN-20261013.json"
+  ],
+  "forbidden_paths": [
+    "core/feed/",
+    "core/broker/",
+    "core/order/",
+    "core/risk/",
+    "config/",
+    "runtime/live/"
+  ],
+  "expected_tests": [
+    "pytest -q tests/test_kite_read_only_observation_runtime.py",
+    "git diff --check"
+  ],
+  "qa_attack_plan": [
+    "consume entire tick budget and ensure depth/runtime still receive computed budgets",
+    "retain pending accounting and alive workers and ensure final state remains FAILED/PARTIAL",
+    "verify no state claims worker failure root cause or WAL fix"
+  ],
+  "uat_criteria": [
+    "review evidence claim limits; live runtime validation is not claimed"
+  ],
+  "release_gates": [
+    "exact-head required CI green",
+    "retain UNVERIFIED claim and no live readiness assertion"
+  ],
+  "rollback_plan": "Revert the isolated shared-deadline allocation change and focused tests.",
+  "evidence_refs": [
+    "shutdown_drain.json:sha256:c66b22dbf79a42dc3511743227e016aca6de48d54b22dd5dc6d17667d1055210",
+    "tests/test_kite_read_only_observation_runtime.py"
+  ],
+  "acting_role": "",
+  "state_history": [],
+  "defect_history": [],
+  "evidence": [],
+  "defects": [],
+  "required_ci_checks": [
+    "unit_tests"
+  ],
+  "extensions": {
+    "evidence_standard": {
+      "schema_version": 1,
+      "enforcement_mode": "REPORT_ONLY",
+      "applicability": "REQUIRED",
+      "applicability_reason": "Runtime lifecycle behavior changes require traceable source, correctness, adversarial, and independent evidence.",
+      "evidence_refs": [],
+      "assessed_paths": [
+        "core/kite_read_only_observation_runtime.py",
+        "tests/test_kite_read_only_observation_runtime.py"
+      ],
+      "subject_commit_sha": null,
+      "claims": [
+        {
+          "claim_id": "LIVE-OBS-SHUTDOWN-BUDGET-001",
+          "statement": "The shutdown lifecycle bounds its optional pre-drain wait and apportions remaining deadline among persistence shutdown calls; focused tests cover normal and full-slice timing while incomplete drains remain FAILED/PARTIAL.",
+          "claim_kind": "operational_reliability",
+          "status": "UNVERIFIED",
+          "source_ids": [
+            "TRADEBOT_AGENT_RULES"
+          ],
+          "evidence_refs": [
+            "shutdown_drain.json:sha256:c66b22dbf79a42dc3511743227e016aca6de48d54b22dd5dc6d17667d1055210",
+            "tests/test_kite_read_only_observation_runtime.py"
+          ],
+          "assumptions": [
+            {
+              "assumption_id": "A1",
+              "statement": "The observed artifact corresponds to the 2026-10-13 supervised run described in the handoff.",
+              "classification": "EMPIRICAL_HYPOTHESIS",
+              "source_ids": [
+                "TRADEBOT_AGENT_RULES"
+              ]
+            }
+          ],
+          "gate_evidence": {},
+          "limitation": "AI role labels are unauthenticated; full lifecycle, independent UAT, exact-head CI, worker failure cause, WAL checkpoint cause, and live runtime outcome remain unverified."
+        }
+      ]
+    }
+  }
+}
