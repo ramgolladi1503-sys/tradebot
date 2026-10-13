@@ -154,6 +154,11 @@ def test_locked_bar_write_propagates_error_without_persisted_or_cached_success(
         ).fetchone()[0]
     assert row_count == 0
 
+    retry_result = _persist(store, "NIFTY", _bar(ts, 25000))
+    assert retry_result["persisted"] is True
+    reopened = MarketSessionStore(db_path=db_path, report_root=tmp_path / "reports")
+    assert len(reopened.get_bars("NIFTY", as_of=ts + timedelta(minutes=1))) == 1
+
 
 def test_session_store_derives_only_complete_timeframes_and_builds_context(tmp_path):
     store = MarketSessionStore(db_path=tmp_path / "session.sqlite", report_root=tmp_path / "reports")
