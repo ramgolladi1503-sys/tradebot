@@ -4,6 +4,8 @@
   "enforcement_stage": "BLOCK_NEW_MATERIAL",
   "protected_material_path_prefixes": [
     "core/",
+    "scripts/run_feed_reconnect_resource_soak.py",
+    "tests/test_feed_reconnect_resource_soak.py",
     "strategies/",
     "research/",
     "scripts/research/",
@@ -36,6 +38,8 @@
   "trusted_non_material_exemptions": [],
   "material_path_prefixes": [
     "core/",
+    "scripts/run_feed_reconnect_resource_soak.py",
+    "tests/test_feed_reconnect_resource_soak.py",
     "strategies/",
     "research/",
     "scripts/research/",
