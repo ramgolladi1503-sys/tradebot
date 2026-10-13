@@ -4,7 +4,8 @@
     "Repeated connection creation does not issue journal_mode negotiation.",
     "A locked write reports failure and does not report persisted/cached success.",
     "After the lock is released, a write can succeed and the persisted bar can be read back.",
-    "The focused test suite at the current exact candidate and hosted CI remain required before merge; no live behavior is inferred."
+    "The focused test suite at the current exact candidate and hosted CI remain required before merge; no live behavior is inferred.",
+    "core/candidate_feed_dependencies.py: refresh the pinned MarketSessionStore source digest required by the integrity validator"
   ],
   "acting_role": "RELEASE_MANAGER",
   "allowed_paths": [
@@ -13,7 +14,8 @@
     "governance/evidence/CLAIM_REGISTRY.json",
     "governance/evidence/VERIFICATION_MATRIX.json",
     "governance/evidence/work_items/LIVE-OBS-SESSION-STORE-WAL-LOCK-20261013.json",
-    "tests/core/test_market_session_store.py"
+    "tests/core/test_market_session_store.py",
+    "core/candidate_feed_dependencies.py"
   ],
   "architecture_impact": "Reuses the existing MarketSessionStore connection initialization and persistence boundary. No new runtime subsystem or parallel evidence ledger is introduced.",
   "business_goal": "Reduce avoidable SQLite lock contention observed during a live-session completed-bar persistence attempt without weakening write failure behavior.",
@@ -279,7 +281,8 @@
         "governance/evidence/CLAIM_REGISTRY.json",
         "governance/evidence/VERIFICATION_MATRIX.json",
         "governance/evidence/work_items/LIVE-OBS-SESSION-STORE-WAL-LOCK-20261013.json",
-        "tests/core/test_market_session_store.py"
+        "tests/core/test_market_session_store.py",
+        "core/candidate_feed_dependencies.py"
       ],
       "claims": [
         {
@@ -318,7 +321,8 @@
   "in_scope": [
     "core/market_session_store.py: initialize and verify WAL once; retain existing busy_timeout and synchronous settings",
     "tests/core/test_market_session_store.py: exercise lock failure, no false persisted/cache success, and retry after lock release",
-    "governance records and review note for this exact SQLite lock PR"
+    "governance records and review note for this exact SQLite lock PR",
+    "core/candidate_feed_dependencies.py: refresh the pinned MarketSessionStore source digest required by the integrity validator"
   ],
   "out_of_scope": [
     "SQLite lock holder identification, which is unknown from captured evidence",

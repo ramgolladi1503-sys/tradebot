@@ -120,7 +120,8 @@
         "governance/evidence/CLAIM_REGISTRY.json",
         "governance/evidence/VERIFICATION_MATRIX.json",
         "governance/evidence/work_items/LIVE-OBS-SESSION-STORE-WAL-LOCK-20261013.json",
-        "tests/core/test_market_session_store.py"
+        "tests/core/test_market_session_store.py",
+        "core/candidate_feed_dependencies.py"
       ],
       "status": "UNVERIFIED",
       "source_ids": [],
