@@ -13,6 +13,8 @@
   "in_scope": [
     "core/kite_depth_ws.py",
     "core/depth_subscription_engine.py",
+    "scripts/run_feed_reconnect_resource_soak.py",
+    "tests/test_feed_reconnect_resource_soak.py",
     "tests/test_candidate_safety.py",
     "tests/test_feed_reconnect_safety.py",
     "tests/test_feed_runtime_states.py",
@@ -67,6 +69,8 @@
   "allowed_paths": [
     "core/kite_depth_ws.py",
     "core/depth_subscription_engine.py",
+    "scripts/run_feed_reconnect_resource_soak.py",
+    "tests/test_feed_reconnect_resource_soak.py",
     "tests/test_candidate_safety.py",
     "tests/test_feed_reconnect_safety.py",
     "tests/test_feed_runtime_states.py",
@@ -94,7 +98,8 @@
   ],
   "expected_tests": [
     "pytest -q tests/test_candidate_safety.py tests/test_feed_reconnect_safety.py tests/test_feed_runtime_states.py tests/test_kite_depth_restart.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_kite_depth_ws_stability.py tests/test_depth_subscription_refresh_contract.py tests/test_depth_subscription_tokens.py tests/test_subscription_universe_123_contract.py tests/governance/test_evidence_contract.py --tb=short",
-    "python3 -m py_compile core/kite_depth_ws.py core/depth_subscription_engine.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_kite_depth_ws_stability.py tests/test_depth_subscription_refresh_contract.py tests/test_depth_subscription_tokens.py tests/governance/test_evidence_contract.py",
+    "pytest -q tests/test_feed_reconnect_resource_soak.py -m 'feed_smoke and not feed_soak and not certification' --durations=20",
+    "python3 -m py_compile core/kite_depth_ws.py core/depth_subscription_engine.py scripts/run_feed_reconnect_resource_soak.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_kite_depth_ws_stability.py tests/test_depth_subscription_refresh_contract.py tests/test_depth_subscription_tokens.py tests/governance/test_evidence_contract.py",
     "git diff --check",
     "Parse all changed governance evidence JSON documents."
   ],
@@ -106,7 +111,8 @@
     "post-prune launch-plan metadata preserves only selected production option and underlying identities",
     "unknown and invalid LTP values do not refresh option freshness",
     "resolver errors and launch-plan updates do not claim applied-subscription reconciliation",
-    "reconnect invalidates applied ownership and failed on_connect replay remains SUBSCRIBE_FAILED"
+    "reconnect invalidates applied ownership and failed on_connect replay remains SUBSCRIBE_FAILED",
+    "reconnect soak publishes only a complete synthetic instrument-identity candidate"
   ],
   "uat_criteria": [
     "offline callback tests preserve LTP/shadow routing and keep observation equities out of option freshness"
@@ -133,6 +139,8 @@
       "assessed_paths": [
         "core/kite_depth_ws.py",
         "core/depth_subscription_engine.py",
+        "scripts/run_feed_reconnect_resource_soak.py",
+        "tests/test_feed_reconnect_resource_soak.py",
         "tests/test_candidate_safety.py",
         "tests/test_feed_reconnect_safety.py",
         "tests/test_feed_runtime_states.py",

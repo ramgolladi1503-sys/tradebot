@@ -87,7 +87,49 @@ class ResourceSoakRunner(impl.ResourceSoakRunner):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.requested_token_count = self.req_tokens
+        budget = int(impl.ws._GOVERNED_FEED_SUBSCRIPTION_BUDGET)
+        if self.req_tokens > budget:
+            self.tokens = self.tokens[:budget]
+            self.req_tokens = len(self.tokens)
         self.last_cycle_condition_snapshot: dict = {}
+
+    def _publish_validated_replay_candidate(self) -> None:
+        """Give the synthetic soak socket a production-shaped replay contract."""
+        tokens = list(self.tokens)
+        option_contracts = {
+            int(token): {
+                "symbol": "NIFTY",
+                "instrument_type": "CE" if index % 2 == 0 else "PE",
+                "exchange": "NFO",
+                "expiry": "2026-12-31",
+                "strike": 25000 + (index // 2) * 50,
+            }
+            for index, token in enumerate(tokens)
+        }
+        desired_revision = impl.ws.record_desired_option_contracts(
+            option_contracts,
+            expected_tokens=tokens,
+            source="feed_reconnect_resource_soak_fixture",
+        )
+        if desired_revision <= 0:
+            raise RuntimeError("soak option identity fixture was not recorded")
+        configured_budget = int(impl.ws._GOVERNED_FEED_SUBSCRIPTION_BUDGET)
+        if len(tokens) > configured_budget:
+            raise RuntimeError(
+                "soak token count exceeds governed replay-candidate budget"
+            )
+        impl.ws.record_desired_subscription_candidate(
+            tokens,
+            option_tokens=tokens,
+            configured_budget=configured_budget,
+            source="feed_reconnect_resource_soak_fixture",
+        )
+        validated_tokens, reason = impl.ws._validated_desired_subscription_tokens()
+        if validated_tokens != sorted(tokens):
+            raise RuntimeError(
+                f"soak replay candidate did not validate: {reason}"
+            )
 
     def _do_warmup(self):
         process_start = impl._resource_snapshot()
@@ -117,6 +159,7 @@ class ResourceSoakRunner(impl.ResourceSoakRunner):
         setattr(impl.ws, "_STOP_REQUESTED", False)
         setattr(impl.ws, "_LAST_RUNTIME_ERROR", None)
 
+        self._publish_validated_replay_candidate()
         impl.ws.start_depth_ws(self.tokens, skip_lock=True, skip_guard=True)
         time.sleep(0.1)
 
@@ -219,6 +262,8 @@ class ResourceSoakRunner(impl.ResourceSoakRunner):
 
     def run(self):
         result = super().run()
+        result["configuration"]["requested_token_count"] = self.requested_token_count
+        result["configuration"]["effective_token_count"] = self.req_tokens
         result["last_cycle_condition_snapshot"] = dict(
             self.last_cycle_condition_snapshot
         )

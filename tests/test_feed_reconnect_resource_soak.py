@@ -109,6 +109,20 @@ def test_profile_contract_is_explicit():
     assert stress["configuration"]["safety_limits_overridden"] is True
     assert stress["configuration"]["original_safety_limits"] != stress["configuration"]["test_safety_limits"]
 
+
+def test_soak_candidate_reports_requested_and_budgeted_token_counts():
+    rc, data, _, _ = run_profile(
+        "control",
+        1,
+        extra_args=["--required-token-count", "150"],
+    )
+    assert rc == 0
+    configuration = data["configuration"]
+    assert configuration["requested_token_count"] == 150
+    assert configuration["effective_token_count"] <= configuration["requested_token_count"]
+    assert configuration["effective_token_count"] == configuration["req_tokens"]
+    assert data["cycle_samples"][0]["snapshot"]["required_token_count"] == configuration["effective_token_count"]
+
 def test_fixed_seed_is_deterministic():
     rc1, data1, _, _ = run_profile("control", 10, seed=123)
     rc2, data2, _, _ = run_profile("control", 10, seed=123)
