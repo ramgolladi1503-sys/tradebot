@@ -10,6 +10,33 @@ import threading
 
 _REAL_THREAD = threading.Thread
 
+
+def _commit_test_option_ownership(contracts):
+    """Model completed local subscribe + FULL-mode application for test tokens."""
+    generation = ws._current_socket_generation()
+    ws._OPTION_OWNERSHIP_BOOTSTRAP_GENERATION = generation
+    ws._invalidate_applied_option_ownership(
+        "test_restart_setup", socket_generation=generation
+    )
+    expected = sorted(int(token) for token in contracts)
+    desired_revision = ws.record_desired_option_contracts(
+        contracts, expected_tokens=expected, source="test_instrument_master"
+    )
+    base, invalidated = ws._begin_applied_option_mutation(
+        "test_confirmed_subscription", affected_tokens=expected
+    )
+    assert ws._commit_applied_option_ownership(
+        socket_generation=generation,
+        desired_revision=desired_revision,
+        base_snapshot=base,
+        invalidated_revision=invalidated.revision,
+        confirmed_tokens=expected,
+        subscribe_tokens=expected,
+        fresh_socket=True,
+        provenance="test_local_api_success",
+    )
+
+
 @pytest.fixture(autouse=True)
 def mock_check_socket_health(monkeypatch):
     monkeypatch.setattr("core.feed.ws_mutation_queue._check_socket_health", lambda ws: (True, True, None))
@@ -19,6 +46,14 @@ from types import SimpleNamespace
 
 @pytest.fixture(autouse=True)
 def _reset_ws_runtime_state(monkeypatch):
+    generation = ws._current_socket_generation()
+    ws.record_desired_option_contracts(
+        {}, expected_tokens=[], source="test_isolation"
+    )
+    ws._invalidate_applied_option_ownership(
+        "test_isolation", socket_generation=generation
+    )
+    ws._OPTION_OWNERSHIP_BOOTSTRAP_GENERATION = 0
     for name, value in {
         "_KITE_TICKER": None,
         "_WATCHDOG_THREAD": None,
@@ -1401,18 +1436,17 @@ def test_soft_resubscribe_uses_desired_tokens_when_flag_enabled(monkeypatch):
     class _DummyTicker:
         MODE_FULL = "full"
         connected = True
+        ws = object()
+
+        def subscribe(self, tokens):
+            calls["subscribe"].append(list(tokens))
+
+        def set_mode(self, mode, tokens):
+            assert mode == self.MODE_FULL
+            calls["set_mode"].append(list(tokens))
 
         def is_connected(self):
             return True
-
-    def mock_safe_subscribe_full_mode(ws_obj, tokens, reason, now_epoch, on_applied_callback=None):
-            calls["subscribe"].append(list(tokens))
-            calls["set_mode"].append(list(tokens))
-            if on_applied_callback: on_applied_callback()
-            res = type("WsMutationResult", (), {"ok": True, "applied": True, "queued": False, "failure_reason": ""})()
-            return res, res
-        
-    monkeypatch.setattr("core.feed.ws_mutation_queue.safe_subscribe_full_mode", mock_safe_subscribe_full_mode)
 
     monkeypatch.setattr(ws, "_KITE_TICKER", _DummyTicker(), raising=False)
     monkeypatch.setattr(ws, "_LAST_TOKENS", [1, 2, 3], raising=False)
@@ -1421,6 +1455,15 @@ def test_soft_resubscribe_uses_desired_tokens_when_flag_enabled(monkeypatch):
     monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 100.0, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {1, 2, 3}, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {1: "NIFTY", 2: "BANKNIFTY", 3: "SENSEX"}, raising=False)
+    ws.record_desired_option_contracts(
+        {
+            token: {"symbol": "NIFTY", "instrument_type": "CE" if token % 2 == 0 else "PE", "exchange": "NFO", "expiry": "2026-12-31", "strike": 25000 + token}
+            for token in range(4, 40)
+        },
+        expected_tokens=list(range(4, 40)),
+        source="test_instrument_master",
+    )
+    ws._OPTION_OWNERSHIP_BOOTSTRAP_GENERATION = ws._current_socket_generation()
     monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     monkeypatch.setenv("FEED_USE_DESIRED_TOKENS", "1")
 
@@ -1440,18 +1483,17 @@ def test_soft_resubscribe_uses_last_tokens_when_flag_disabled(monkeypatch):
     class _DummyTicker:
         MODE_FULL = "full"
         connected = True
+        ws = object()
+
+        def subscribe(self, tokens):
+            calls["subscribe"].append(list(tokens))
+
+        def set_mode(self, mode, tokens):
+            assert mode == self.MODE_FULL
+            calls["set_mode"].append(list(tokens))
 
         def is_connected(self):
             return True
-
-    def mock_safe_subscribe_full_mode(ws_obj, tokens, reason, now_epoch, on_applied_callback=None):
-            calls["subscribe"].append(list(tokens))
-            calls["set_mode"].append(list(tokens))
-            if on_applied_callback: on_applied_callback()
-            res = type("WsMutationResult", (), {"ok": True, "applied": True, "queued": False, "failure_reason": ""})()
-            return res, res
-        
-    monkeypatch.setattr("core.feed.ws_mutation_queue.safe_subscribe_full_mode", mock_safe_subscribe_full_mode)
 
     monkeypatch.setattr(ws, "_KITE_TICKER", _DummyTicker(), raising=False)
     monkeypatch.setattr(ws, "_LAST_TOKENS", [11, 22, 33, 44], raising=False)
@@ -1460,6 +1502,10 @@ def test_soft_resubscribe_uses_last_tokens_when_flag_disabled(monkeypatch):
     monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 100.0, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {11, 22, 33}, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {11: "NIFTY", 22: "BANKNIFTY", 33: "SENSEX"}, raising=False)
+    _commit_test_option_ownership({
+        44: {"symbol": "NIFTY", "instrument_type": "CE", "exchange": "NFO", "expiry": "2026-12-31", "strike": 25000},
+    })
+    ws._OPTION_OWNERSHIP_BOOTSTRAP_GENERATION = -1
     monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     monkeypatch.delenv("FEED_USE_DESIRED_TOKENS", raising=False)
 
@@ -1480,18 +1526,17 @@ def test_soft_resubscribe_auto_recovers_desired_tokens_when_current_is_underlyin
     class _DummyTicker:
         MODE_FULL = "full"
         connected = True
+        ws = object()
+
+        def subscribe(self, tokens):
+            calls["subscribe"].append(list(tokens))
+
+        def set_mode(self, mode, tokens):
+            assert mode == self.MODE_FULL
+            calls["set_mode"].append(list(tokens))
 
         def is_connected(self):
             return True
-
-    def mock_safe_subscribe_full_mode(ws_obj, tokens, reason, now_epoch, on_applied_callback=None):
-            calls["subscribe"].append(list(tokens))
-            calls["set_mode"].append(list(tokens))
-            if on_applied_callback: on_applied_callback()
-            res = type("WsMutationResult", (), {"ok": True, "applied": True, "queued": False, "failure_reason": ""})()
-            return res, res
-        
-    monkeypatch.setattr("core.feed.ws_mutation_queue.safe_subscribe_full_mode", mock_safe_subscribe_full_mode)
 
     monkeypatch.setattr(ws, "_KITE_TICKER", _DummyTicker(), raising=False)
     monkeypatch.setattr(ws, "_LAST_TOKENS", [11, 22, 33], raising=False)
@@ -1500,6 +1545,15 @@ def test_soft_resubscribe_auto_recovers_desired_tokens_when_current_is_underlyin
     monkeypatch.setattr(ws, "_LAST_WS_TICK_EPOCH", 100.0, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {11, 22, 33}, raising=False)
     monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {11: "NIFTY", 22: "BANKNIFTY", 33: "SENSEX"}, raising=False)
+    ws.record_desired_option_contracts(
+        {
+            token: {"symbol": "NIFTY", "instrument_type": "CE" if token % 2 == 0 else "PE", "exchange": "NFO", "expiry": "2026-12-31", "strike": 25000 + token}
+            for token in range(4, 40)
+        },
+        expected_tokens=list(range(4, 40)),
+        source="test_instrument_master",
+    )
+    ws._OPTION_OWNERSHIP_BOOTSTRAP_GENERATION = ws._current_socket_generation()
     monkeypatch.setattr(ws, "_log_ws", lambda event, payload, **kwargs: events.append((event, payload)))
     monkeypatch.delenv("FEED_USE_DESIRED_TOKENS", raising=False)
 
@@ -1567,6 +1621,11 @@ def test_option_runtime_state_marks_live_symbol_fresh_without_cross_symbol_leak(
         },
         raising=False,
     )
+    _commit_test_option_ownership({
+        101: {"symbol": "NIFTY", "instrument_type": "CE", "exchange": "NFO", "expiry": "2026-12-31", "strike": 25000},
+        102: {"symbol": "NIFTY", "instrument_type": "PE", "exchange": "NFO", "expiry": "2026-12-31", "strike": 25000},
+        201: {"symbol": "BANKNIFTY", "instrument_type": "CE", "exchange": "NFO", "expiry": "2026-12-31", "strike": 50000},
+    })
 
     state = ws._option_runtime_state(
         now_epoch=102.0,
@@ -1592,6 +1651,9 @@ def test_option_runtime_state_distinguishes_no_token_no_live_and_stale(monkeypat
     monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {1: "NIFTY", 101: "NIFTY"}, raising=False)
 
     monkeypatch.setattr(ws, "_LAST_MSG_TS_BY_TOKEN", {}, raising=False)
+    _commit_test_option_ownership({
+        101: {"symbol": "NIFTY", "instrument_type": "CE", "exchange": "NFO", "expiry": "2026-12-31", "strike": 25000},
+    })
     no_token = ws._option_runtime_state(
         now_epoch=100.0,
         tokens=[1],
@@ -1812,6 +1874,9 @@ def test_restart_verification_emits_verified_ok_only_after_connect_subscribe_and
     monkeypatch.setattr(ws, "_RUNTIME_STATE", "RUNNING", raising=False)
 
     monkeypatch.setattr(ws, "_SOCKET_GENERATION", 20, raising=False)
+    _commit_test_option_ownership({
+        101: {"symbol": "NIFTY", "instrument_type": "CE", "exchange": "NFO", "expiry": "2026-12-31", "strike": 25000},
+    })
     ws._begin_feed_restart_verification(reason="ws_error:1006", start_epoch=1000.0, now_epoch=1000.0, socket_generation=20)
     ws._record_feed_restart_verify_connect(now_epoch=1000.5, socket_generation=20)
     ws._record_feed_restart_verify_subscribe(now_epoch=1000.6, socket_generation=20)
@@ -1917,6 +1982,9 @@ def test_restart_verification_failed_state_can_recover_after_fresh_proof(monkeyp
     monkeypatch.setattr(ws, "_RUNTIME_STATE", "RUNNING", raising=False)
 
     monkeypatch.setattr(ws, "_SOCKET_GENERATION", 20, raising=False)
+    _commit_test_option_ownership({
+        101: {"symbol": "NIFTY", "instrument_type": "CE", "exchange": "NFO", "expiry": "2026-12-31", "strike": 25000},
+    })
     ws._begin_feed_restart_verification(reason="ws_error:1006", start_epoch=1000.0, now_epoch=1000.0, socket_generation=20)
     ws._tick_feed_restart_verification(now_epoch=1001.0)
     assert ws._FEED_RESTART_VERIFY_STATE == "FAILED"

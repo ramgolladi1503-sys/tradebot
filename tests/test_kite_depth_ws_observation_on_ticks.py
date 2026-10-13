@@ -2,6 +2,7 @@ import importlib
 import threading
 import time
 from datetime import date
+import pytest
 
 from config import config as cfg
 from config import feed_runtime_reliability as reliability_cfg
@@ -35,6 +36,29 @@ def _commit_test_option_ownership(ws, contracts):
         fresh_socket=True,
         provenance="test_local_api_success",
     )
+
+
+@pytest.fixture(autouse=True)
+def _reset_test_option_ownership():
+    """Keep generation-bound ownership evidence isolated between tests."""
+    ws = importlib.import_module("core.kite_depth_ws")
+    generation = ws._current_socket_generation()
+    ws.record_desired_option_contracts(
+        {}, expected_tokens=[], source="test_isolation"
+    )
+    ws._invalidate_applied_option_ownership(
+        "test_isolation", socket_generation=generation
+    )
+    ws._OPTION_OWNERSHIP_BOOTSTRAP_GENERATION = 0
+    yield
+    generation = ws._current_socket_generation()
+    ws.record_desired_option_contracts(
+        {}, expected_tokens=[], source="test_isolation_teardown"
+    )
+    ws._invalidate_applied_option_ownership(
+        "test_isolation_teardown", socket_generation=generation
+    )
+    ws._OPTION_OWNERSHIP_BOOTSTRAP_GENERATION = 0
 
 
 def _stage_test_option_contracts(ws, contracts):

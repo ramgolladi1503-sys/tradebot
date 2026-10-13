@@ -77,11 +77,35 @@ def test_on_reconnect_logs_success_and_transitions_state(ticker_callbacks):
 
 def test_on_connect_resubscribes_all_tokens_and_restores_mode(ticker_callbacks):
     mock_ws = MagicMock()
+    generation = kite_depth_ws._current_socket_generation()
+    kite_depth_ws._OPTION_OWNERSHIP_BOOTSTRAP_GENERATION = generation
+    kite_depth_ws._invalidate_applied_option_ownership(
+        "test_connect_setup", socket_generation=generation
+    )
+    expected_options = [123, 456]
+    kite_depth_ws.record_desired_option_contracts(
+        {
+            123: {"symbol": "NIFTY", "instrument_type": "CE", "exchange": "NFO", "expiry": "2026-12-31", "strike": 25000},
+            456: {"symbol": "NIFTY", "instrument_type": "PE", "exchange": "NFO", "expiry": "2026-12-31", "strike": 25000},
+        },
+        expected_tokens=expected_options,
+        source="test_instrument_master",
+    )
     with patch("core.kite_depth_ws._LAST_TOKENS", [123, 456]), \
+         patch("core.kite_depth_ws._LAST_DESIRED_TOKENS", [123, 456]), \
+         patch("core.kite_depth_ws._LAST_OPTION_COUNTS_BY_SYMBOL", {"NIFTY": 2}), \
+         patch("core.kite_depth_ws._LAST_OPTION_MIN_REQUIRED_BY_SYMBOL", {"NIFTY": 1}), \
          patch("core.kite_depth_ws._log_ws") as mock_log:
+        # The callback's mock socket applies subscribe and mode synchronously;
+        # the production observed adapter invokes its application callback only
+        # after both calls succeed.
         ticker_callbacks["on_connect"](mock_ws, "response")
         mock_ws.subscribe.assert_called_with([123, 456])
         mock_ws.set_mode.assert_called_with(mock_ws.MODE_FULL, [123, 456])
+        ownership = kite_depth_ws.get_applied_option_ownership_snapshot()
+        assert ownership.state == "KNOWN"
+        assert ownership.socket_generation == generation
+        assert set(ownership.contracts) == set(expected_options)
         # It transitions to RUNNING, which gets converted to STALE/DEGRADED if ticks are delayed.
         # It doesn't become LIVE/LIVE_FRESH until ticks arrive.
         assert kite_depth_ws._RUNTIME_STATE == "RUNNING"

@@ -13,6 +13,10 @@
   "in_scope": [
     "core/kite_depth_ws.py",
     "core/depth_subscription_engine.py",
+    "tests/test_candidate_safety.py",
+    "tests/test_feed_reconnect_safety.py",
+    "tests/test_feed_runtime_states.py",
+    "tests/test_kite_depth_restart.py",
     "tests/test_kite_depth_ws_observation_on_ticks.py",
     "tests/test_kite_depth_ws_stability.py",
     "tests/test_depth_subscription_refresh_contract.py",
@@ -23,7 +27,8 @@
     "governance/evidence/work_items/LIVE-OBS-EQ-OPTION-FRESHNESS-20261013.json",
     "docs/agent_reviews/pr976_live_option_freshness_ownership.md",
     "generation-bound applied option ownership snapshot",
-    "subscription mutation reconciliation and option freshness readers"
+    "subscription mutation reconciliation and option freshness readers",
+    "legacy regression fixture alignment with generation-bound applied ownership"
   ],
   "out_of_scope": [
     "global feed-health root cause",
@@ -62,6 +67,10 @@
   "allowed_paths": [
     "core/kite_depth_ws.py",
     "core/depth_subscription_engine.py",
+    "tests/test_candidate_safety.py",
+    "tests/test_feed_reconnect_safety.py",
+    "tests/test_feed_runtime_states.py",
+    "tests/test_kite_depth_restart.py",
     "tests/test_kite_depth_ws_observation_on_ticks.py",
     "tests/test_kite_depth_ws_stability.py",
     "tests/test_depth_subscription_refresh_contract.py",
@@ -84,7 +93,7 @@
     "runtime/live/"
   ],
   "expected_tests": [
-    "pytest -q tests/test_kite_depth_ws_observation_on_ticks.py tests/test_kite_depth_ws_stability.py tests/test_depth_subscription_refresh_contract.py tests/test_depth_subscription_tokens.py tests/test_subscription_universe_123_contract.py tests/governance/test_evidence_contract.py --tb=short",
+    "pytest -q tests/test_candidate_safety.py tests/test_feed_reconnect_safety.py tests/test_feed_runtime_states.py tests/test_kite_depth_restart.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_kite_depth_ws_stability.py tests/test_depth_subscription_refresh_contract.py tests/test_depth_subscription_tokens.py tests/test_subscription_universe_123_contract.py tests/governance/test_evidence_contract.py --tb=short",
     "python3 -m py_compile core/kite_depth_ws.py core/depth_subscription_engine.py tests/test_kite_depth_ws_observation_on_ticks.py tests/test_kite_depth_ws_stability.py tests/test_depth_subscription_refresh_contract.py tests/test_depth_subscription_tokens.py tests/governance/test_evidence_contract.py",
     "git diff --check",
     "Parse all changed governance evidence JSON documents."
@@ -124,6 +133,10 @@
       "assessed_paths": [
         "core/kite_depth_ws.py",
         "core/depth_subscription_engine.py",
+        "tests/test_candidate_safety.py",
+        "tests/test_feed_reconnect_safety.py",
+        "tests/test_feed_runtime_states.py",
+        "tests/test_kite_depth_restart.py",
         "tests/test_kite_depth_ws_observation_on_ticks.py",
         "tests/test_kite_depth_ws_stability.py",
         "tests/test_depth_subscription_refresh_contract.py",

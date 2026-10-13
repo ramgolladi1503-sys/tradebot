@@ -20,7 +20,7 @@ No orders or broker APIs were called. No credentials, environment files, risk ga
 
 ## Grill Me Review
 
-The adversarial review initially found that launch-plan activation cleared production token-to-symbol mappings and that pre-prune resolver rows could include tokens outside the final subscription. Both findings were fixed by constructing production-only launch metadata from the post-prune, post-budget set. The final review confirmed the production mapping, cash observation mapping, index-only mutation, and proposal-versus-applied assertions. No remaining blocking code finding was reported.
+The adversarial review initially found that launch-plan activation cleared production token-to-symbol mappings and that pre-prune resolver rows could include tokens outside the final subscription. Both findings were fixed by constructing production-only launch metadata from the post-prune, post-budget set. The final review confirmed the production mapping, cash observation mapping, index-only mutation, and proposal-versus-applied assertions. The initial source review reported no blocking implementation finding; the test-proof follow-up identified a reconnect assertion gap, which is now covered by explicit ownership assertions.
 
 ## Hermes Review
 
@@ -32,9 +32,15 @@ The implementation covers callback ownership checks, sidecar staging and freshne
 
 ## QA / Safety Review
 
-The targeted suite completed with 249 passed and 1 skipped. Modified Python modules and test modules compiled. Three evidence JSON documents parsed, and `git diff --check` passed. Independent review found and closed the sidecar mapping issue before the candidate was committed.
+The original implementation-focused targeted suite completed with 249 passed and 1 skipped. After aligning legacy regression fixtures, the five affected test files passed 177 tests, and the added reconnect-ownership assertions passed in a 15-test candidate/reconnect run. Modified Python modules and test modules compiled. Three evidence JSON documents parsed, and `git diff --check` passed. The full expanded focused command was interrupted by the execution session ending without a captured result; do not treat it as passed. Independent review found and closed the sidecar mapping issue before the candidate was committed.
 
-The first broad run exposed 11 legacy fixture failures because those tests inferred applied option truth from token-to-symbol mappings. Fixtures were updated to establish a valid KNOWN snapshot where their assertions required applied option health; tests that lack applied ownership retain fail-closed expectations. The corrected targeted suite passed.
+The first broad run exposed legacy fixture failures because those tests inferred applied option truth from token-to-symbol mappings. Fixtures were updated to establish a KNOWN snapshot where their assertions require applied option health; tests that lack applied ownership retain fail-closed expectations. The post-fix local five-file regression slice reported 177 passed. A broader focused command including mutation, token, launch-universe, and evidence-contract tests was attempted, but the execution session ended without a captured result. Its outcome is unknown and must not be represented as a pass.
+
+Independent QA noted that some state-rendering fixtures seed KNOWN via the private commit helper without exercising socket API methods, and the candidate-safety test stubs the observed adapter callback. These are fixture/interface checks only. Separate mutation tests exercise subscribe and FULL mode calls and assert resulting ownership. The reconnect test now additionally asserts KNOWN state, the active generation, and exact expected option token identities. Do not characterize every fixture as proof of API application.
+
+## Current PR / CI Status
+
+At committed head `a683240ca3c374e365fb2748377cdf2e6b65f713`, GitHub `unit_tests` failed 16 tests and Trusted Base failed for incomplete lifecycle history/state/evidence. The local test-only corrections have not yet been pushed or run by GitHub. The `pr818-live-flow-freeze-target` check also fails; the user explicitly authorized ignoring that check. No authorization was given to bypass unit-test failures or Trusted Base. Exact-head CI and delivery lifecycle remain blockers.
 
 ## Acceptance Proof
 
@@ -56,7 +62,7 @@ It does not prove exchange delivery, overall feed readiness, strategy correctnes
 
 ## Human Approval
 
-The user explicitly approved expanding the scoped fix across `core/kite_depth_ws.py` and `core/depth_subscription_engine.py`, and authorized opening a PR. That approval does not extend to restarting the live process or merging this PR. The user stated they will perform review.
+The user explicitly approved expanding the scoped fix across `core/kite_depth_ws.py` and `core/depth_subscription_engine.py`, authorized opening a PR, and later authorized automatic merge when the PR is mergeable, with the PR818 check ignored. This does not authorize bypassing other failing checks or incomplete Trusted Base evidence, and does not authorize restarting the live process.
 
 ## High-Risk Path Review
 
