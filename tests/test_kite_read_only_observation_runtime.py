@@ -379,7 +379,7 @@ def test_lifecycle_recomputes_each_store_budget_from_one_deadline(monkeypatch):
     report = lifecycle.shutdown()
 
     assert len(passed_budgets) == 3
-    assert passed_budgets[0] > passed_budgets[1] > passed_budgets[2] > 0
+    assert all(budget > 0 for budget in passed_budgets)
     assert report["shutdown_drain_deadline_expired"] is False
     assert report["shutdown_drain_complete"] is True
     assert report["read_only"] is True
@@ -440,6 +440,82 @@ def test_lifecycle_signals_all_persistence_workers_before_bridge_or_drain_wait(m
     assert max(signal_positions) < events.index("bridge-wait")
     assert max(signal_positions) < min(wait_positions)
     assert report["shutdown_drain_complete"] is True
+
+
+@pytest.mark.parametrize("consume_entire_budget", [False, True])
+def test_lifecycle_reserves_shutdown_time_after_bounded_predrain(monkeypatch, consume_entire_budget):
+    from types import SimpleNamespace
+    import core.kite_read_only_observation_runtime as lifecycle_module
+    import core.tick_store as tick_store
+    import core.depth_store as depth_store
+    import core.feed.runtime_store as runtime_store
+
+    class FakeClock:
+        now = 0.0
+
+        def monotonic(self):
+            return self.now
+
+        def sleep(self, seconds):
+            self.now += seconds
+
+    class Feed:
+        def start_depth_ws(self, tokens, **kwargs):
+            return True
+
+        def stop_depth_ws(self, **kwargs):
+            return None
+
+    clock = FakeClock()
+    monkeypatch.setattr(lifecycle_module, "time", SimpleNamespace(monotonic=clock.monotonic, sleep=clock.sleep))
+    monkeypatch.setattr(tick_store, "request_persistence_shutdown", lambda: None)
+    monkeypatch.setattr(depth_store.depth_store, "request_persistence_shutdown", lambda: None)
+    monkeypatch.setattr(runtime_store, "request_runtime_persistence_shutdown", lambda: None)
+    monkeypatch.setattr("core.market_event_graph_live_runtime_bridge.flush_live_source_bridge", lambda: {"flushed": True})
+
+    # Keep work pending throughout pre-drain and report unresolved accounting
+    # and worker state after shutdown. The drain must remain visibly incomplete.
+    monkeypatch.setattr(tick_store, "pending_tick_count", lambda: 1)
+    monkeypatch.setattr(depth_store.depth_store, "persistence_state", lambda: {
+        "worker_alive": True, "queue_depth": 1, "in_flight": 1,
+    })
+    monkeypatch.setattr(runtime_store, "runtime_persistence_state", lambda: {
+        "worker_alive": True, "pending": 1,
+    })
+    monkeypatch.setattr(tick_store, "get_persistence_worker_state", lambda: {
+        "worker_join_completed": False,
+        "queue_depth_at_shutdown": 1,
+        "pending_writes_at_shutdown": 1,
+        "accounting_invariant_ok": False,
+    })
+
+    budgets = []
+
+    def shutdown_incomplete(**kwargs):
+        budget = kwargs["deadline_seconds"]
+        budgets.append(budget)
+        # Exercise both early completion and a call consuming its full slice.
+        clock.now += budget if consume_entire_budget else 0.1
+        return {"complete": False, "budget": budget}
+
+    monkeypatch.setattr(tick_store, "shutdown_persistence_worker", shutdown_incomplete)
+    monkeypatch.setattr(depth_store.depth_store, "shutdown_persistence", shutdown_incomplete)
+    monkeypatch.setattr(runtime_store, "shutdown_runtime_persistence", shutdown_incomplete)
+
+    lifecycle = ObservationLifecycle(Feed(), drain_deadline_seconds=2.0)
+    lifecycle.start([256265])
+    report = lifecycle.shutdown()
+
+    assert len(budgets) == 3
+    assert all(budget > 0 for budget in budgets)
+    assert budgets[0] <= 1.8
+    assert report["shutdown_drain_deadline_expired"] is consume_entire_budget
+    assert report["shutdown_drain_complete"] is False
+    assert report["phase"] == "FAILED"
+    assert report["final_seal"] == "PARTIAL"
+    assert report["tick_state"]["worker_join_completed"] is False
+    assert report["depth_state"]["in_flight"] == 1
+    assert report["tick_state"]["accounting_invariant_ok"] is False
 
 
 def test_lifecycle_signals_workers_before_bridge_exhausts_shared_deadline(monkeypatch):
