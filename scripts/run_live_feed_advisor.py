@@ -25,6 +25,7 @@ from core.nse_fo_contract_master import (
 from core.model_manifest_generator import SentinelManifestLock
 from core.dynamic_slippage_model import DynamicOptionSlippageModel
 from core.expiry_calendar import get_days_to_expiry, is_holiday
+from core.asset_profile_registry import get_asset_profile, AssetProfile
 from core.active_position_manager import (
     ActivePositionManager,
     STATE_STANDBY,
@@ -65,10 +66,12 @@ class SentinelLiveFeedAdvisor:
             self.calib = json.load(f)
 
         self.ticker = ticker.upper()
+        self.profile: AssetProfile = get_asset_profile(self.ticker)
         self.target_expiry = str(target_expiry).strip().upper() if target_expiry else None
         self.slippage = DynamicOptionSlippageModel(base_brokerage_pts=0.40)
-        self.apm = ActivePositionManager()
-        self.spread_threshold = 0.04
+        wal_path = f"runtime/sentinel_apm_wal_{self.ticker.lower()}.json" if self.ticker != "NIFTY" else "runtime/sentinel_apm_wal.json"
+        self.apm = ActivePositionManager(wal_path=wal_path, profile=self.profile)
+        self.spread_threshold = self.profile.max_spread_pct
         self.or_high = -1e9
         self.or_low = 1e9
         self.shock_active = True
@@ -81,7 +84,10 @@ class SentinelLiveFeedAdvisor:
 
         # Append-Only Audit Sink Setup
         today_str = datetime.now().strftime("%Y%m%d")
-        self.audit_log_path = Path(f"runtime/audit/sentinel_execution_paths_{today_str}.jsonl")
+        if self.ticker != "NIFTY":
+            self.audit_log_path = Path(f"runtime/audit/sentinel_execution_paths_{self.ticker.lower()}_{today_str}.jsonl")
+        else:
+            self.audit_log_path = Path(f"runtime/audit/sentinel_execution_paths_{today_str}.jsonl")
         self.audit_log_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Generate unique run ID and write immutable startup manifest
@@ -161,7 +167,8 @@ class SentinelLiveFeedAdvisor:
         print(f"📝 [AUDIT LOG SINK] Streaming to: {self.audit_log_path} (Run ID: {self.run_id})")
 
     def fetch_live_1m_candles(self) -> list:
-        url = "https://api.upstox.com/v2/historical-candle/intraday/NSE_INDEX%7CNifty%2050/1minute"
+        encoded_key = urllib.parse.quote(self.profile.index_instrument_key, safe="")
+        url = f"https://api.upstox.com/v2/historical-candle/intraday/{encoded_key}/1minute"
         req = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "TradeBot/1.0"})
         with urllib.request.urlopen(req, timeout=5) as resp:
             data = json.loads(resp.read().decode())
@@ -879,19 +886,19 @@ class SentinelLiveFeedAdvisor:
                 upper_wick = h - max(o, c)
                 lower_wick = min(o, c) - l
 
-                # 1-Strike In-The-Money (ITM) Strike Contract Resolver (K ± 50, Delta ≈ 0.65)
-                # Bridges 81% ATM liquidity with theta immunity and +10 pt option gain delivery
-                atm_strike = int(round(c / 50.0) * 50)
-                ce_itm_strike = atm_strike - 50  # 1-strike ITM for Call
-                pe_itm_strike = atm_strike + 50  # 1-strike ITM for Put
-                ce_contract = f"NIFTY {ce_itm_strike} CE [ITM]"
-                pe_contract = f"NIFTY {pe_itm_strike} PE [ITM]"
+                # 1-Strike In-The-Money (ITM) Strike Contract Resolver (Delta ≈ 0.65)
+                # Bridges ATM liquidity with theta immunity
+                step = self.profile.strike_step
+                atm_strike = int(round(c / float(step)) * step)
+                ce_itm_strike = atm_strike - step  # 1-strike ITM for Call
+                pe_itm_strike = atm_strike + step  # 1-strike ITM for Put
+                ce_contract = f"{self.ticker} {ce_itm_strike} CE [ITM]"
+                pe_contract = f"{self.ticker} {pe_itm_strike} PE [ITM]"
 
                 signal_display = "WAIT"
-                # Target: +15 spot pts yields +10.0 option strike pts on 0.65 delta
-                target_pts = 15.0
-                # Volatility-Scaled Stop Loss: max(12.0, 1.2 * ATR_1m) removes noise whipsaw
-                sl_pts = round(max(12.0, 1.2 * atr_1m), 1)
+                target_pts = self.profile.target_scalp_pts
+                # Volatility-Scaled Stop Loss: max(initial_sl_pts, 1.2 * ATR_1m) removes noise whipsaw
+                sl_pts = round(max(self.profile.initial_sl_pts, 1.2 * atr_1m), 1)
 
                 entry_dir = None
                 contract_choice = None
@@ -899,8 +906,9 @@ class SentinelLiveFeedAdvisor:
 
                 # Dynamic Regime Classification: Gear 1 (Range Scalper) vs Gear 2 (Trend Expansion)
                 or_width = self.or_high - self.or_low
-                is_or_expansion = (c < self.or_low or c > self.or_high) and or_width >= 70.0
-                current_gear = "GEAR_2_TREND" if (is_or_expansion or (self.ewma_ker >= 0.35 and or_width >= 70.0)) else "GEAR_1_RANGE"
+                min_exp_width = self.profile.or_min_expansion_width
+                is_or_expansion = (c < self.or_low or c > self.or_high) and or_width >= min_exp_width
+                current_gear = "GEAR_2_TREND" if (is_or_expansion or (self.ewma_ker >= 0.35 and or_width >= min_exp_width)) else "GEAR_1_RANGE"
 
                 # First-Principles Stochastic Diffusion Horizon Energy Gate Check
                 # Derived from Brownian maximum excursion over the 15-minute holding horizon: E[D] = ATR_1m * sqrt(15)
@@ -911,6 +919,7 @@ class SentinelLiveFeedAdvisor:
                     trade_horizon_mins=15
                 )
 
+                wick_threshold = 20.0 if self.ticker == "SENSEX" else 6.0
                 if c > self.or_high:
                     entry_dir = "CE"
                     contract_choice = ce_contract
@@ -921,12 +930,12 @@ class SentinelLiveFeedAdvisor:
                     contract_choice = pe_contract
                     chosen_strike = pe_itm_strike
                     signal_display = f"🎯 [BUY {pe_contract}] @ Breakdown < {self.or_low:.1f} | Target: +{target_pts}pts | Vol-SL: -{sl_pts}pts (ATR:{atr_1m:.1f})"
-                elif lower_wick >= 6.0 and (lower_wick / total_range) >= 0.40:
+                elif lower_wick >= wick_threshold and (lower_wick / total_range) >= 0.40:
                     entry_dir = "CE"
                     contract_choice = ce_contract
                     chosen_strike = ce_itm_strike
                     signal_display = f"🎯 [BUY {ce_contract}] @ Bullish Wick Rejection | Target: +{target_pts}pts | Vol-SL: -{sl_pts}pts"
-                elif upper_wick >= 6.0 and (upper_wick / total_range) >= 0.40:
+                elif upper_wick >= wick_threshold and (upper_wick / total_range) >= 0.40:
                     entry_dir = "PE"
                     contract_choice = pe_contract
                     chosen_strike = pe_itm_strike
@@ -936,16 +945,17 @@ class SentinelLiveFeedAdvisor:
                 session_high = max(float(b[2]) for b in candles)
                 session_low = min(float(b[3]) for b in candles)
                 session_range = session_high - session_low
-                # Macro ATR Extension Cap: If session has already moved > 2.5x 20d ATR (300 pts),
+                # Macro ATR Extension Cap: If session has already moved > macro_exhaustion_cap_pts,
                 # new trend breakout entries pay peak IV and risk mean-reversion whipsaw.
-                atr_extension_exhausted = (session_range > 2.5 * 120.0)
+                atr_extension_exhausted = (session_range > self.profile.macro_exhaustion_cap_pts)
 
                 # Re-Entry Displacement Gate: Enforce that re-entering in the same direction
                 # requires price to displace at least 1.0 * ATR_1m past the previous exit price.
                 # Prevents taking back-to-back losing micro-scalps into the same stall zone.
                 insufficient_displacement = False
+                base_disp = 25.0 if self.ticker == "SENSEX" else 8.0
                 if self.last_exit_price is not None and self.last_exit_direction == entry_dir:
-                    min_disp_pts = max(8.0, 1.0 * atr_1m)
+                    min_disp_pts = max(base_disp, 1.0 * atr_1m)
                     if entry_dir == "PE" and (self.last_exit_price - c) < min_disp_pts:
                         insufficient_displacement = True
                     elif entry_dir == "CE" and (c - self.last_exit_price) < min_disp_pts:

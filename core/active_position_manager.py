@@ -77,9 +77,14 @@ class PositionPayload:
 
 
 class ActivePositionManager:
-    def __init__(self, wal_path: str = "runtime/sentinel_apm_wal.json"):
+    def __init__(
+        self,
+        wal_path: str = "runtime/sentinel_apm_wal.json",
+        profile: Optional[Any] = None,
+    ):
         self.wal_path = Path(wal_path)
         self.wal_path.parent.mkdir(parents=True, exist_ok=True)
+        self.profile = profile
         self.state = STATE_STANDBY
         self.payload: Optional[PositionPayload] = None
         self.last_completed_trade: Optional[Dict[str, Any]] = None
@@ -361,17 +366,22 @@ class ActivePositionManager:
                 _record_tick_exit("RUNNER_HWM_TRAILING_EXIT", current_spot)
                 return self.liquidate()
 
-        # 5. Dynamic Ratchet Locks
+        # 5. Dynamic Ratchet Locks (Scaled via AssetProfile if provided)
+        ratchet_trig = getattr(self.profile, "ratchet_trigger_pts", 8.0) if self.profile else 8.0
+        ratchet_lock = getattr(self.profile, "ratchet_lock_pts", 4.0) if self.profile else 4.0
+        be_trig = getattr(self.profile, "breakeven_trigger_pts", 12.0) if self.profile else 12.0
+        be_lock = getattr(self.profile, "breakeven_lock_pts", 1.0) if self.profile else 1.0
+
         gain = (current_spot - p.entry_price) if is_ce else (p.entry_price - current_spot)
-        if gain >= 12.0 and not p.trail_locked:
-            be_sl = (p.entry_price + 1.0) if is_ce else (p.entry_price - 1.0)
+        if gain >= be_trig and not p.trail_locked:
+            be_sl = (p.entry_price + be_lock) if is_ce else (p.entry_price - be_lock)
             if (is_ce and be_sl > p.current_sl) or (not is_ce and be_sl < p.current_sl):
                 p.current_sl = be_sl
                 p.trail_locked = True
                 if self.state == STATE_IN_FLIGHT:
                     self._transition_to(STATE_TRAIL_LOCK)
-        elif gain >= 8.0 and not p.trail_locked:
-            new_sl = (p.entry_price + 4.0) if is_ce else (p.entry_price - 4.0)
+        elif gain >= ratchet_trig and not p.trail_locked:
+            new_sl = (p.entry_price + ratchet_lock) if is_ce else (p.entry_price - ratchet_lock)
             if (is_ce and new_sl > p.current_sl) or (not is_ce and new_sl < p.current_sl):
                 p.current_sl = new_sl
                 p.trail_locked = True
@@ -512,18 +522,24 @@ class ActivePositionManager:
             _record_exit("TRAILING_STOP_HIT", p.current_sl)
             return self.liquidate()
 
-        # Invariant: Breakeven Lock at +12.0 Spot Points Gain (Snaps SL to entry + 1.0 pt)
-        if gain >= 12.0 and not p.trail_locked:
-            be_sl = (p.entry_price + 1.0) if is_ce else (p.entry_price - 1.0)
+        # Dynamic Ratchet and Breakeven Locks (Scaled via AssetProfile if provided)
+        ratchet_trig = getattr(self.profile, "ratchet_trigger_pts", 8.0) if self.profile else 8.0
+        ratchet_lock = getattr(self.profile, "ratchet_lock_pts", 4.0) if self.profile else 4.0
+        be_trig = getattr(self.profile, "breakeven_trigger_pts", 12.0) if self.profile else 12.0
+        be_lock = getattr(self.profile, "breakeven_lock_pts", 1.0) if self.profile else 1.0
+
+        # Invariant: Breakeven Lock at Breakeven Trigger Spot Points Gain
+        if gain >= be_trig and not p.trail_locked:
+            be_sl = (p.entry_price + be_lock) if is_ce else (p.entry_price - be_lock)
             if (is_ce and be_sl > p.current_sl) or (not is_ce and be_sl < p.current_sl):
                 p.current_sl = be_sl
                 p.trail_locked = True
                 if self.state == STATE_IN_FLIGHT:
                     self._transition_to(STATE_TRAIL_LOCK)
 
-        # 2. Monotonic Trailing Ratchet (+8 pts move locks +4 pts profit)
-        elif gain >= 8.0 and not p.trail_locked:
-            new_sl = (p.entry_price + 4.0) if is_ce else (p.entry_price - 4.0)
+        # 2. Monotonic Trailing Ratchet (Move locks profit)
+        elif gain >= ratchet_trig and not p.trail_locked:
+            new_sl = (p.entry_price + ratchet_lock) if is_ce else (p.entry_price - ratchet_lock)
             # Invariant 1.1: Compare-And-Swap monotonicity check
             if (is_ce and new_sl > p.current_sl) or (not is_ce and new_sl < p.current_sl):
                 p.current_sl = new_sl
