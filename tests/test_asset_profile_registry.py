@@ -46,15 +46,15 @@ def test_sensex_profile_mathematical_scaling():
     assert sensex.index_instrument_key == "BSE_INDEX|SENSEX"
     assert sensex.fo_exchange_prefix == "BSE_FO"
     assert sensex.strike_step == 100
-    assert sensex.target_scalp_pts == 50.0
-    assert sensex.target_runner_pts == 100.0
-    assert sensex.initial_sl_pts == 40.0
+    assert sensex.target_scalp_pts == 46.0
+    assert sensex.target_runner_pts == 85.0
+    assert sensex.initial_sl_pts == 30.0
     assert sensex.ratchet_trigger_pts == 25.0
     assert sensex.ratchet_lock_pts == 12.0
     assert sensex.breakeven_trigger_pts == 40.0
     assert sensex.breakeven_lock_pts == 3.0
-    assert sensex.or_min_expansion_width == 220.0
-    assert sensex.macro_exhaustion_cap_pts == 950.0
+    assert sensex.or_min_expansion_width == 300.0
+    assert sensex.macro_exhaustion_cap_pts == 1100.0
     assert sensex.max_spread_pct == 0.05
     assert sensex.weekly_expiry_day_of_week == 3  # Thursday
 

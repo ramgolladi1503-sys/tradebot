@@ -27,15 +27,15 @@ def test_sensex_profile_parameters():
     assert sensex.index_instrument_key == "BSE_INDEX|SENSEX"
     assert sensex.fo_exchange_prefix == "BSE_FO"
     assert sensex.strike_step == 100
-    assert sensex.target_scalp_pts == 50.0
-    assert sensex.target_runner_pts == 100.0
-    assert sensex.initial_sl_pts == 40.0
+    assert sensex.target_scalp_pts == 46.0
+    assert sensex.target_runner_pts == 85.0
+    assert sensex.initial_sl_pts == 30.0
     assert sensex.ratchet_trigger_pts == 25.0
     assert sensex.ratchet_lock_pts == 12.0
     assert sensex.breakeven_trigger_pts == 40.0
     assert sensex.breakeven_lock_pts == 3.0
-    assert sensex.or_min_expansion_width == 220.0
-    assert sensex.macro_exhaustion_cap_pts == 950.0
+    assert sensex.or_min_expansion_width == 300.0
+    assert sensex.macro_exhaustion_cap_pts == 1100.0
     assert sensex.weekly_expiry_day_of_week == 3  # Thursday
 
 
@@ -57,7 +57,7 @@ def test_sensex_active_position_manager_ratchet(tmp_path):
     )
     assert armed is True
     assert apm.state == STATE_IN_FLIGHT
-    assert apm.payload.current_sl == 73000.0 - 40.0  # 72960.0
+    assert apm.payload.current_sl == 73000.0 - sensex.initial_sl_pts  # 72970.0
 
     # Move spot by +20 pts (less than +25 ratchet trigger) -> should stay in flight, SL unchanged
     state, p = apm.evaluate_tick(
@@ -68,7 +68,7 @@ def test_sensex_active_position_manager_ratchet(tmp_path):
     )
     assert state == STATE_IN_FLIGHT
     assert p["trail_locked"] is False
-    assert p["current_sl"] == 72960.0
+    assert p["current_sl"] == 72970.0
 
     # Move spot by +26 pts (crosses +25 trigger) -> ratchets SL to entry + 12.0 = 73012.0
     state, p = apm.evaluate_tick(

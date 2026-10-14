@@ -1,0 +1,50 @@
+{
+  "metadata": {
+    "asset": "SENSEX",
+    "historical_archive": "/Volumes/TradeBot/historical/sensex/sensex_1minute_2022_2026.parquet",
+    "total_bars_analyzed": 442677,
+    "total_sessions": 1186,
+    "date_range": "2022-01-03 09:15:00 to 2026-10-13 15:29:00",
+    "median_1m_bar_range_pts": 22.5,
+    "p90_opening_range_width_pts": 528.8,
+    "p90_daily_session_range_pts": 1128.6
+  },
+  "RANGE": {
+    "count": 242125,
+    "percentage": 60.4,
+    "efficiency_ratio_max": 0.28,
+    "action": "MICRO_SCALP_BOTH_WAYS",
+    "optimal_target_pts": 46.7,
+    "optimal_stop_loss_pts": 25.8,
+    "optimal_rejection_wick_pts": 15.7,
+    "optimal_profit_lock_trigger_pts": 25.6,
+    "rules": "Fade rips at upper boundary; Buy dips at lower boundary/VWAP floor; Lock profits quickly."
+  },
+  "TRENDING_UP": {
+    "count": 20697,
+    "percentage": 5.2,
+    "efficiency_ratio_min": 0.45,
+    "action": "PULLBACK_LONG_ONLY",
+    "optimal_target_pts": 80.7,
+    "optimal_stop_loss_pts": 33.4,
+    "rules": "Buy pullbacks to VWAP; Strictly forbid shorting/fading; Trail stops."
+  },
+  "TRENDING_DOWN": {
+    "count": 19339,
+    "percentage": 4.8,
+    "efficiency_ratio_min": 0.45,
+    "action": "BREAKDOWN_SHORT_ONLY",
+    "optimal_target_pts": 92.1,
+    "optimal_stop_loss_pts": 38.7,
+    "rules": "Sell rallies to VWAP; Strictly forbid buying dips; Trail stops."
+  },
+  "VOLATILE_SHOCK": {
+    "count": 29355,
+    "percentage": 7.3,
+    "min_bar_range_pts": 39.1,
+    "action": "STAND_ASIDE_100_PERCENT_CASH",
+    "optimal_target_pts": 0.0,
+    "optimal_stop_loss_pts": 0.0,
+    "rules": "Enforce mandatory stand-aside; Vega shock & erratic wicks destroy capital."
+  }
+}
