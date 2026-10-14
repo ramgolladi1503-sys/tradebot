@@ -591,7 +591,7 @@ def test_wi08_gate5_lot_size_scale_invariance():
 def test_wi11_gate1_adaptive_batching_scales_with_queue_depth(monkeypatch):
     import core.depth_store as depth_store_mod
     batches_received = []
-    
+
     def fake_batch_insert(items):
         batches_received.append(len(items))
         return len(items)
@@ -600,17 +600,17 @@ def test_wi11_gate1_adaptive_batching_scales_with_queue_depth(monkeypatch):
     monkeypatch.setattr(cfg, "DEPTH_PERSIST_BATCH_SIZE", 50, raising=False)
     monkeypatch.setattr(cfg, "PERSISTENCE_BATCH_MAX_ITEMS", 500, raising=False)
     monkeypatch.setattr(cfg, "DEPTH_SNAPSHOT_WRITE_MIN_INTERVAL_SEC", 0.0, raising=False)
-    
+
     store = DepthStore()
     sample = {
         "buy": [{"price": 100.0, "quantity": 10}],
         "sell": [{"price": 101.0, "quantity": 10}],
     }
-    
+
     # Enqueue a burst of 300 updates
     for i in range(300):
         store.update(800_000 + i, sample)
-        
+
     state = store.shutdown_persistence(deadline_seconds=5.0)
     assert state["accounting_invariant_ok"] is True
     assert state["unaccounted_remainder"] == 0
@@ -642,12 +642,10 @@ def test_wi11_gate3_in_memory_depth_lookups_unaffected_by_persistence_worker():
         "sell": [{"price": 101.0, "quantity": 50}],
     }
     store.update(999999, sample)
-    
+
     # Lookups are immediate in-memory and synchronous
     book = store.books[999999]
     assert book["depth_state"] == "VALID_BOOK"
     assert book["is_valid"] is True
     assert book["imbalance"] == 0.0
     store.shutdown_persistence(deadline_seconds=1.0)
-
-

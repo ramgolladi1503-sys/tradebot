@@ -633,4 +633,3 @@ def test_wi07_gate5_safety_non_negotiables_enforced():
     assert ("place" + "_order") not in src
     assert "broker" not in src
     assert ("cancel" + "_order") not in src
-

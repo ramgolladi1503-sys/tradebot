@@ -401,4 +401,3 @@ def test_wi12_gate8_bridge_telemetry_integration():
     dict_payload = telemetry.to_dict()
     assert dict_payload["active_desync_count"] == 1
     assert dict_payload["total_retrograde_count"] == 1
-

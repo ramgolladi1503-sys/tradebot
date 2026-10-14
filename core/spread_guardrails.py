@@ -538,4 +538,3 @@ class SpreadGuardrail:
                 "regime_multiplier": regime_state.regime_multiplier,
             },
         )
-

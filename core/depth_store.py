@@ -59,7 +59,7 @@ class DepthImbalanceResult:
 
 def compute_depth_imbalance(depth: Mapping[str, Any] | None) -> DepthImbalanceResult:
     """Pure, deterministic computation of L2 orderbook depth imbalance with microstructure validation.
-    
+
     Guarantees:
     - Never raises an unhandled exception.
     - math.isfinite(result.imbalance) is True.

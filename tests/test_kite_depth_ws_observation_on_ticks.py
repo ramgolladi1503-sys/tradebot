@@ -2144,4 +2144,3 @@ def test_wi04_gate4_hard_timeout_fail_closed_guarantee():
     context, symbols, reason = _source_tick_freshness_failure(snapshot, max_age_sec=3.0)
     assert reason == "SNAPSHOT_SOURCE_TICK_STALE"
     assert "NIFTY2680625000CE" in symbols
-

@@ -1185,5 +1185,3 @@ def test_wi06_gate5_temporal_alignment_ist_date(monkeypatch):
 
     ist_today = now_ist().date()
     assert resolver._trading_date() == ist_today
-
-

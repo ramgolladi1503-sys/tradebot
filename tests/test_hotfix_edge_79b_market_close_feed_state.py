@@ -273,4 +273,3 @@ def test_wi14_gate5_dirty_handoff_when_dropped_writes_occur():
     assert manifest["handoff_status"] == "DIRTY_HANDOFF_UNRESOLVED_WRITES"
     assert manifest["dropped_evidence_writes"] == 2
     assert manifest["queue_drain_certified"] is False
-

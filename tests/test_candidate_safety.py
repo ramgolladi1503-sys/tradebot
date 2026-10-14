@@ -10,7 +10,7 @@ def test_subscription_delta_uses_observed_mutation_interface():
     with patch("core.feed.ws_mutation_queue.safe_subscribe_full_mode_observed") as mock_sub, \
          patch("core.feed.ws_mutation_queue.safe_unsubscribe") as mock_unsub, \
          patch("core.kite_depth_ws._can_mutate_ws_subscriptions", return_value=(True, "ok", {})):
-        
+
         # mock return values (WsMutationResult mock)
         mock_res = MagicMock()
         mock_res.ok = True
@@ -31,15 +31,15 @@ def test_subscription_delta_uses_observed_mutation_interface():
         mock_unsub.side_effect = lambda _ws, _tokens, _reason, _now_epoch, on_applied_callback=None: (
             on_applied_callback() if on_applied_callback else None
         ) or mock_res
-        
+
         _apply_subscription_delta(ws, [123], [456], "test")
-        
+
         assert mock_sub.call_count == 1
         assert mock_sub.call_args[0][0] == ws
         assert mock_sub.call_args[0][1] == [123]
         assert mock_sub.call_args.kwargs["socket_generation"] is not None
         assert callable(mock_sub.call_args.kwargs["active_generation"])
-        
+
         assert mock_unsub.call_count == 1
         assert mock_unsub.call_args[0][0] == ws
         assert mock_unsub.call_args[0][1] == [456]
@@ -88,7 +88,7 @@ def test_stale_option_ltp_blocks_candidate_execution_without_triggering_no_live_
     from core.blocker_lifecycle import evaluate_feed_symbol_blockers, BlockerRegistry
     from core.opportunity_engine import build_opportunity_score
     registry = BlockerRegistry("test")
-    
+
     # 1. Show NO_LIVE_OPTION_FEED does NOT trigger for 10s gap
     evaluate_feed_symbol_blockers(
         registry=registry,
@@ -106,7 +106,7 @@ def test_stale_option_ltp_blocks_candidate_execution_without_triggering_no_live_
     keys = [k for k in registry._records.keys() if k[2] == "NO_LIVE_OPTION_FEED"]
     record_live = registry._records.get(keys[0]) if keys else None
     assert record_live is None or not record_live.active
-    
+
     # 2. Show stale quote blocks execution in opportunity engine
     candidate = {
         "symbol": "NIFTY",
@@ -120,13 +120,13 @@ def test_stale_option_ltp_blocks_candidate_execution_without_triggering_no_live_
         "primary_blocker": "stale_quote" # Sometimes explicitly passed
     }
     score_out = build_opportunity_score(candidate)
-    
+
     assert score_out["candidate_class"] != "EXECUTABLE"
     assert score_out.get("primary_blocker") == "stale_quote"
 
 def test_rest_recovery_forces_advisory_only_in_production_engine():
     from core.opportunity_engine import _base_execution_truth
-    
+
     candidate = {
         "symbol": "NIFTY",
         "execution_allowed": True,
@@ -135,16 +135,16 @@ def test_rest_recovery_forces_advisory_only_in_production_engine():
         "execution_entry_status": "executable",
         "source_flags": {"quote_source": "REST_RECOVERY"}
     }
-    
+
     truth = _base_execution_truth(candidate)
-    
+
     assert truth["execution_truth"] is False
     assert candidate["execution_allowed"] is False
     assert candidate["mode"] == "advisory_only"
 
 def test_recovered_fallback_forces_advisory_only_in_production_engine():
     from core.opportunity_engine import _base_execution_truth
-    
+
     candidate = {
         "symbol": "NIFTY",
         "execution_allowed": True,
@@ -153,9 +153,9 @@ def test_recovered_fallback_forces_advisory_only_in_production_engine():
         "execution_entry_status": "executable",
         "source_flags": {"recovered_fallback": True}
     }
-    
+
     truth = _base_execution_truth(candidate)
-    
+
     assert truth["execution_truth"] is False
     assert candidate["execution_allowed"] is False
     assert candidate["mode"] == "advisory_only"
@@ -164,7 +164,7 @@ def test_recovered_fallback_forces_advisory_only_in_production_engine():
 def test_wi09_gate1_spread_guard_null_or_none_or_non_positive_quote():
     from core.spread_guardrails import SpreadGuardrailState
     guard = SpreadGuardrailState()
-    
+
     # Null input
     r1 = guard.validate_quote(None, 100.0)
     assert r1.passed is False
@@ -196,7 +196,7 @@ def test_wi09_gate2_spread_guard_crossed_quote():
 def test_wi09_gate3_excessive_and_valid_spread_threshold():
     from core.spread_guardrails import SpreadGuardrailState
     guard = SpreadGuardrailState(max_spread_bps=50.0) # 0.5% max
-    
+
     # Spread = 2.0 on midpoint 100.0 -> 200 bps (> 50 bps)
     r_bad = guard.validate_quote(99.0, 101.0)
     assert r_bad.passed is False
@@ -213,7 +213,7 @@ def test_wi09_gate3_excessive_and_valid_spread_threshold():
 def test_wi09_gate4_midpoint_jump_rejection_and_baseline_isolation():
     from core.spread_guardrails import SpreadGuardrailState
     guard = SpreadGuardrailState(max_jump_pct=2.0)
-    
+
     # Tick 1: Initialize baseline at 100.0
     r1 = guard.validate_quote(99.95, 100.05)
     assert r1.passed is True
@@ -236,7 +236,7 @@ def test_wi09_gate4_midpoint_jump_rejection_and_baseline_isolation():
 def test_wi09_gate5_causal_resynchronization_after_k_consistent_ticks():
     from core.spread_guardrails import SpreadGuardrailState
     guard = SpreadGuardrailState(max_jump_pct=2.0, recovery_k_ticks=3, cluster_tolerance_pct=0.5)
-    
+
     # Tick 1: Baseline at 100.0
     guard.validate_quote(99.95, 100.05)
     assert guard.last_accepted_midpoint == pytest.approx(100.0)
@@ -263,18 +263,18 @@ def test_wi09_gate5_causal_resynchronization_after_k_consistent_ticks():
 def test_wi09_gate6_candidate_safety_integration_forces_advisory_only():
     from core.spread_guardrails import SpreadGuardrailState, apply_spread_guard_to_candidate
     guard = SpreadGuardrailState()
-    
+
     # Inadmissible quote (excessive spread)
     res = guard.validate_quote(10.0, 50.0)
     assert res.passed is False
-    
+
     candidate = {
         "symbol": "NIFTY",
         "execution_allowed": True,
         "mode": "live",
         "candidate_class": "EXECUTABLE",
     }
-    
+
     updated = apply_spread_guard_to_candidate(candidate, res)
     assert updated["execution_allowed"] is False
     assert updated["mode"] == "advisory_only"
@@ -304,7 +304,7 @@ def test_wi10_gate2_gap_aware_ordinal_strike_window_selection():
     from core.option_chain import compute_gap_aware_strike_window
     # Available strikes with missing intermediate strike 24900
     available = [24600.0, 24700.0, 24800.0, 25000.0, 25100.0]
-    
+
     # Spot 24800, strikes_around=2 -> Should pick 2 below (24600, 24700), ATM (24800), and 2 above (25000, 25100)
     window = compute_gap_aware_strike_window(
         spot=24800.0,
@@ -319,7 +319,7 @@ def test_wi10_gate3_unlisted_atm_strike_tie_breaks_to_higher_rung():
     from core.option_chain import compute_gap_aware_strike_window
     # Exact ATM 24850 is not listed
     available = [24700.0, 24800.0, 24900.0, 25000.0]
-    
+
     # Spot 24850 -> nearest strikes are 24800 and 24900. Deterministic tie-break anchors to higher 24900
     window = compute_gap_aware_strike_window(
         spot=24850.0,
@@ -334,15 +334,15 @@ def test_wi10_gate3_unlisted_atm_strike_tie_breaks_to_higher_rung():
 def test_wi10_gate4_strike_window_hysteresis_anti_churn():
     from core.option_chain import StrikeWindowHysteresisState
     state = StrikeWindowHysteresisState(hysteresis_pct=0.20)
-    
+
     # Initial state should always recenter
     assert state.should_recenter(spot=24800.0, step=50.0) is True
     state.update(24800.0)
-    
+
     # Boundary oscillation within threshold (50 * 1.2 = 60 pts)
     # Spot moves to 24840 (+40 pts < 60) -> should NOT recenter
     assert state.should_recenter(spot=24840.0, step=50.0) is False
-    
+
     # Spot moves to 24870 (+70 pts >= 60) -> should recenter
     assert state.should_recenter(spot=24870.0, step=50.0) is True
 
@@ -473,6 +473,3 @@ def test_wi13_gate5_causal_no_unclosed_tick_lookahead():
     assert res.passed is False
     assert res.reason == "INSUFFICIENT_VOL_DATA"
     assert res.regime_state.is_sufficient_history is False
-
-
-

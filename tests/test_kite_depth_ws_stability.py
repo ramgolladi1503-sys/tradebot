@@ -2857,4 +2857,3 @@ def test_wi05_gate4_safety_non_negotiables_enforced():
     assert decision.live_order_action is False
     assert decision.broker_order_action is False
     assert decision.append is False
-
