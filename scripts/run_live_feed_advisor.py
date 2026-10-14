@@ -26,6 +26,7 @@ from core.model_manifest_generator import SentinelManifestLock
 from core.dynamic_slippage_model import DynamicOptionSlippageModel
 from core.expiry_calendar import get_days_to_expiry, is_holiday
 from core.asset_profile_registry import get_asset_profile, AssetProfile
+from core.institutional_writer_flow import InstitutionalWriterFlowEngine
 from core.active_position_manager import (
     ActivePositionManager,
     STATE_STANDBY,
@@ -70,6 +71,7 @@ class SentinelLiveFeedAdvisor:
         self.target_expiry = str(target_expiry).strip().upper() if target_expiry else None
         exch_name = "BSE" if "BSE" in self.profile.fo_exchange_prefix else "NSE"
         self.slippage = DynamicOptionSlippageModel(base_brokerage_pts=0.40, exchange=exch_name)
+        self.writer_flow = InstitutionalWriterFlowEngine(strike_step=self.profile.strike_step, ntm_strikes_count=3)
         wal_path = f"runtime/sentinel_apm_wal_{self.ticker.lower()}.json" if self.ticker != "NIFTY" else "runtime/sentinel_apm_wal.json"
         self.apm = ActivePositionManager(wal_path=wal_path, profile=self.profile)
         self.spread_threshold = self.profile.max_spread_pct
@@ -515,6 +517,33 @@ class SentinelLiveFeedAdvisor:
                     "candidate_reason": candidate_reason,
                     "option_candidate": option_candidate,
                 }
+
+            # Institutional Writer Wall & PCR Divergence Gate:
+            live_opt_book = getattr(self, "live_option_book", {})
+            if live_opt_book:
+                flow_state = self.writer_flow.compute_ntm_flow(
+                    spot_price=spot_close,
+                    live_option_book=live_opt_book,
+                    asset_prefix=self.ticker
+                )
+                passes_wall, wall_reason = self.writer_flow.validate_writer_gate(
+                    entry_direction=entry_dir,
+                    spot_price=spot_close,
+                    flow_state=flow_state,
+                    min_runway_pts=35.0 if self.ticker == "SENSEX" else 15.0
+                )
+                if not passes_wall:
+                    candidate_status = "NOT_EVALUABLE"
+                    candidate_reason = wall_reason
+                    signal_display = f"{signal_display} -> SUPPRESSED ({wall_reason})"
+                    risk_flag = "VETO_WRITER_WALL_COLLISION"
+                    return {
+                        "signal_display": signal_display,
+                        "risk_flag": risk_flag,
+                        "candidate_status": candidate_status,
+                        "candidate_reason": candidate_reason,
+                        "option_candidate": option_candidate,
+                    }
 
             # Descriptive capture/receive-time observation only; exchange timestamp is unverified.
             candidate_status = "CAPTURE_RECEIVE_TIME_REPLAY_ONLY"
