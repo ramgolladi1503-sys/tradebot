@@ -242,6 +242,16 @@ class ActivePositionManager:
             hold_horizon = 360
         elif is_runner_mode:
             hold_horizon = 25
+        else:
+            # Layer 3 0-DTE Greek Shield: Dynamic Theta Decay Curve
+            # If entering past 12:30 PM on 0-DTE, scale hold horizon down linearly to prevent theta burn
+            try:
+                entry_t = datetime.fromisoformat(entry_time_str).time()
+                mins_to_close = (dtime(15, 30).hour * 60 + dtime(15, 30).minute) - (entry_t.hour * 60 + entry_t.minute)
+                if mins_to_close < 180:  # Past 12:30 PM
+                    hold_horizon = max(6, int(15.0 * (mins_to_close / 180.0)))
+            except Exception:
+                hold_horizon = 15
 
         self.payload = PositionPayload(
             position_id=position_id,

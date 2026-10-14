@@ -950,12 +950,13 @@ class SentinelLiveFeedAdvisor:
                 atr_extension_exhausted = (session_range > self.profile.macro_exhaustion_cap_pts)
 
                 # Re-Entry Displacement Gate: Enforce that re-entering in the same direction
-                # requires price to displace at least 1.0 * ATR_1m past the previous exit price.
-                # Prevents taking back-to-back losing micro-scalps into the same stall zone.
+                # requires price to displace past previous exit price outside single-bar noise envelope.
+                # SENSEX median 1m bar is ~22.5 pts, so minimum displacement is max(30.0, 1.2 * ATR_1m).
                 insufficient_displacement = False
-                base_disp = 25.0 if self.ticker == "SENSEX" else 8.0
+                base_disp = 30.0 if self.ticker == "SENSEX" else 8.0
+                disp_mult = 1.2 if self.ticker == "SENSEX" else 1.0
                 if self.last_exit_price is not None and self.last_exit_direction == entry_dir:
-                    min_disp_pts = max(base_disp, 1.0 * atr_1m)
+                    min_disp_pts = max(base_disp, disp_mult * atr_1m)
                     if entry_dir == "PE" and (self.last_exit_price - c) < min_disp_pts:
                         insufficient_displacement = True
                     elif entry_dir == "CE" and (c - self.last_exit_price) < min_disp_pts:

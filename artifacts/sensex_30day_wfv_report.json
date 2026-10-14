@@ -1,0 +1,163 @@
+{
+  "audit_name": "SENSEX_30_DAY_WALK_FORWARD_VERIFICATION",
+  "date_range": "2026-08-31 to 2026-10-13",
+  "total_sessions": 30,
+  "total_trades": 195,
+  "win_rate_pct": 58.97,
+  "net_cumulative_pts": 685.2,
+  "profit_factor": 1.27,
+  "avg_win_pts": 28.1,
+  "avg_loss_pts": -31.8,
+  "daily_stats": {
+    "2026-08-31": {
+      "trades": 4,
+      "pnl_pts": -39.0,
+      "wins": 2
+    },
+    "2026-09-01": {
+      "trades": 7,
+      "pnl_pts": 104.0,
+      "wins": 6
+    },
+    "2026-09-02": {
+      "trades": 2,
+      "pnl_pts": -18.0,
+      "wins": 1
+    },
+    "2026-09-03": {
+      "trades": 5,
+      "pnl_pts": 34.7,
+      "wins": 3
+    },
+    "2026-09-04": {
+      "trades": 4,
+      "pnl_pts": 6.0,
+      "wins": 3
+    },
+    "2026-09-07": {
+      "trades": 6,
+      "pnl_pts": 63.7,
+      "wins": 4
+    },
+    "2026-09-08": {
+      "trades": 5,
+      "pnl_pts": -32.0,
+      "wins": 2
+    },
+    "2026-09-09": {
+      "trades": 6,
+      "pnl_pts": -29.7,
+      "wins": 3
+    },
+    "2026-09-10": {
+      "trades": 6,
+      "pnl_pts": -165.2,
+      "wins": 0
+    },
+    "2026-09-11": {
+      "trades": 7,
+      "pnl_pts": 159.8,
+      "wins": 5
+    },
+    "2026-09-15": {
+      "trades": 13,
+      "pnl_pts": 218.0,
+      "wins": 10
+    },
+    "2026-09-16": {
+      "trades": 1,
+      "pnl_pts": -59.7,
+      "wins": 0
+    },
+    "2026-09-17": {
+      "trades": 3,
+      "pnl_pts": 22.7,
+      "wins": 2
+    },
+    "2026-09-18": {
+      "trades": 3,
+      "pnl_pts": 62.2,
+      "wins": 2
+    },
+    "2026-09-21": {
+      "trades": 3,
+      "pnl_pts": 96.1,
+      "wins": 3
+    },
+    "2026-09-22": {
+      "trades": 7,
+      "pnl_pts": 100.0,
+      "wins": 5
+    },
+    "2026-09-23": {
+      "trades": 5,
+      "pnl_pts": -0.4,
+      "wins": 3
+    },
+    "2026-09-24": {
+      "trades": 10,
+      "pnl_pts": 2.0,
+      "wins": 5
+    },
+    "2026-09-25": {
+      "trades": 1,
+      "pnl_pts": 12.0,
+      "wins": 1
+    },
+    "2026-09-28": {
+      "trades": 8,
+      "pnl_pts": -89.5,
+      "wins": 3
+    },
+    "2026-09-29": {
+      "trades": 0,
+      "pnl_pts": 0,
+      "wins": 0
+    },
+    "2026-09-30": {
+      "trades": 8,
+      "pnl_pts": -39.0,
+      "wins": 4
+    },
+    "2026-10-01": {
+      "trades": 11,
+      "pnl_pts": 218.5,
+      "wins": 9
+    },
+    "2026-10-05": {
+      "trades": 7,
+      "pnl_pts": 38.3,
+      "wins": 4
+    },
+    "2026-10-06": {
+      "trades": 9,
+      "pnl_pts": 8.0,
+      "wins": 5
+    },
+    "2026-10-07": {
+      "trades": 5,
+      "pnl_pts": -116.4,
+      "wins": 1
+    },
+    "2026-10-08": {
+      "trades": 14,
+      "pnl_pts": 42.4,
+      "wins": 9
+    },
+    "2026-10-09": {
+      "trades": 9,
+      "pnl_pts": 5.5,
+      "wins": 6
+    },
+    "2026-10-12": {
+      "trades": 17,
+      "pnl_pts": -106.3,
+      "wins": 7
+    },
+    "2026-10-13": {
+      "trades": 9,
+      "pnl_pts": 186.5,
+      "wins": 7
+    }
+  }
+}
