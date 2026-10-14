@@ -112,8 +112,8 @@ def compute_depth_imbalance(depth: Mapping[str, Any] | None) -> DepthImbalanceRe
                 depth_state="INVALID_BOOK",
                 is_valid=False,
             )
-        if px > 0.0 and qty > 0:
-            if prev_bid_px is not None and px >= prev_bid_px:
+        if qty > 0:
+            if px > 0.0 and prev_bid_px is not None and px >= prev_bid_px:
                 # Monotonicity violation: bid prices must descend strictly
                 return DepthImbalanceResult(
                     imbalance=0.0,
@@ -122,8 +122,9 @@ def compute_depth_imbalance(depth: Mapping[str, Any] | None) -> DepthImbalanceRe
                     depth_state="INVALID_BOOK",
                     is_valid=False,
                 )
-            prev_bid_px = px
-            parsed_buys.append((px, qty))
+            if px > 0.0:
+                prev_bid_px = px
+            parsed_buys.append((px if px > 0.0 else None, qty))
 
     # Validate and extract sell levels
     parsed_sells = []
@@ -150,8 +151,8 @@ def compute_depth_imbalance(depth: Mapping[str, Any] | None) -> DepthImbalanceRe
                 depth_state="INVALID_BOOK",
                 is_valid=False,
             )
-        if px > 0.0 and qty > 0:
-            if prev_ask_px is not None and px <= prev_ask_px:
+        if qty > 0:
+            if px > 0.0 and prev_ask_px is not None and px <= prev_ask_px:
                 # Monotonicity violation: ask prices must ascend strictly
                 return DepthImbalanceResult(
                     imbalance=0.0,
@@ -160,8 +161,9 @@ def compute_depth_imbalance(depth: Mapping[str, Any] | None) -> DepthImbalanceRe
                     depth_state="INVALID_BOOK",
                     is_valid=False,
                 )
-            prev_ask_px = px
-            parsed_sells.append((px, qty))
+            if px > 0.0:
+                prev_ask_px = px
+            parsed_sells.append((px if px > 0.0 else None, qty))
 
     buy_qty = sum(q for _, q in parsed_buys)
     sell_qty = sum(q for _, q in parsed_sells)
@@ -340,7 +342,12 @@ class DepthStore:
 
     def _persist_loop(self):
         min_batch_size = self._persist_batch_size
-        max_batch_size = max(min_batch_size, int(getattr(cfg, "PERSISTENCE_BATCH_MAX_ITEMS", 1000) or 1000))
+        adaptive_enabled = bool(getattr(cfg, "PERSISTENCE_BATCH_ADAPTIVE_ENABLED", False))
+        configured_max = getattr(cfg, "PERSISTENCE_BATCH_MAX_ITEMS", None)
+        if adaptive_enabled or configured_max is not None:
+            max_batch_size = max(min_batch_size, int(configured_max or min_batch_size))
+        else:
+            max_batch_size = min_batch_size
         prune_interval_sec = max(
             5.0,
             float(getattr(cfg, "DEPTH_SNAPSHOT_PRUNE_INTERVAL_SEC", 30.0) or 30.0),
@@ -349,16 +356,15 @@ class DepthStore:
             5.0,
             float(getattr(cfg, "WAL_CHECKPOINT_MIN_INTERVAL_SEC", 30.0) or 30.0),
         )
-        last_prune_epoch = time.time()
-        last_wal_epoch = time.time()
+        last_prune_mono = time.monotonic()
+        last_wal_mono = time.monotonic()
         from core.trade_store import prune_depth_snapshots, checkpoint_depth_wal
 
         while not self._persist_stop.is_set() or not self._persist_queue.empty():
             items = []
             with self._persist_admission_lock:
-                # Dynamic adaptive batch sizing: absorb surges up to PERSISTENCE_BATCH_MAX_ITEMS
                 current_q = self._persist_queue.qsize()
-                effective_batch_size = min(max_batch_size, max(min_batch_size, current_q))
+                effective_batch_size = min(max_batch_size, max(min_batch_size, current_q)) if max_batch_size > min_batch_size else min_batch_size
                 while len(items) < effective_batch_size:
                     try:
                         items.append(self._persist_queue.get_nowait())
@@ -421,20 +427,20 @@ class DepthStore:
                         self._persist_queue.task_done()
 
             # Run retention pruning & non-blocking WAL checkpoints only when queue occupancy is low/idle.
-            now_epoch = time.time()
+            now_mono = time.monotonic()
             queue_idle = _retention_prune_allowed(
                 queue_depth=self._persist_queue.qsize(),
                 in_flight=self._persist_in_flight,
             )
-            if (now_epoch - last_prune_epoch) >= prune_interval_sec and queue_idle:
-                last_prune_epoch = now_epoch
+            if (now_mono - last_prune_mono) >= prune_interval_sec and queue_idle:
+                last_prune_mono = now_mono
                 try:
                     prune_depth_snapshots()
                 except Exception as prune_exc:
                     logger.debug("background_depth_prune_skipped err=%s", prune_exc)
 
-            if (now_epoch - last_wal_epoch) >= wal_interval_sec and self._persist_queue.qsize() < min_batch_size:
-                last_wal_epoch = now_epoch
+            if (now_mono - last_wal_mono) >= wal_interval_sec and self._persist_queue.qsize() < min_batch_size:
+                last_wal_mono = now_mono
                 try:
                     checkpoint_depth_wal(mode="PASSIVE")
                 except Exception as wal_exc:
