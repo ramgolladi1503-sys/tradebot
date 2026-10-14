@@ -317,6 +317,8 @@ def execute_post_market_stitching(date_str: str, date_compact: str, data_dir: Pa
         if out_file.exists() and out_file.stat().st_size > 0 and final_count > 0 and valid_chunks > 0:
             logger.info(f"Master file verified ({final_count:,} ticks). Pruning raw chunks...")
             for cf in chunk_files:
+                if Path(cf).resolve() == out_file.resolve():
+                    continue
                 try:
                     Path(cf).unlink(missing_ok=True)
                 except Exception as e:
