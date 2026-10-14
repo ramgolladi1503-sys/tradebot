@@ -543,8 +543,11 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
     if bool(getattr(conf, "DEPTH_SUBSCRIPTION_VALIDATE_TOKENS", True)):
         known = _resolve_known_tokens(ws)
         if known:
-            preserve = set(underlying_tokens) | set(sticky) | set(option_token_set)
+            preserve = set(underlying_tokens) | set(sticky)
+            dropped_tokens = [t for t in tokens if t not in known and t not in preserve]
             tokens = [t for t in tokens if t in known or t in preserve]
+            for dropped_tok in dropped_tokens:
+                option_rank.pop(int(dropped_tok), None)
 
     tokens, truncated, _budget_meta = ws._enforce_subscription_budget(tokens, max_tokens=max_tokens, option_rank_by_token=option_rank, underlying_tokens=underlying_tokens, sticky_tokens=sticky, active_trade_tokens=sticky)
     try:
