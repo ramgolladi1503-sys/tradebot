@@ -547,12 +547,19 @@ class ActivePositionManager:
                 if self.state == STATE_IN_FLIGHT:
                     self._transition_to(STATE_TRAIL_LOCK)
 
-        # 2. Monotonic Trailing Ratchet (Move locks profit)
-        elif gain >= ratchet_trig and not p.trail_locked:
-            new_sl = (p.entry_price + ratchet_lock) if is_ce else (p.entry_price - ratchet_lock)
-            # Invariant 1.1: Compare-And-Swap monotonicity check
-            if (is_ce and new_sl > p.current_sl) or (not is_ce and new_sl < p.current_sl):
-                p.current_sl = new_sl
+        # 2. Continuous Parabolic Trailing Ratchet (Move locks profit & trails runner expansion)
+        elif gain >= ratchet_trig:
+            # Trailing cushion scales with ATR: keep a 1.2 * ATR trailing distance behind peak favorable spot
+            trailing_cushion = max(ratchet_lock, 1.2 * atr_1m)
+            peak_spot = (p.entry_price + p.max_spot_excursion) if is_ce else (p.entry_price - p.max_spot_excursion)
+            trail_sl = (peak_spot - trailing_cushion) if is_ce else (peak_spot + trailing_cushion)
+            # Invariant: Must at least guarantee minimum locked profit
+            min_guaranteed_sl = (p.entry_price + ratchet_lock) if is_ce else (p.entry_price - ratchet_lock)
+            effective_trail = max(trail_sl, min_guaranteed_sl) if is_ce else min(trail_sl, min_guaranteed_sl)
+
+            # Invariant 1.1: Compare-And-Swap monotonicity check (stop only ratchets forward, never backward)
+            if (is_ce and effective_trail > p.current_sl) or (not is_ce and effective_trail < p.current_sl):
+                p.current_sl = effective_trail
                 p.trail_locked = True
                 if self.state == STATE_IN_FLIGHT:
                     self._transition_to(STATE_TRAIL_LOCK)
