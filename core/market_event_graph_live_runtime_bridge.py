@@ -103,12 +103,14 @@ class LiveSourceRuntimeBridge:
         exporter: LiveCapturedMetadataExporter | None = None,
         universe_contract: Mapping[str, Any] | None = None,
         subscription_evidence_provider: Callable[[LiveUniverseContract], Mapping[str, Any]] | None = None,
+        coordinator: Any | None = None,
     ) -> None:
         self.exporter = exporter or LiveCapturedMetadataExporter(
             Path(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_PATH", default_live_capture_path()))
         )
         self._explicit_universe_contract = dict(universe_contract or {})
         self._subscription_evidence_provider = subscription_evidence_provider
+        self._coordinator = coordinator
         self._last_source_bar_end_epoch: float | None = None
         self._last_session_date: str | None = None
         self._write_failures = 0
@@ -237,6 +239,11 @@ class LiveSourceRuntimeBridge:
         row["observed_at_epoch"] = float(snapshot["observed_at_epoch"])
         row["index_source_bar_end_epoch"] = float(snapshot["index_source_bar_end_epoch"])
         row["subscription_evidence"] = dict(subscription)
+        if self._coordinator is not None and hasattr(self._coordinator, "get_telemetry"):
+            try:
+                row["feed_desync_telemetry"] = self._coordinator.get_telemetry().to_dict()
+            except Exception as exc:
+                row["feed_desync_telemetry"] = {"error": str(exc)}
         latency_ms["validation"] = (time.perf_counter() - validation_start) * 1000.0
 
         write_start = time.perf_counter()
@@ -268,6 +275,67 @@ class LiveSourceRuntimeBridge:
         payload = self._audit_payload({})
         payload["flushed"] = True
         return payload
+
+    def certify_eod_drain(self) -> tuple[bool, int, int]:
+        """Behaviorally verifies that export buffers are flushed and drained with zero dropped writes.
+
+        Returns (drain_certified, remaining_queue_depth, dropped_writes).
+        """
+        self.flush()
+        remaining_depth = getattr(self.exporter, "queue_depth", 0)
+        try:
+            remaining_depth = int(remaining_depth)
+        except (TypeError, ValueError):
+            remaining_depth = 0
+        dropped = int(self._dropped_evidence_writes)
+        certified = (remaining_depth == 0 and dropped == 0)
+        return certified, remaining_depth, dropped
+
+    def build_session_handoff_manifest(
+        self,
+        reconciliation_result: Any,
+        session_date: str | None = None,
+    ) -> dict[str, Any]:
+        """Build an immutable, verifiable Session Handoff Manifest certifying clean EOD teardown."""
+        import hashlib
+        from core.market_close_feed_state import SessionHandoffManifest
+
+        drain_certified, remaining_depth, dropped_writes = self.certify_eod_drain()
+        resolved_date = str(session_date or self._last_session_date or "UNKNOWN_SESSION")
+        recon_state = getattr(reconciliation_result, "reconciliation_state", "RECONCILED_CLEAN")
+
+        if dropped_writes > 0:
+            handoff_status = "DIRTY_HANDOFF_UNRESOLVED_WRITES"
+        elif recon_state == "UNRECONCILED_OPEN_ORDERS_DETECTED":
+            handoff_status = "DIRTY_HANDOFF_UNRECONCILED_ORDERS"
+        elif drain_certified and recon_state == "RECONCILED_CLEAN":
+            handoff_status = "CLEAN_HANDOFF_CERTIFIED"
+        else:
+            handoff_status = "DIRTY_HANDOFF_UNRESOLVED_WRITES"
+
+        manifest_content = (
+            f"{resolved_date}:{self._metrics.get('meg_cycles_emitted', 0)}:"
+            f"{drain_certified}:{remaining_depth}:{dropped_writes}:{handoff_status}"
+        )
+        manifest_sha256 = hashlib.sha256(manifest_content.encode("utf-8")).hexdigest()
+
+        manifest = SessionHandoffManifest(
+            session_date=resolved_date,
+            feed_session_id=str(getattr(reconciliation_result, "metadata", {}).get("feed_session_id", "FEED_SESSION_EOD")),
+            universe_hash=str(self._explicit_universe_contract.get("canonical_sha256", "UNKNOWN_UNIVERSE_HASH")),
+            total_bars_exported=int(self._metrics.get("meg_cycles_emitted", 0)),
+            queue_drain_certified=bool(drain_certified),
+            remaining_queue_depth=int(remaining_depth),
+            dropped_evidence_writes=int(dropped_writes),
+            reconciliation_result=reconciliation_result,
+            handoff_status=handoff_status,
+            manifest_sha256=manifest_sha256,
+            read_only=True,
+            is_order_action=False,
+            broker_api_called=False,
+            allowed_for_live_execution=False,
+        )
+        return manifest.to_dict()
 
     def _load_universe_contract(self) -> tuple[LiveUniverseContract | None, str]:
         raw = dict(self._explicit_universe_contract or {})

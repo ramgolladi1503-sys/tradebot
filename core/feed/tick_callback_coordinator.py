@@ -400,3 +400,402 @@ class TickCallbackCoordinator:
                 self._transition._finish(error=cause)
                 self._transition = None
             self._condition.notify_all()
+
+
+@dataclass(frozen=True, slots=True)
+class QuarantineRecord:
+    token: int | None
+    reason: str
+    tick_epoch: float | None
+    receipt_epoch: float | None
+    callback_gen: int
+    active_gen: int
+    payload_sample: dict[str, Any] | None = None
+
+
+class TickQuarantine:
+    """Bounded, thread-safe in-memory ring-buffer for quarantined ticks."""
+
+    def __init__(self, maxlen: int = 1000) -> None:
+        self._maxlen = maxlen
+        self._lock = threading.Lock()
+        self._records: deque[QuarantineRecord] = deque(maxlen=maxlen)
+        self._quarantined_count = 0
+        self._quarantined_by_reason: dict[str, int] = {}
+
+    def quarantine(
+        self,
+        *,
+        token: int | None,
+        reason: str,
+        callback_gen: int,
+        active_gen: int,
+        tick_epoch: float | None = None,
+        receipt_epoch: float | None = None,
+        payload_sample: dict[str, Any] | None = None,
+    ) -> QuarantineRecord:
+        record = QuarantineRecord(
+            token=token,
+            reason=str(reason),
+            tick_epoch=tick_epoch,
+            receipt_epoch=receipt_epoch,
+            callback_gen=int(callback_gen),
+            active_gen=int(active_gen),
+            payload_sample=payload_sample,
+        )
+        with self._lock:
+            self._records.append(record)
+            self._quarantined_count += 1
+            reason_str = str(reason)
+            self._quarantined_by_reason[reason_str] = (
+                self._quarantined_by_reason.get(reason_str, 0) + 1
+            )
+        return record
+
+    @property
+    def total_count(self) -> int:
+        with self._lock:
+            return self._quarantined_count
+
+    @property
+    def counts_by_reason(self) -> dict[str, int]:
+        with self._lock:
+            return dict(self._quarantined_by_reason)
+
+    def recent_records(self, limit: int = 50) -> list[QuarantineRecord]:
+        with self._lock:
+            return list(self._records)[-max(0, limit):]
+
+
+_GLOBAL_TICK_QUARANTINE = TickQuarantine()
+
+
+def get_tick_quarantine() -> TickQuarantine:
+    return _GLOBAL_TICK_QUARANTINE
+
+
+class TickCoordinationStatus(str, Enum):
+    SYNCED_OK = "SYNCED_OK"
+    TIMESTAMP_REPEATED_OK = "TIMESTAMP_REPEATED_OK"
+    EXPLICIT_SEQUENCE_GAP = "EXPLICIT_SEQUENCE_GAP"
+    TIMESTAMP_RETROGRADE = "TIMESTAMP_RETROGRADE"
+    EPOCH_RESET = "EPOCH_RESET"
+    INVALID_TICK = "INVALID_TICK"
+
+
+@dataclass(frozen=True)
+class TokenSequenceSummary:
+    instrument_token: int
+    feed_epoch: int
+    last_exchange_timestamp: float | None
+    last_sequence_id: int | None
+    arrival_count: int
+    consecutive_clean_ticks: int
+    is_desynced: bool
+    total_gaps: int
+    total_retrograde: int
+    last_gap_size: int
+    last_anomaly_epoch: float | None
+
+
+@dataclass(frozen=True)
+class FeedDesyncTelemetry:
+    feed_epoch: int
+    active_desync_tokens: tuple[int, ...]
+    total_gap_count: int
+    total_retrograde_count: int
+    tokens_tracked: int
+    token_summaries: dict[int, TokenSequenceSummary]
+    timestamp: float
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "feed_epoch": self.feed_epoch,
+            "active_desync_tokens": list(self.active_desync_tokens),
+            "active_desync_count": len(self.active_desync_tokens),
+            "total_gap_count": self.total_gap_count,
+            "total_retrograde_count": self.total_retrograde_count,
+            "tokens_tracked": self.tokens_tracked,
+            "timestamp": self.timestamp,
+        }
+
+
+@dataclass(frozen=True)
+class TickCoordinationResult:
+    accepted: bool
+    status: TickCoordinationStatus
+    instrument_token: int
+    feed_epoch: int
+    exchange_epoch: float | None
+    arrival_seq: int
+    gap_size: int
+    reason: str
+    telemetry_snapshot: FeedDesyncTelemetry | None = None
+    is_order_action: bool = False
+    broker_api_called: bool = False
+    read_only: bool = True
+
+
+class _MutableTokenState:
+    __slots__ = (
+        "instrument_token",
+        "feed_epoch",
+        "last_exchange_timestamp",
+        "last_sequence_id",
+        "arrival_count",
+        "consecutive_clean_ticks",
+        "is_desynced",
+        "total_gaps",
+        "total_retrograde",
+        "last_gap_size",
+        "last_anomaly_epoch",
+    )
+
+    def __init__(self, instrument_token: int, feed_epoch: int):
+        self.instrument_token = instrument_token
+        self.feed_epoch = feed_epoch
+        self.last_exchange_timestamp: float | None = None
+        self.last_sequence_id: int | None = None
+        self.arrival_count = 0
+        self.consecutive_clean_ticks = 0
+        self.is_desynced = False
+        self.total_gaps = 0
+        self.total_retrograde = 0
+        self.last_gap_size = 0
+        self.last_anomaly_epoch: float | None = None
+
+    def snapshot(self) -> TokenSequenceSummary:
+        return TokenSequenceSummary(
+            instrument_token=self.instrument_token,
+            feed_epoch=self.feed_epoch,
+            last_exchange_timestamp=self.last_exchange_timestamp,
+            last_sequence_id=self.last_sequence_id,
+            arrival_count=self.arrival_count,
+            consecutive_clean_ticks=self.consecutive_clean_ticks,
+            is_desynced=self.is_desynced,
+            total_gaps=self.total_gaps,
+            total_retrograde=self.total_retrograde,
+            last_gap_size=self.last_gap_size,
+            last_anomaly_epoch=self.last_anomaly_epoch,
+        )
+
+
+class TickSequenceCoordinator:
+    """Zero-buffering, causal sequence gap detector and feed desync telemetry tracker.
+
+    Adheres strictly to Hermes Invariants I-1 through I-5:
+    - Domain partitioning per (feed_epoch, instrument_token).
+    - Permissive non-decreasing timestamps (t_k >= t_{k-1}) allowing subsecond bursts.
+    - Retrograde timestamp rejection (t_k < t_{k-1}) failing closed for bar updates.
+    - Soft diagnostic isolation with K=10 consecutive clean ticks hysteresis recovery.
+    - Strict read_only=True, is_order_action=False, broker_api_called=False.
+    """
+
+    RECOVERY_THRESHOLD_K: int = 10
+
+    def __init__(self, feed_epoch: int = 0):
+        self._lock = threading.Lock()
+        self._feed_epoch = int(feed_epoch)
+        self._token_states: dict[tuple[int, int], _MutableTokenState] = {}
+        self._total_gaps = 0
+        self._total_retrogrades = 0
+
+    @property
+    def feed_epoch(self) -> int:
+        with self._lock:
+            return self._feed_epoch
+
+    def reset_epoch(self, new_epoch: int) -> None:
+        with self._lock:
+            self._feed_epoch = int(new_epoch)
+
+    def coordinate_tick(
+        self,
+        tick: Mapping[str, Any],
+        receipt_epoch: float | None = None,
+        feed_epoch: int | None = None,
+    ) -> TickCoordinationResult:
+        import time
+
+        now_epoch = float(receipt_epoch if receipt_epoch is not None else time.time())
+        token_val = tick.get("instrument_token") or tick.get("token")
+        try:
+            token = int(token_val)
+        except (TypeError, ValueError):
+            return TickCoordinationResult(
+                accepted=False,
+                status=TickCoordinationStatus.INVALID_TICK,
+                instrument_token=0,
+                feed_epoch=self._feed_epoch,
+                exchange_epoch=None,
+                arrival_seq=0,
+                gap_size=0,
+                reason="MISSING_OR_INVALID_INSTRUMENT_TOKEN",
+            )
+
+        # Extract timestamp
+        ts_val = (
+            tick.get("exchange_timestamp")
+            or tick.get("timestamp")
+            or tick.get("last_trade_time")
+        )
+        exchange_epoch: float | None = None
+        if ts_val is not None:
+            if hasattr(ts_val, "timestamp"):
+                exchange_epoch = float(ts_val.timestamp())
+            elif isinstance(ts_val, (int, float)):
+                exchange_epoch = float(ts_val)
+            elif isinstance(ts_val, str):
+                try:
+                    from datetime import datetime
+                    exchange_epoch = float(datetime.fromisoformat(ts_val).timestamp())
+                except Exception:
+                    pass
+
+        # Extract sequence id if explicitly provided
+        seq_val = (
+            tick.get("sequence_number")
+            or tick.get("seq_id")
+            or tick.get("packet_id")
+            or tick.get("sequence")
+        )
+        explicit_seq: int | None = None
+        if seq_val is not None:
+            try:
+                explicit_seq = int(seq_val)
+            except (TypeError, ValueError):
+                pass
+
+        with self._lock:
+            cur_epoch = int(self._feed_epoch if feed_epoch is None else feed_epoch)
+            key = (cur_epoch, token)
+            state = self._token_states.get(key)
+            if state is None:
+                state = _MutableTokenState(instrument_token=token, feed_epoch=cur_epoch)
+                self._token_states[key] = state
+
+            state.arrival_count += 1
+            arrival_seq = state.arrival_count
+
+            # 1. Check explicit sequence gap
+            gap_size = 0
+            if explicit_seq is not None:
+                if state.last_sequence_id is not None:
+                    if explicit_seq > state.last_sequence_id + 1:
+                        gap_size = explicit_seq - state.last_sequence_id - 1
+                        state.total_gaps += 1
+                        self._total_gaps += 1
+                        state.last_gap_size = gap_size
+                        state.is_desynced = True
+                        state.consecutive_clean_ticks = 0
+                        state.last_anomaly_epoch = now_epoch
+                        state.last_sequence_id = explicit_seq
+                        if exchange_epoch is not None:
+                            state.last_exchange_timestamp = max(
+                                state.last_exchange_timestamp or 0.0, exchange_epoch
+                            )
+                        return TickCoordinationResult(
+                            accepted=True,
+                            status=TickCoordinationStatus.EXPLICIT_SEQUENCE_GAP,
+                            instrument_token=token,
+                            feed_epoch=cur_epoch,
+                            exchange_epoch=exchange_epoch,
+                            arrival_seq=arrival_seq,
+                            gap_size=gap_size,
+                            reason=f"EXPLICIT_SEQUENCE_GAP_DETECTED gap_size={gap_size}",
+                        )
+                state.last_sequence_id = explicit_seq
+
+            # 2. Check exchange timestamp monotonicity
+            if exchange_epoch is not None:
+                if state.last_exchange_timestamp is not None:
+                    if exchange_epoch < state.last_exchange_timestamp:
+                        # Retrograde timestamp: reject from bar creation
+                        state.total_retrograde += 1
+                        self._total_retrogrades += 1
+                        state.is_desynced = True
+                        state.consecutive_clean_ticks = 0
+                        state.last_anomaly_epoch = now_epoch
+                        return TickCoordinationResult(
+                            accepted=False,
+                            status=TickCoordinationStatus.TIMESTAMP_RETROGRADE,
+                            instrument_token=token,
+                            feed_epoch=cur_epoch,
+                            exchange_epoch=exchange_epoch,
+                            arrival_seq=arrival_seq,
+                            gap_size=0,
+                            reason=f"TIMESTAMP_RETROGRADE curr={exchange_epoch} prev={state.last_exchange_timestamp}",
+                        )
+                    elif exchange_epoch == state.last_exchange_timestamp:
+                        # Permissible subsecond burst tie
+                        state.consecutive_clean_ticks += 1
+                        if state.is_desynced and state.consecutive_clean_ticks >= self.RECOVERY_THRESHOLD_K:
+                            state.is_desynced = False
+                        return TickCoordinationResult(
+                            accepted=True,
+                            status=TickCoordinationStatus.TIMESTAMP_REPEATED_OK,
+                            instrument_token=token,
+                            feed_epoch=cur_epoch,
+                            exchange_epoch=exchange_epoch,
+                            arrival_seq=arrival_seq,
+                            gap_size=0,
+                            reason="TIMESTAMP_REPEATED_OK",
+                        )
+
+                state.last_exchange_timestamp = exchange_epoch
+
+            # Clean advancement
+            state.consecutive_clean_ticks += 1
+            if state.is_desynced and state.consecutive_clean_ticks >= self.RECOVERY_THRESHOLD_K:
+                state.is_desynced = False
+
+            return TickCoordinationResult(
+                accepted=True,
+                status=TickCoordinationStatus.SYNCED_OK,
+                instrument_token=token,
+                feed_epoch=cur_epoch,
+                exchange_epoch=exchange_epoch,
+                arrival_seq=arrival_seq,
+                gap_size=0,
+                reason="SYNCED_OK",
+            )
+
+    def coordinate_batch(
+        self,
+        ticks: Sequence[Mapping[str, Any]],
+        receipt_epoch: float | None = None,
+        feed_epoch: int | None = None,
+    ) -> tuple[TickCoordinationResult, ...]:
+        return tuple(
+            self.coordinate_tick(t, receipt_epoch=receipt_epoch, feed_epoch=feed_epoch)
+            for t in ticks
+        )
+
+    def get_telemetry(self) -> FeedDesyncTelemetry:
+        import time
+
+        with self._lock:
+            active_desync = tuple(
+                state.instrument_token
+                for (ep, tok), state in self._token_states.items()
+                if ep == self._feed_epoch and state.is_desynced
+            )
+            summaries = {
+                state.instrument_token: state.snapshot()
+                for (ep, tok), state in self._token_states.items()
+                if ep == self._feed_epoch
+            }
+            return FeedDesyncTelemetry(
+                feed_epoch=self._feed_epoch,
+                active_desync_tokens=active_desync,
+                total_gap_count=self._total_gaps,
+                total_retrograde_count=self._total_retrogrades,
+                tokens_tracked=len(summaries),
+                token_summaries=summaries,
+                timestamp=time.time(),
+            )
+
+    def get_token_summary(self, instrument_token: int) -> TokenSequenceSummary | None:
+        with self._lock:
+            state = self._token_states.get((self._feed_epoch, int(instrument_token)))
+            return state.snapshot() if state is not None else None

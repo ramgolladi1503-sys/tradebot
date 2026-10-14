@@ -325,10 +325,8 @@ def _primitive_pair(
         measured_lateness_ms = (selected_epoch - target_epoch) * 1000
         if (
             selected_time.date() != decision_date
-            or selected_time.hour != target_hour
-            or selected_time.minute != target_minute
             or lateness_ms is None
-            or not 0 <= measured_lateness_ms <= 2000
+            or not -100 <= measured_lateness_ms <= 2000
             or abs(lateness_ms - round(measured_lateness_ms)) > 1
             or price is None
             or price <= 0

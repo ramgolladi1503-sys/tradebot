@@ -672,23 +672,275 @@ def test_build_depth_subscription_tokens_requires_session_tick_before_pruning_st
 
 
 def test_prune_stale_option_subscription_tokens_preserves_symbol_floor(monkeypatch):
-    pass
+    ctx = _setup_depth_window_mocks(monkeypatch)
+    token_meta = ctx["token_meta"]
+    nifty_options = [
+        int(t) for t, meta in token_meta.items()
+        if str(meta.get("symbol") or "").upper() == "NIFTY"
+    ][:10]
+
+    monkeypatch.setattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_ENABLE", True, raising=False)
+    monkeypatch.setattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MAX_AGE_SEC", 2.5, raising=False)
+    monkeypatch.setattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_CONSECUTIVE_STALE_WINDOWS", 1, raising=False)
+    monkeypatch.setattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_REQUIRE_SESSION_TICK", False, raising=False)
+    monkeypatch.setattr(ws, "now_utc_epoch", lambda: 200.0)
+    monkeypatch.setattr(ws, "_DEPTH_WS_START_EPOCH", 100.0, raising=False)
+    monkeypatch.setattr(
+        ws,
+        "get_latest_tick_rows_db",
+        lambda tokens: {int(t): {"ts_epoch": 180.0, "ltp": 100.0} for t in tokens},
+    )
+
+    rank_by_token = {int(t): (abs(i - 5), 1, float(i), 0, int(t)) for i, t in enumerate(nifty_options)}
+    token_to_symbol = {int(t): "NIFTY" for t in nifty_options}
+
+    min_required = {"NIFTY": 4}
+    kept_tokens, meta = ws._prune_stale_option_subscription_tokens(
+        tokens=nifty_options,
+        option_rank_by_token=rank_by_token,
+        token_to_symbol=token_to_symbol,
+        min_required_by_symbol=min_required,
+    )
+
+    assert len(kept_tokens) == 4
+    assert meta["pruned_count"] == 6
+    assert meta["kept_count"] == 4
+    assert meta["protected_stale_by_symbol"]["NIFTY"] == 4
 
 
 def test_maybe_refresh_stale_option_subscription_universe_applies_delta(monkeypatch):
-    pass
+    ctx = _setup_depth_window_mocks(monkeypatch)
+    token_meta = ctx["token_meta"]
+    nifty_options = [
+        int(t) for t, meta in token_meta.items()
+        if str(meta.get("symbol") or "").upper() == "NIFTY"
+    ]
+    current_tokens = nifty_options[:10]
+    monkeypatch.setattr(ws, "_LAST_TOKENS", list(current_tokens), raising=False)
+    monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {int(t): "NIFTY" for t in nifty_options}, raising=False)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+    contracts = {
+        int(t): ws.OptionContractIdentity(
+            token=int(t),
+            symbol="NIFTY",
+            instrument_type=str(token_meta[t].get("instrument_type") or "CE"),
+            exchange="NFO",
+            expiry="2026-03-05",
+            strike=float(token_meta[t].get("strike") or 22000),
+        )
+        for t in current_tokens
+    }
+    snap = ws.AppliedOptionOwnershipSnapshot(
+        state="KNOWN",
+        socket_generation=ws._current_socket_generation(),
+        revision=1,
+        provenance="test",
+        contracts=contracts,
+    )
+    monkeypatch.setattr(ws, "get_applied_option_ownership_snapshot", lambda: snap)
+
+    now_epoch = 1000.0
+    tick_ts = {int(t): (now_epoch - 1.0 if i < 2 else now_epoch - 50.0) for i, t in enumerate(current_tokens)}
+    monkeypatch.setattr(ws, "_LAST_MSG_TS_BY_TOKEN", tick_ts, raising=False)
+    monkeypatch.setattr(ws, "_can_mutate_ws_subscriptions", lambda **kwargs: (True, "ok", {}))
+    desired_tokens = nifty_options[2:12]
+    monkeypatch.setattr(
+        ws,
+        "build_subscription_tokens",
+        lambda symbols: (list(desired_tokens), [{"symbol": "NIFTY", "tokens": list(desired_tokens)}]),
+    )
+    monkeypatch.setattr(
+        ws,
+        "_should_mutate_stale_option_symbol_subscription",
+        lambda **kwargs: (True, {"mutation_window_count_by_symbol": 3}, {}),
+    )
+
+    refresh_state = {"last_refresh_epoch": 0.0, "last_freshness_refresh_epoch": 0.0}
+    changed, payload = ws._maybe_refresh_stale_option_subscription_universe(
+        now_epoch=now_epoch,
+        refresh_state=refresh_state,
+    )
+
+    assert changed is True
+    assert payload["freshness_urgent"] is True
+    assert payload["reason"] == "freshness_drift"
+    assert len(payload["subscribe_tokens"]) > 0 or len(payload["unsubscribe_tokens"]) > 0
 
 
 def test_build_depth_subscription_tokens_passes_symbol_minimums_into_prune(monkeypatch):
-    pass
+    ctx = _setup_depth_window_mocks(monkeypatch)
+    captured_min_required: list[dict] = []
+    orig_prune = ws._prune_stale_option_subscription_tokens
+
+    def _spy_prune(*args, **kwargs):
+        captured_min_required.append(dict(kwargs.get("min_required_by_symbol") or {}))
+        return orig_prune(*args, **kwargs)
+
+    monkeypatch.setattr(ws, "_prune_stale_option_subscription_tokens", _spy_prune)
+    monkeypatch.setattr(cfg, "FEED_PRUNE_STALE_OPTION_SUBSCRIPTIONS_MIN_REQUIRED_FLOOR", 14, raising=False)
+    monkeypatch.setattr(cfg, "MIN_OPTION_TOKENS", 12, raising=False)
+
+    tokens, resolution = ws.build_depth_subscription_tokens(["NIFTY"], max_tokens=100)
+
+    assert len(captured_min_required) == 1
+    assert captured_min_required[0].get("NIFTY") >= 14
 
 
 def test_maybe_refresh_stale_option_subscription_universe_triggers_freshness_refresh(monkeypatch):
-    pass
+    ctx = _setup_depth_window_mocks(monkeypatch)
+    token_meta = ctx["token_meta"]
+    nifty_options = [
+        int(t) for t, meta in token_meta.items()
+        if str(meta.get("symbol") or "").upper() == "NIFTY"
+    ][:10]
+
+    monkeypatch.setattr(ws, "_LAST_TOKENS", list(nifty_options), raising=False)
+    monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", {int(t): "NIFTY" for t in nifty_options}, raising=False)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+    contracts2 = {
+        int(t): ws.OptionContractIdentity(
+            token=int(t),
+            symbol="NIFTY",
+            instrument_type=str(token_meta[t].get("instrument_type") or "CE"),
+            exchange="NFO",
+            expiry="2026-03-05",
+            strike=float(token_meta[t].get("strike") or 22000),
+        )
+        for t in nifty_options
+    }
+    snap2 = ws.AppliedOptionOwnershipSnapshot(
+        state="KNOWN",
+        socket_generation=ws._current_socket_generation(),
+        revision=1,
+        provenance="test",
+        contracts=contracts2,
+    )
+    monkeypatch.setattr(ws, "get_applied_option_ownership_snapshot", lambda: snap2)
+
+    now_epoch = 1000.0
+    tick_ts = {int(t): now_epoch - 50.0 for t in nifty_options}
+    monkeypatch.setattr(ws, "_LAST_MSG_TS_BY_TOKEN", tick_ts, raising=False)
+    monkeypatch.setattr(ws, "_can_mutate_ws_subscriptions", lambda **kwargs: (True, "ok", {}))
+    monkeypatch.setattr(
+        ws,
+        "build_subscription_tokens",
+        lambda symbols: (list(nifty_options), [{"symbol": "NIFTY", "tokens": list(nifty_options)}]),
+    )
+    monkeypatch.setattr(
+        ws,
+        "_should_mutate_stale_option_symbol_subscription",
+        lambda **kwargs: (True, {"mutation_window_count_by_symbol": 3}, {}),
+    )
+
+    refresh_state = {"last_refresh_epoch": 0.0, "last_freshness_refresh_epoch": 0.0}
+    changed, payload = ws._maybe_refresh_stale_option_subscription_universe(
+        now_epoch=now_epoch,
+        refresh_state=refresh_state,
+    )
+
+    assert changed is True
+    assert payload["refresh_mode"] == "symbol_freshness_refresh"
+    assert payload["subscribe_tokens"] == []
+    assert payload["unsubscribe_tokens"] == []
+    assert payload["refresh_tokens"] == sorted(nifty_options)
 
 
 def test_maybe_refresh_stale_option_subscription_universe_refreshes_only_stale_symbol_family(monkeypatch):
-    pass
+    ctx = _setup_depth_window_mocks(monkeypatch)
+    token_meta = ctx["token_meta"]
+    nifty_options = [
+        int(t) for t, meta in token_meta.items()
+        if str(meta.get("symbol") or "").upper() == "NIFTY"
+    ][:10]
+    banknifty_options = [
+        int(t) for t, meta in token_meta.items()
+        if str(meta.get("symbol") or "").upper() == "BANKNIFTY"
+    ][:10]
+
+    all_current = nifty_options + banknifty_options
+    tok_to_sym = {int(t): "NIFTY" for t in nifty_options}
+    tok_to_sym.update({int(t): "BANKNIFTY" for t in banknifty_options})
+
+    contracts3 = {}
+    for t in nifty_options:
+        contracts3[int(t)] = ws.OptionContractIdentity(
+            token=int(t),
+            symbol="NIFTY",
+            instrument_type=str(token_meta[t].get("instrument_type") or "CE"),
+            exchange="NFO",
+            expiry="2026-03-05",
+            strike=float(token_meta[t].get("strike") or 22000),
+        )
+    for t in banknifty_options:
+        contracts3[int(t)] = ws.OptionContractIdentity(
+            token=int(t),
+            symbol="BANKNIFTY",
+            instrument_type=str(token_meta[t].get("instrument_type") or "CE"),
+            exchange="NFO",
+            expiry="2026-03-05",
+            strike=float(token_meta[t].get("strike") or 48000),
+        )
+    snap3 = ws.AppliedOptionOwnershipSnapshot(
+        state="KNOWN",
+        socket_generation=ws._current_socket_generation(),
+        revision=1,
+        provenance="test",
+        contracts=contracts3,
+    )
+
+    monkeypatch.setattr(ws, "_LAST_TOKENS", list(all_current), raising=False)
+    monkeypatch.setattr(ws, "_TOKEN_TO_SYMBOL", tok_to_sym, raising=False)
+    monkeypatch.setattr(ws, "is_market_open_ist", lambda: True)
+    monkeypatch.setattr(ws, "get_applied_option_ownership_snapshot", lambda: snap3)
+
+    now_epoch = 1000.0
+    tick_ts = {}
+    for t in nifty_options:
+        tick_ts[int(t)] = now_epoch - 45.0
+    for t in banknifty_options:
+        tick_ts[int(t)] = now_epoch - 0.5
+    monkeypatch.setattr(ws, "_LAST_MSG_TS_BY_TOKEN", tick_ts, raising=False)
+    monkeypatch.setattr(ws, "_can_mutate_ws_subscriptions", lambda **kwargs: (True, "ok", {}))
+
+    new_nifty = [
+        int(t) for t, meta in token_meta.items()
+        if str(meta.get("symbol") or "").upper() == "NIFTY"
+    ][2:12]
+    all_desired = new_nifty + banknifty_options
+
+    monkeypatch.setattr(
+        ws,
+        "build_subscription_tokens",
+        lambda symbols: (
+            list(all_desired),
+            [
+                {"symbol": "NIFTY", "tokens": list(new_nifty)},
+                {"symbol": "BANKNIFTY", "tokens": list(banknifty_options)},
+            ],
+        ),
+    )
+
+    def _fake_should_mutate(**kwargs):
+        sym = kwargs.get("symbol")
+        if sym == "NIFTY":
+            return True, {"mutation_window_count_by_symbol": 3}, {}
+        return False, {"mutation_window_count_by_symbol": 0}, {}
+
+    monkeypatch.setattr(ws, "_should_mutate_stale_option_symbol_subscription", _fake_should_mutate)
+
+    refresh_state = {"last_refresh_epoch": 0.0, "last_freshness_refresh_epoch": 0.0}
+    changed, payload = ws._maybe_refresh_stale_option_subscription_universe(
+        now_epoch=now_epoch,
+        refresh_state=refresh_state,
+    )
+
+    assert changed is True
+    assert payload["mutation_eligible_symbols"] == ["NIFTY"]
+    assert "BANKNIFTY" not in payload["mutation_eligible_symbols"]
+
+    for tok in payload["subscribe_tokens"] + payload["unsubscribe_tokens"]:
+        assert tok_to_sym.get(int(tok)) == "NIFTY" or tok in new_nifty
+        assert tok not in banknifty_options
 
 
 def test_option_expiry_unavailable_sets_fail_reason(monkeypatch):
@@ -766,3 +1018,172 @@ def test_build_depth_subscription_tokens_fallback_preserves_symbols_argument(mon
     assert calls == [["NIFTY"]]
     assert tokens == [101]
     assert resolution == [{"symbol": "NIFTY", "count": 1}]
+
+
+def test_record_desired_subscription_candidate_clamps_budget_to_governed_budget(monkeypatch):
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False, raising=False)
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKENS", {256265})
+    monkeypatch.setattr(ws, "_UNDERLYING_TOKEN_TO_SYMBOL", {256265: "NIFTY"})
+    raw_tokens = [256265, 1001, 1002]
+    option_tokens = [1001, 1002]
+    contracts = {
+        1001: {"symbol": "NIFTY", "instrument_type": "CE", "strike": 22000, "exchange": "NFO", "expiry": "2026-03-05"},
+        1002: {"symbol": "NIFTY", "instrument_type": "PE", "strike": 22000, "exchange": "NFO", "expiry": "2026-03-05"},
+    }
+    ws.record_desired_option_contracts(
+        contracts,
+        expected_tokens=option_tokens,
+        source="test_budget_clamp",
+    )
+    # Pass configured_budget=150 exceeding governed budget (123)
+    rev = ws.record_desired_subscription_candidate(
+        raw_tokens,
+        option_tokens=option_tokens,
+        configured_budget=150,
+        source="test_budget_clamp",
+        observation_required=False,
+    )
+    assert rev > 0
+    candidate = ws._DESIRED_SUBSCRIPTION_CANDIDATE
+    assert candidate.complete is True
+    assert candidate.configured_budget == 123
+    assert set(candidate.tokens) == set(raw_tokens)
+    validated, reason = ws._validated_desired_subscription_tokens()
+    assert validated == sorted(raw_tokens)
+    assert reason == "validated_desired_plan"
+
+
+def test_wi06_gate1_validate_tokens_drops_phantom_option_tokens(monkeypatch):
+    """GATE-WI06-1: Option tokens not in known_tokens are dropped and pruned from option_rank_by_token."""
+    ctx = _setup_depth_window_mocks(monkeypatch)
+    monkeypatch.setattr(cfg, "DEPTH_SUBSCRIPTION_VALIDATE_TOKENS", True, raising=False)
+
+    # Populate known_tokens for NFO with all NIFTY tokens except phantom token 999999
+    known_rows = []
+    for token, meta in ctx["token_meta"].items():
+        if str(meta.get("symbol") or "").upper() == "NIFTY":
+            known_rows.append({"instrument_token": int(token)})
+    for symbol, token in ctx["index_tokens"].items():
+        if str(symbol).upper() == "NIFTY":
+            known_rows.append({"instrument_token": int(token)})
+
+    def _instruments_cached(exchange=None, ttl_sec=3600):
+        if str(exchange or "").upper() == "NFO":
+            return list(known_rows)
+        return []
+
+    monkeypatch.setattr(ws.kite_client, "instruments_cached", _instruments_cached)
+
+    # Inject phantom option token 999999 into option resolver output
+    orig_resolve = ws.kite_client.resolve_option_tokens_window
+
+    def _fake_resolve(**kwargs):
+        toks = orig_resolve(**kwargs)
+        return toks + [999999]
+
+    monkeypatch.setattr(ws.kite_client, "resolve_option_tokens_window", _fake_resolve)
+
+    tokens, resolution = ws.build_depth_subscription_tokens(["NIFTY"], max_tokens=200)
+
+    # 999999 must NOT be in subscribed tokens
+    assert 999999 not in tokens
+
+
+def test_wi06_gate2_validate_tokens_preserves_underlying_and_open_trades(monkeypatch):
+    """GATE-WI06-2: Underlying tokens and active open trades are preserved even if not in options universe."""
+    ctx = _setup_depth_window_mocks(monkeypatch)
+    monkeypatch.setattr(cfg, "DEPTH_SUBSCRIPTION_VALIDATE_TOKENS", True, raising=False)
+
+    index_token = ctx["index_tokens"]["NIFTY"]
+    active_trade_token = 888888
+    monkeypatch.setattr(ws, "get_sticky_tokens", lambda: {active_trade_token})
+
+    monkeypatch.setattr(
+        ws.kite_client,
+        "instruments_cached",
+        lambda exchange=None, ttl_sec=3600: [{"instrument_token": int(index_token)}],
+    )
+
+    tokens, resolution = ws.build_depth_subscription_tokens(
+        ["NIFTY"],
+        max_tokens=200,
+    )
+
+    # Both index token and active open trade token must be preserved
+    assert index_token in tokens
+    assert active_trade_token in tokens
+
+
+def test_wi06_gate3_stale_local_cache_bypassed_for_broker_fetch(tmp_path, monkeypatch):
+    """GATE-WI06-3: Local cache older than current IST date is marked stale and bypassed for broker fetch."""
+    import os
+    import json
+    import core.option_token_resolver as resolver
+    from datetime import datetime, timedelta
+    from core.time_utils import IST_TZ
+
+    fake_data_dir = tmp_path / "data"
+    fake_data_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(resolver, "data_root", lambda: fake_data_dir)
+
+    stale_cache_file = fake_data_dir / "kite_instruments.json"
+    stale_cache_file.write_text(json.dumps({"NFO": [{"instrument_token": 111111}]}))
+
+    # Set mtime to 2 days ago
+    past_time = (datetime.now(tz=IST_TZ) - timedelta(days=2)).timestamp()
+    os.utime(str(stale_cache_file), (past_time, past_time))
+
+    broker_called = []
+
+    def _fake_broker(exchange, ttl_sec=3600):
+        broker_called.append(exchange)
+        return [{"instrument_token": 222222}]
+
+    monkeypatch.setattr(resolver.kite_client, "instruments_cached", _fake_broker)
+
+    inst, source = resolver._load_instruments("NFO")
+    assert source == "kite_client_cache"
+    assert inst == [{"instrument_token": 222222}]
+    assert broker_called == ["NFO"]
+
+
+def test_wi06_gate4_stale_cache_broker_unreachable_fails_closed(tmp_path, monkeypatch):
+    """GATE-WI06-4: When local cache is stale and broker is unreachable, fail closed with TokenCoverageError."""
+    import os
+    import json
+    import core.option_token_resolver as resolver
+    from datetime import datetime, timedelta
+    from core.time_utils import IST_TZ
+
+    fake_data_dir = tmp_path / "data"
+    fake_data_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(resolver, "data_root", lambda: fake_data_dir)
+
+    stale_cache_file = fake_data_dir / "kite_instruments.json"
+    stale_cache_file.write_text(json.dumps({"NFO": [{"instrument_token": 111111}]}))
+
+    past_time = (datetime.now(tz=IST_TZ) - timedelta(days=3)).timestamp()
+    os.utime(str(stale_cache_file), (past_time, past_time))
+
+    # Broker is unreachable or returns empty
+    monkeypatch.setattr(
+        resolver.kite_client,
+        "instruments_cached",
+        lambda exchange, ttl_sec=3600: [],
+    )
+
+    with pytest.raises(resolver.TokenCoverageError) as exc_info:
+        resolver._load_instruments("NFO")
+
+    assert exc_info.value.code == "CACHE_STALE_AND_BROKER_UNREACHABLE"
+
+
+def test_wi06_gate5_temporal_alignment_ist_date(monkeypatch):
+    """GATE-WI06-5: Instrument caching and option token resolving strictly use canonical IST date."""
+    from core.time_utils import now_ist
+    import core.option_token_resolver as resolver
+
+    ist_today = now_ist().date()
+    assert resolver._trading_date() == ist_today
+
+

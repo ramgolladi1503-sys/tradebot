@@ -241,3 +241,164 @@ def test_shutdown_resolves_an_uncompleted_transition_as_cancelled():
     assert coordinator.shutdown(WAIT) is ShutdownStatus.COMPLETED
     with pytest.raises(CoordinatorFailed, match="did not complete"):
         transition.wait(WAIT)
+
+
+# ---------------------------------------------------------------------------
+# WI-12 Invariant Proof Gates: Monotonic Sequence Gap & Desync Telemetry
+# ---------------------------------------------------------------------------
+
+from core.feed.tick_callback_coordinator import (
+    TickSequenceCoordinator,
+    TickCoordinationStatus,
+)
+
+
+def test_wi12_gate1_sequential_ticks_nominal_flow():
+    """Consecutive advancing ticks are accepted with SYNCED_OK and clean metrics."""
+    coord = TickSequenceCoordinator(feed_epoch=1)
+    for i in range(5):
+        res = coord.coordinate_tick({
+            "instrument_token": 256265,
+            "exchange_timestamp": 1700000000.0 + i,
+            "sequence_number": 100 + i,
+        })
+        assert res.accepted is True
+        assert res.status == TickCoordinationStatus.SYNCED_OK
+        assert res.gap_size == 0
+        assert res.is_order_action is False
+        assert res.broker_api_called is False
+        assert res.read_only is True
+
+    telemetry = coord.get_telemetry()
+    assert telemetry.total_gap_count == 0
+    assert telemetry.total_retrograde_count == 0
+    assert len(telemetry.active_desync_tokens) == 0
+
+
+def test_wi12_gate2_subsecond_burst_identical_timestamps_accepted():
+    """Identical exchange timestamps within high-frequency burst are accepted (I-2)."""
+    coord = TickSequenceCoordinator(feed_epoch=1)
+    res1 = coord.coordinate_tick({
+        "instrument_token": 256265,
+        "exchange_timestamp": 1700000000.0,
+    })
+    assert res1.accepted is True
+    assert res1.status == TickCoordinationStatus.SYNCED_OK
+
+    # Subsequent tick with identical exchange timestamp
+    res2 = coord.coordinate_tick({
+        "instrument_token": 256265,
+        "exchange_timestamp": 1700000000.0,
+    })
+    assert res2.accepted is True
+    assert res2.status == TickCoordinationStatus.TIMESTAMP_REPEATED_OK
+    assert res2.gap_size == 0
+
+
+def test_wi12_gate3_retrograde_timestamp_rejected_fail_closed():
+    """Ticks arriving with backward/retrograde exchange timestamp are rejected for bars (I-2)."""
+    coord = TickSequenceCoordinator(feed_epoch=1)
+    res1 = coord.coordinate_tick({
+        "instrument_token": 256265,
+        "exchange_timestamp": 1700000010.0,
+    })
+    assert res1.accepted is True
+
+    # Regressed tick
+    res2 = coord.coordinate_tick({
+        "instrument_token": 256265,
+        "exchange_timestamp": 1700000005.0,
+    })
+    assert res2.accepted is False
+    assert res2.status == TickCoordinationStatus.TIMESTAMP_RETROGRADE
+    assert 256265 in coord.get_telemetry().active_desync_tokens
+    assert coord.get_telemetry().total_retrograde_count == 1
+
+
+def test_wi12_gate4_explicit_sequence_gap_detection():
+    """Gaps in explicit sequence number are detected, measured, and marked desynced (I-2)."""
+    coord = TickSequenceCoordinator(feed_epoch=1)
+    coord.coordinate_tick({
+        "instrument_token": 256265,
+        "sequence_number": 10,
+    })
+    # Jump from 10 to 14 -> gap of 3 dropped packets (11, 12, 13)
+    res = coord.coordinate_tick({
+        "instrument_token": 256265,
+        "sequence_number": 14,
+    })
+    assert res.accepted is True
+    assert res.status == TickCoordinationStatus.EXPLICIT_SEQUENCE_GAP
+    assert res.gap_size == 3
+    assert 256265 in coord.get_telemetry().active_desync_tokens
+    assert coord.get_telemetry().total_gap_count == 1
+
+
+def test_wi12_gate5_hysteresis_recovery_k10_exact():
+    """Desynced token recovers to synced strictly upon receiving K=10 consecutive clean ticks (I-3)."""
+    coord = TickSequenceCoordinator(feed_epoch=1)
+    # Trigger desync
+    coord.coordinate_tick({"instrument_token": 111, "sequence_number": 1})
+    coord.coordinate_tick({"instrument_token": 111, "sequence_number": 5})  # gap of 3
+    assert 111 in coord.get_telemetry().active_desync_tokens
+
+    # Send 9 clean ticks
+    for i in range(9):
+        coord.coordinate_tick({"instrument_token": 111, "sequence_number": 6 + i})
+        assert 111 in coord.get_telemetry().active_desync_tokens, f"premature recovery at step {i+1}"
+
+    # 10th clean tick triggers recovery
+    coord.coordinate_tick({"instrument_token": 111, "sequence_number": 15})
+    assert 111 not in coord.get_telemetry().active_desync_tokens
+
+
+def test_wi12_gate6_token_partition_isolation():
+    """Anomalies in one token do not contaminate other tokens (I-1)."""
+    coord = TickSequenceCoordinator(feed_epoch=1)
+    coord.coordinate_tick({"instrument_token": 100, "exchange_timestamp": 10.0})
+    coord.coordinate_tick({"instrument_token": 200, "exchange_timestamp": 10.0})
+
+    # Retrograde only on token 100
+    coord.coordinate_tick({"instrument_token": 100, "exchange_timestamp": 5.0})
+    # Clean tick on token 200
+    coord.coordinate_tick({"instrument_token": 200, "exchange_timestamp": 11.0})
+
+    telemetry = coord.get_telemetry()
+    assert 100 in telemetry.active_desync_tokens
+    assert 200 not in telemetry.active_desync_tokens
+
+    summary_100 = coord.get_token_summary(100)
+    summary_200 = coord.get_token_summary(200)
+    assert summary_100 is not None and summary_100.is_desynced is True
+    assert summary_200 is not None and summary_200.is_desynced is False
+
+
+def test_wi12_gate7_epoch_advancement_resets_cleanly():
+    """Advancing feed_epoch resets token tracking partition without false anomalies (I-1)."""
+    coord = TickSequenceCoordinator(feed_epoch=1)
+    coord.coordinate_tick({"instrument_token": 555, "exchange_timestamp": 1000.0})
+
+    # WebSocket reconnect increments epoch to 2
+    coord.reset_epoch(2)
+    # Next tick with lower timestamp in epoch 2 is treated as fresh epoch start, not retrograde
+    res = coord.coordinate_tick({"instrument_token": 555, "exchange_timestamp": 500.0})
+    assert res.accepted is True
+    assert res.status == TickCoordinationStatus.SYNCED_OK
+    assert 555 not in coord.get_telemetry().active_desync_tokens
+
+
+def test_wi12_gate8_bridge_telemetry_integration():
+    """LiveSourceRuntimeBridge exports feed_desync_telemetry into evidence rows (I-5)."""
+    from core.market_event_graph_live_runtime_bridge import LiveSourceRuntimeBridge
+    coord = TickSequenceCoordinator(feed_epoch=1)
+    coord.coordinate_tick({"instrument_token": 777, "exchange_timestamp": 100.0})
+    coord.coordinate_tick({"instrument_token": 777, "exchange_timestamp": 90.0})  # retrograde
+
+    bridge = LiveSourceRuntimeBridge(coordinator=coord)
+    assert bridge._coordinator is coord
+    telemetry = bridge._coordinator.get_telemetry()
+    assert 777 in telemetry.active_desync_tokens
+    dict_payload = telemetry.to_dict()
+    assert dict_payload["active_desync_count"] == 1
+    assert dict_payload["total_retrograde_count"] == 1
+

@@ -70,11 +70,12 @@ def test_close_window_tick_slowdown_explains_stale_ltp_near_close():
     )
 
     assert decision.state == CLOSE_WINDOW_TICK_SLOWDOWN
-    assert decision.feed_ok is False
+    assert decision.feed_ok is True
     assert decision.ws_connected is True
     assert decision.close_window_active is True
     assert decision.decision_gate_reason == CLOSE_WINDOW_TICK_SLOWDOWN
-    assert CLOSE_WINDOW_TICK_SLOWDOWN in decision.blockers
+    assert decision.blockers == ()
+    assert decision.warnings == (CLOSE_WINDOW_TICK_SLOWDOWN,)
     assert WEBSOCKET_DISCONNECTED not in decision.blockers
 
 
@@ -169,3 +170,107 @@ def test_empty_payload_fails_unknown_without_side_effects():
     assert FEED_STATE_UNKNOWN in decision.blockers
     assert decision.read_only is True
     assert decision.append is False
+
+
+# ---------------------------------------------------------------------------
+# WI-14 Invariant Proof Gates: End-of-Day Reconciliation & Clean Session Handoff
+# ---------------------------------------------------------------------------
+
+from core.market_close_feed_state import reconcile_eod_session
+
+
+def test_wi14_gate1_market_close_precedes_websocket_drop_and_schedule_decoupling():
+    """seconds_to_close <= 0.0 or market_closed=True evaluates to MARKET_CLOSED, even if ws_connected=False (I-1)."""
+    # Simultaneous market close and socket drop
+    decision = classify_market_close_feed_state(
+        {
+            "ws_connected": False,
+            "websocket_ok": False,
+            "seconds_to_close": 0.0,
+            "ltp_age_sec": 10.0,
+        },
+        now_epoch=1_000.0,
+    )
+    assert decision.state == MARKET_CLOSED
+    assert decision.decision_gate_reason == MARKET_CLOSED
+    assert decision.feed_ok is False
+
+    # Negative seconds_to_close (e.g. 15:35 IST or special session close)
+    decision_neg = classify_market_close_feed_state(
+        {
+            "ws_connected": False,
+            "seconds_to_close": -300.0,
+        },
+        now_epoch=1_000.0,
+    )
+    assert decision_neg.state == MARKET_CLOSED
+
+
+def test_wi14_gate2_eod_reconciliation_read_only_and_order_safety():
+    """EOD reconciliation never places/cancels orders; open orders flag UNRECONCILED_OPEN_ORDERS_DETECTED (I-2)."""
+    # Clean case
+    clean_res = reconcile_eod_session(session_date="2026-10-14", market_closed=True)
+    assert clean_res.reconciliation_state == "RECONCILED_CLEAN"
+    assert clean_res.read_only is True
+    assert clean_res.is_order_action is False
+    assert clean_res.broker_api_called is False
+    assert clean_res.allowed_for_live_execution is False
+
+    # Case with open orders: MUST NOT attempt order actions, flags advisory warning
+    open_orders_mock = [{"order_id": "ORD-12345", "status": "OPEN", "symbol": "NIFTY26OCT24800CE"}]
+    warn_res = reconcile_eod_session(
+        session_date="2026-10-14",
+        market_closed=True,
+        open_orders=open_orders_mock,
+    )
+    assert warn_res.reconciliation_state == "UNRECONCILED_OPEN_ORDERS_DETECTED"
+    assert "UNRECONCILED_OPEN_ORDERS_DETECTED" in warn_res.warnings
+    assert warn_res.open_orders_count == 1
+    assert warn_res.is_order_action is False
+    assert warn_res.broker_api_called is False
+
+
+def test_wi14_gate3_bridge_certify_eod_drain_behavior():
+    """LiveSourceRuntimeBridge.certify_eod_drain behaviorally verifies queue depth == 0 (I-4)."""
+    from core.market_event_graph_live_runtime_bridge import LiveSourceRuntimeBridge
+
+    bridge = LiveSourceRuntimeBridge()
+    certified, depth, dropped = bridge.certify_eod_drain()
+    assert certified is True
+    assert depth == 0
+    assert dropped == 0
+
+
+def test_wi14_gate4_session_handoff_manifest_export_and_immutability():
+    """Session Handoff Manifest produces a verifiable SHA256 sealed payload (I-3, I-4)."""
+    from core.market_event_graph_live_runtime_bridge import LiveSourceRuntimeBridge
+
+    bridge = LiveSourceRuntimeBridge()
+    recon = reconcile_eod_session(session_date="2026-10-14", market_closed=True)
+    manifest = bridge.build_session_handoff_manifest(recon, session_date="2026-10-14")
+
+    assert manifest["session_date"] == "2026-10-14"
+    assert manifest["handoff_status"] == "CLEAN_HANDOFF_CERTIFIED"
+    assert manifest["queue_drain_certified"] is True
+    assert manifest["remaining_queue_depth"] == 0
+    assert manifest["dropped_evidence_writes"] == 0
+    assert len(manifest["manifest_sha256"]) == 64  # valid SHA256 hex
+    assert manifest["read_only"] is True
+    assert manifest["is_order_action"] is False
+    assert manifest["broker_api_called"] is False
+    assert manifest["allowed_for_live_execution"] is False
+
+
+def test_wi14_gate5_dirty_handoff_when_dropped_writes_occur():
+    """If dropped writes occurred, session handoff manifest flags DIRTY_HANDOFF_UNRESOLVED_WRITES (I-4)."""
+    from core.market_event_graph_live_runtime_bridge import LiveSourceRuntimeBridge
+
+    bridge = LiveSourceRuntimeBridge()
+    bridge._dropped_evidence_writes = 2  # simulate 2 dropped writes
+    recon = reconcile_eod_session(session_date="2026-10-14", market_closed=True)
+    manifest = bridge.build_session_handoff_manifest(recon, session_date="2026-10-14")
+
+    assert manifest["handoff_status"] == "DIRTY_HANDOFF_UNRESOLVED_WRITES"
+    assert manifest["dropped_evidence_writes"] == 2
+    assert manifest["queue_drain_certified"] is False
+

@@ -16,7 +16,7 @@ from core.instruments import build_option_registry, log_requested_expiry_missing
 from core.kite_client import kite_client
 from core.log_writer import get_jsonl_writer
 from core.paths import data_root, logs_dir
-from core.time_utils import now_ist, utc_now
+from core.time_utils import now_ist, utc_now, IST_TZ
 
 _LOG_PATH = logs_dir() / "option_token_resolution.jsonl"
 _LOGGER = get_jsonl_writer(_LOG_PATH)
@@ -106,26 +106,33 @@ def _log_expired_contract_rejected(
     )
 
 
-def _load_local_instruments_cache(exchange: str) -> list[dict]:
+def _load_local_instruments_cache(exchange: str) -> tuple[list[dict], bool]:
     cache_path = data_root() / "kite_instruments.json"
     if not cache_path.exists():
-        return []
+        return [], False
+    try:
+        mtime_dt = datetime.fromtimestamp(cache_path.stat().st_mtime, tz=IST_TZ).date()
+        if mtime_dt < _trading_date():
+            # Local cache is from a previous trading session/week
+            return [], True
+    except Exception:
+        pass
     try:
         raw = json.loads(cache_path.read_text())
     except Exception:
-        return []
+        return [], False
     if isinstance(raw, dict):
         bucket = raw.get(exchange)
         if isinstance(bucket, list):
-            return list(bucket)
-        return []
+            return list(bucket), False
+        return [], False
     if isinstance(raw, list):
-        return list(raw)
-    return []
+        return list(raw), False
+    return [], False
 
 
 def _load_instruments(exchange: str) -> tuple[list[dict], str]:
-    local = _load_local_instruments_cache(exchange)
+    local, is_stale = _load_local_instruments_cache(exchange)
     if local:
         return local, "local_cache"
     ttl_sec = int(getattr(cfg, "OPTION_TOKEN_RESOLVER_CACHE_TTL_SEC", 3600))
@@ -135,6 +142,12 @@ def _load_instruments(exchange: str) -> tuple[list[dict], str]:
         data = []
     if isinstance(data, list) and data:
         return data, "kite_client_cache"
+    if is_stale:
+        raise TokenCoverageError(
+            code="CACHE_STALE_AND_BROKER_UNREACHABLE",
+            message=f"Local instruments cache for {exchange} is stale and broker instruments are unreachable.",
+            evidence={"exchange": exchange, "trading_date": _trading_date().isoformat()},
+        )
     return [], "missing"
 
 

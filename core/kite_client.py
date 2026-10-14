@@ -224,7 +224,8 @@ class KiteClient:
         # requiring real credentials or token alignment.
         kite = self.kite if self.kite is not None else self.ensure()
         key = (exchange or "ALL").upper()
-        today = date.today().isoformat()
+        from core.time_utils import now_ist
+        today = now_ist().date().isoformat()
 
         cached = self._instruments_cache.get(key)
         if not force and cached and cached.get("date") == today:

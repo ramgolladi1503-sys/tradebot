@@ -29,6 +29,213 @@ _ERROR_LOG_PATH = logs_dir() / "depth_store_errors.jsonl"
 _ERROR_LOGGER = get_jsonl_writer(_ERROR_LOG_PATH)
 logger = logging.getLogger(__name__)
 
+from dataclasses import dataclass
+from typing import Literal, Mapping, Any
+
+DepthState = Literal["VALID_BOOK", "EMPTY_BOOK", "ONE_SIDED_BOOK", "CROSSED_BOOK", "INVALID_BOOK"]
+
+@dataclass(frozen=True, slots=True)
+class DepthImbalanceResult:
+    imbalance: float
+    buy_qty: int
+    sell_qty: int
+    depth_state: DepthState
+    is_valid: bool
+    spread: float | None = None
+    best_bid: float | None = None
+    best_ask: float | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "imbalance": self.imbalance,
+            "buy_qty": self.buy_qty,
+            "sell_qty": self.sell_qty,
+            "depth_state": self.depth_state,
+            "is_valid": self.is_valid,
+            "spread": self.spread,
+            "best_bid": self.best_bid,
+            "best_ask": self.best_ask,
+        }
+
+def compute_depth_imbalance(depth: Mapping[str, Any] | None) -> DepthImbalanceResult:
+    """Pure, deterministic computation of L2 orderbook depth imbalance with microstructure validation.
+    
+    Guarantees:
+    - Never raises an unhandled exception.
+    - math.isfinite(result.imbalance) is True.
+    - -1.0 <= result.imbalance <= 1.0.
+    - Non-negative integer quantities.
+    - Exact state classification (VALID_BOOK, EMPTY_BOOK, ONE_SIDED_BOOK, CROSSED_BOOK, INVALID_BOOK).
+    """
+    if not isinstance(depth, Mapping):
+        return DepthImbalanceResult(
+            imbalance=0.0,
+            buy_qty=0,
+            sell_qty=0,
+            depth_state="INVALID_BOOK",
+            is_valid=False,
+        )
+
+    raw_buys = depth.get("buy") or []
+    raw_sells = depth.get("sell") or []
+    if not isinstance(raw_buys, list) or not isinstance(raw_sells, list):
+        return DepthImbalanceResult(
+            imbalance=0.0,
+            buy_qty=0,
+            sell_qty=0,
+            depth_state="INVALID_BOOK",
+            is_valid=False,
+        )
+
+    # Validate and extract buy levels
+    parsed_buys = []
+    prev_bid_px = None
+    for b in raw_buys:
+        if not isinstance(b, Mapping):
+            continue
+        try:
+            px = float(b.get("price", 0.0) or 0.0)
+            qty = int(b.get("quantity", 0) or 0)
+        except (TypeError, ValueError, OverflowError):
+            return DepthImbalanceResult(
+                imbalance=0.0,
+                buy_qty=0,
+                sell_qty=0,
+                depth_state="INVALID_BOOK",
+                is_valid=False,
+            )
+        if not math.isfinite(px) or px < 0.0 or qty < 0:
+            return DepthImbalanceResult(
+                imbalance=0.0,
+                buy_qty=0,
+                sell_qty=0,
+                depth_state="INVALID_BOOK",
+                is_valid=False,
+            )
+        if px > 0.0 and qty > 0:
+            if prev_bid_px is not None and px >= prev_bid_px:
+                # Monotonicity violation: bid prices must descend strictly
+                return DepthImbalanceResult(
+                    imbalance=0.0,
+                    buy_qty=0,
+                    sell_qty=0,
+                    depth_state="INVALID_BOOK",
+                    is_valid=False,
+                )
+            prev_bid_px = px
+            parsed_buys.append((px, qty))
+
+    # Validate and extract sell levels
+    parsed_sells = []
+    prev_ask_px = None
+    for s in raw_sells:
+        if not isinstance(s, Mapping):
+            continue
+        try:
+            px = float(s.get("price", 0.0) or 0.0)
+            qty = int(s.get("quantity", 0) or 0)
+        except (TypeError, ValueError, OverflowError):
+            return DepthImbalanceResult(
+                imbalance=0.0,
+                buy_qty=0,
+                sell_qty=0,
+                depth_state="INVALID_BOOK",
+                is_valid=False,
+            )
+        if not math.isfinite(px) or px < 0.0 or qty < 0:
+            return DepthImbalanceResult(
+                imbalance=0.0,
+                buy_qty=0,
+                sell_qty=0,
+                depth_state="INVALID_BOOK",
+                is_valid=False,
+            )
+        if px > 0.0 and qty > 0:
+            if prev_ask_px is not None and px <= prev_ask_px:
+                # Monotonicity violation: ask prices must ascend strictly
+                return DepthImbalanceResult(
+                    imbalance=0.0,
+                    buy_qty=0,
+                    sell_qty=0,
+                    depth_state="INVALID_BOOK",
+                    is_valid=False,
+                )
+            prev_ask_px = px
+            parsed_sells.append((px, qty))
+
+    buy_qty = sum(q for _, q in parsed_buys)
+    sell_qty = sum(q for _, q in parsed_sells)
+    best_bid = parsed_buys[0][0] if parsed_buys else None
+    best_ask = parsed_sells[0][0] if parsed_sells else None
+
+    # Empty book check
+    if buy_qty == 0 and sell_qty == 0:
+        return DepthImbalanceResult(
+            imbalance=0.0,
+            buy_qty=0,
+            sell_qty=0,
+            depth_state="EMPTY_BOOK",
+            is_valid=False,
+            spread=None,
+            best_bid=None,
+            best_ask=None,
+        )
+
+    # Crossed book check when both sides exist
+    if best_bid is not None and best_ask is not None:
+        if best_bid >= best_ask:
+            return DepthImbalanceResult(
+                imbalance=0.0,
+                buy_qty=buy_qty,
+                sell_qty=sell_qty,
+                depth_state="CROSSED_BOOK",
+                is_valid=False,
+                spread=round(best_ask - best_bid, 4),
+                best_bid=best_bid,
+                best_ask=best_ask,
+            )
+
+    # One-sided liquidity
+    if buy_qty > 0 and sell_qty == 0:
+        return DepthImbalanceResult(
+            imbalance=1.0,
+            buy_qty=buy_qty,
+            sell_qty=0,
+            depth_state="ONE_SIDED_BOOK",
+            is_valid=True,
+            spread=None,
+            best_bid=best_bid,
+            best_ask=None,
+        )
+    if sell_qty > 0 and buy_qty == 0:
+        return DepthImbalanceResult(
+            imbalance=-1.0,
+            buy_qty=0,
+            sell_qty=sell_qty,
+            depth_state="ONE_SIDED_BOOK",
+            is_valid=True,
+            spread=None,
+            best_bid=None,
+            best_ask=best_ask,
+        )
+
+    # Valid uncrossed two-sided book
+    total_qty = buy_qty + sell_qty
+    raw_imb = (buy_qty - sell_qty) / total_qty
+    clamped_imb = max(-1.0, min(1.0, float(raw_imb)))
+    spread = round(best_ask - best_bid, 4) if (best_bid is not None and best_ask is not None) else None
+
+    return DepthImbalanceResult(
+        imbalance=clamped_imb,
+        buy_qty=buy_qty,
+        sell_qty=sell_qty,
+        depth_state="VALID_BOOK",
+        is_valid=True,
+        spread=spread,
+        best_bid=best_bid,
+        best_ask=best_ask,
+    )
+
 def _retention_prune_allowed(*, queue_depth: int, in_flight: int) -> bool:
     """Retention maintenance must yield to any pending persistence work."""
     return int(queue_depth) == 0 and int(in_flight) == 0
@@ -132,18 +339,27 @@ class DepthStore:
             logger.error("depth_rejection_provenance_write_failed error=%s", type(exc).__name__)
 
     def _persist_loop(self):
-        batch_size = self._persist_batch_size
+        min_batch_size = self._persist_batch_size
+        max_batch_size = max(min_batch_size, int(getattr(cfg, "PERSISTENCE_BATCH_MAX_ITEMS", 1000) or 1000))
         prune_interval_sec = max(
             5.0,
             float(getattr(cfg, "DEPTH_SNAPSHOT_PRUNE_INTERVAL_SEC", 30.0) or 30.0),
         )
+        wal_interval_sec = max(
+            5.0,
+            float(getattr(cfg, "WAL_CHECKPOINT_MIN_INTERVAL_SEC", 30.0) or 30.0),
+        )
         last_prune_epoch = time.time()
-        from core.trade_store import prune_depth_snapshots
+        last_wal_epoch = time.time()
+        from core.trade_store import prune_depth_snapshots, checkpoint_depth_wal
 
         while not self._persist_stop.is_set() or not self._persist_queue.empty():
             items = []
             with self._persist_admission_lock:
-                while len(items) < batch_size:
+                # Dynamic adaptive batch sizing: absorb surges up to PERSISTENCE_BATCH_MAX_ITEMS
+                current_q = self._persist_queue.qsize()
+                effective_batch_size = min(max_batch_size, max(min_batch_size, current_q))
+                while len(items) < effective_batch_size:
                     try:
                         items.append(self._persist_queue.get_nowait())
                         with self._persist_lock:
@@ -204,10 +420,7 @@ class DepthStore:
                     for _ in items:
                         self._persist_queue.task_done()
 
-            # Run retention pruning only when persistence is genuinely idle.
-            # A merely sub-batch backlog is still live write pressure; running
-            # the retention DELETE then can extend SQLite writer occupancy and
-            # turn a recoverable backlog into queue rejection.
+            # Run retention pruning & non-blocking WAL checkpoints only when queue occupancy is low/idle.
             now_epoch = time.time()
             queue_idle = _retention_prune_allowed(
                 queue_depth=self._persist_queue.qsize(),
@@ -219,6 +432,13 @@ class DepthStore:
                     prune_depth_snapshots()
                 except Exception as prune_exc:
                     logger.debug("background_depth_prune_skipped err=%s", prune_exc)
+
+            if (now_epoch - last_wal_epoch) >= wal_interval_sec and self._persist_queue.qsize() < min_batch_size:
+                last_wal_epoch = now_epoch
+                try:
+                    checkpoint_depth_wal(mode="PASSIVE")
+                except Exception as wal_exc:
+                    logger.debug("background_wal_checkpoint_skipped err=%s", wal_exc)
 
     def _should_persist_snapshot(self, instrument_token, now_epoch: float) -> bool:
         min_interval_sec = self._sampling_interval_sec()
@@ -254,19 +474,26 @@ class DepthStore:
             self._raw_updates_seen += 1
         now_iso = datetime.fromtimestamp(now_epoch, tz=timezone.utc).isoformat().replace("+00:00", "Z")
         self._ts_window.append(now_epoch)
+        res = compute_depth_imbalance(depth)
+        imbalance = res.imbalance
+        if res.depth_state == "CROSSED_BOOK":
+            record_degradation("depth", "DEPTH_CROSSED_BOOK")
+        elif res.depth_state == "INVALID_BOOK":
+            record_degradation("depth", "DEPTH_INVALID_BOOK")
+
         self.books[instrument_token] = {
             "depth": depth,
+            "imbalance": res.imbalance,
+            "depth_state": res.depth_state,
+            "is_valid": res.is_valid,
+            "buy_qty": res.buy_qty,
+            "sell_qty": res.sell_qty,
+            "spread": res.spread,
             "ts": now_epoch,
             "ts_epoch": now_epoch,
             "ts_iso": now_iso,
         }
         try:
-            # compute imbalance
-            buy_qty = sum([b.get("quantity", 0) for b in depth.get("buy", [])])
-            sell_qty = sum([s.get("quantity", 0) for s in depth.get("sell", [])])
-            imbalance = 0.0
-            if buy_qty + sell_qty > 0:
-                imbalance = (buy_qty - sell_qty) / (buy_qty + sell_qty)
             should_persist = self._should_persist_snapshot(instrument_token, now_epoch)
             with self._persist_lock:
                 if should_persist:
@@ -295,7 +522,7 @@ class DepthStore:
                     # accepts the legacy shape only when its serialized
                     # envelope still fits the same byte bound.
                     canonical_depth = depth
-                    item_bytes = len(json.dumps({"depth": depth, "imbalance": imbalance}, sort_keys=True, separators=(",", ":")).encode("utf-8")) + 110
+                    item_bytes = len(json.dumps({"depth": depth, "imbalance": imbalance}, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")) + 110
                 require_item_size(item_bytes, MAX_DEPTH_QUEUE_ITEM_BYTES, "DEPTH_QUEUE")
                 try:
                     # Apply bounded, time-limited backpressure without stalling the
@@ -303,7 +530,7 @@ class DepthStore:
                     put_timeout_sec = min(0.05, max(0.0, float(
                         getattr(cfg, "DEPTH_PERSIST_QUEUE_PUT_TIMEOUT_SEC", 0.05) or 0.05)))
                     item = (now_iso, instrument_token,
-                            json.dumps({"depth": canonical_depth, "imbalance": imbalance}, sort_keys=True, separators=(",", ":")), now_epoch)
+                            json.dumps({"depth": canonical_depth, "imbalance": imbalance, "depth_state": res.depth_state, "is_valid": res.is_valid}, sort_keys=True, separators=(",", ":"), allow_nan=False), now_epoch)
                     # Hold admission serialization through enqueue + ledger update so
                     # the worker cannot dequeue an item before it is counted.
                     deadline = time.monotonic() + put_timeout_sec

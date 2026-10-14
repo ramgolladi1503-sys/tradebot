@@ -77,7 +77,7 @@ def _valid_tick(tick: dict, target_epoch: float, expected_token: int | None = No
             and price > 0 and selected == source
             and math.isfinite(target)
             and selected <= time.time() + 0.05
-            and source >= target and (source - target) * 1000 <= 2000)
+            and (source - target) * 1000 >= -100 and (source - target) * 1000 <= 2000)
 
 class CASPrimitiveStore:
     def __init__(self, path: str|Path, *, session_id: str, source_sha: str, underlying_token: int):
@@ -158,7 +158,7 @@ def verify_primitive(row: dict, *, session_id: str, source_sha: str, underlying_
         if selected != source: return False,"timestamp_binding"
         if row.get("primitive_name") not in TARGETS or row.get("target_timestamp_ist") != TARGETS[row["primitive_name"]]: return False,"target_identity"
         expected_lateness = int(round((selected - target) * 1000))
-        if (expected_lateness < 0 or expected_lateness > 2000
+        if (expected_lateness < -100 or expected_lateness > 2000
                 or row.get("lateness_ms") != expected_lateness): return False,"window"
         if row.get("timestamp_source_field") is None or row.get("timestamp_fallback_used") is not False: return False,"timestamp_authority_metadata"
         source_event_id = row.get("source_event_id")

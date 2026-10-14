@@ -49,12 +49,15 @@ def _load_frozen_contract_hashes(repo_root: Path) -> dict[str, str]:
     }
 
 
+from core.market_calendar import _is_nse_fno_holiday
+
+
 def generate_rolling_close_dates(prior_date_str: str, window: int = 200) -> list[str]:
-    """Generate 200 consecutive prior weekday dates ending at prior_date_str."""
+    """Generate 200 consecutive prior exchange trading dates ending at prior_date_str, skipping weekends and NSE holidays."""
     rolling_dates: list[str] = []
     current = date.fromisoformat(prior_date_str)
     while len(rolling_dates) < window:
-        if current.weekday() < 5:
+        if current.weekday() < 5 and not _is_nse_fno_holiday(current):
             rolling_dates.append(current.isoformat())
         current -= timedelta(days=1)
     rolling_dates.reverse()
@@ -93,6 +96,15 @@ def build_t1_heritage_graph(
         "calendar_id": calendar_id,
         "calendar_version": calendar_version,
     }
+
+    # Invariant I-2: Strict input validation for positive, finite prices
+    for val_name, val in [
+        ("futures_1529_close", futures_1529_close),
+        ("daily_close", daily_close),
+        ("sma200_value", sma200_value),
+    ]:
+        if not isinstance(val, (int, float)) or not math.isfinite(val) or val <= 0:
+            raise ValueError(f"INVALID_T1_PREREQUISITE_PRICE: {val_name} must be a positive finite float, got {val}")
 
     instruments = {
         OPENING_DRIVE_ID: {"contract_key": futures_contract_key},

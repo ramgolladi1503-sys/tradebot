@@ -145,3 +145,44 @@ def test_build_and_publish_t1_manifest_end_to_end(tmp_path):
     assert registry.orders_placed == 0
     assert registry.orders_modified == 0
     assert registry.orders_cancelled == 0
+
+
+def test_generate_rolling_close_dates_skips_nse_holidays():
+    from core.market_calendar import NSE_FNO_2026_HOLIDAYS
+    # Test a date range around Gandhi Jayanti (2026-10-02)
+    dates = generate_rolling_close_dates("2026-10-06", window=20)
+    assert len(dates) == 20
+    # 2026-10-02 is in NSE_FNO_2026_HOLIDAYS and must be skipped
+    assert "2026-10-02" not in dates
+    for d_str in dates:
+        d = Path(d_str)
+        # No weekends
+        from datetime import date
+        dt = date.fromisoformat(d_str)
+        assert dt.weekday() < 5
+        assert dt not in NSE_FNO_2026_HOLIDAYS
+
+
+def test_build_t1_heritage_graph_rejects_non_positive_prices():
+    repo_root = Path(__file__).resolve().parents[1]
+    with pytest.raises(ValueError, match="INVALID_T1_PREREQUISITE_PRICE"):
+        build_t1_heritage_graph(
+            target_session_date="2026-10-07",
+            prior_session_date="2026-10-06",
+            futures_contract_key="NIFTY26OCTFUT",
+            futures_1529_close=-100.0,
+            daily_close=22776.1,
+            sma200_value=24473.3,
+            repo_root=repo_root,
+        )
+
+    with pytest.raises(ValueError, match="INVALID_T1_PREREQUISITE_PRICE"):
+        build_t1_heritage_graph(
+            target_session_date="2026-10-07",
+            prior_session_date="2026-10-06",
+            futures_contract_key="NIFTY26OCTFUT",
+            futures_1529_close=22776.1,
+            daily_close=0.0,
+            sma200_value=24473.3,
+            repo_root=repo_root,
+        )

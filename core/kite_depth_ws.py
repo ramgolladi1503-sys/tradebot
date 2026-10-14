@@ -646,8 +646,9 @@ def record_desired_subscription_candidate(
     desired_options = get_desired_option_contract_snapshot()
     observation = _observation_state_payload()
     try:
-        budget = int(configured_budget)
+        raw_budget = int(configured_budget)
         governed_budget = int(_GOVERNED_FEED_SUBSCRIPTION_BUDGET)
+        budget = min(raw_budget, governed_budget) if raw_budget > 0 and governed_budget > 0 else raw_budget
     except (TypeError, ValueError, OverflowError):
         budget = governed_budget = 0
     observation_enabled = bool(observation.get("enabled"))
@@ -3901,7 +3902,6 @@ def _attempt_causal_ws1006_recovery_clear(*, now_epoch: float) -> bool:
 
 
 def _handle_ws1006_recoverable(*, source: str, ws, code: int | None, reason: str | None) -> bool:
-    global _RUNTIME_STATE, _LAST_RUNTIME_ERROR, _WS_RECOVERY_PROOF_CONTEXT
     category = _ws1006_fault_category(code=code, reason_text=reason)
     if category != "RECOVERABLE_WS_DROP":
         return False
@@ -7576,10 +7576,12 @@ def _enforce_subscription_budget(
         )
     )
     keep_budget = budget - len(preserved)
+    fail_closed = False
     if keep_budget >= 0:
         kept = preserved + candidates[:keep_budget]
     else:
-        kept = list(preserved)
+        kept = list(preserved[:budget])
+        fail_closed = True
         _log_ws(
             "FEED_TOKEN_BUDGET_PRESERVE_EXCEEDED",
             {
@@ -7588,6 +7590,8 @@ def _enforce_subscription_budget(
                 "underlying_tokens": len(set(int(t) for t in (underlying_tokens or set()) if t is not None)),
                 "sticky_tokens": len(set(int(t) for t in (sticky_tokens or set()) if t is not None)),
                 "active_trade_tokens": len(set(int(t) for t in (active_trade_tokens or set()) if t is not None)),
+                "clamped_to": len(kept),
+                "fail_closed": True,
             },
         )
     kept = list(dict.fromkeys(int(t) for t in kept if t is not None and int(t) > 0))
@@ -7611,6 +7615,7 @@ def _enforce_subscription_budget(
         "dropped_count": len(dropped),
         "dropped_tokens": dropped,
         "preserved_count": len(preserved),
+        "fail_closed": fail_closed,
     }
 
 
@@ -7916,7 +7921,7 @@ def _build_subscription_tokens_impl(
 
     preserve_tokens: set[int] = set(int(t) for t in _UNDERLYING_TOKENS)
     preserve_tokens.update(int(t) for t in sticky_tokens if t is not None)
-    preserve_tokens.update(int(t) for t in option_rank_by_token.keys())
+    preserve_tokens.update(int(t) for t in (active_trade_tokens or set()) if t is not None)
 
     min_required_by_symbol = dict(_LAST_OPTION_MIN_REQUIRED_BY_SYMBOL or {})
     # Prevent prune starvation: enforce a per-symbol minimum floor, but still allow
@@ -7966,28 +7971,50 @@ def _build_subscription_tokens_impl(
                 counts[exchange_key] = int(counts.get(exchange_key, 0)) + 1
             return counts
 
-        known_tokens: set[int] = set()
-        try:
-            for exch in ("NFO", "BFO", "NSE", "BSE"):
+        known_tokens_by_exchange: dict[str, set[int]] = {}
+        for exch in ("NFO", "BFO", "NSE", "BSE"):
+            try:
+                exch_set = set()
                 for inst in kite_client.instruments_cached(exch, ttl_sec=getattr(cfg, "KITE_INSTRUMENTS_TTL", 3600)):
                     tok = inst.get("instrument_token")
                     if tok is not None:
                         try:
-                            known_tokens.add(int(tok))
+                            exch_set.add(int(tok))
                         except Exception:
                             continue
-        except Exception:
-            known_tokens = set()
-        if known_tokens:
+                if exch_set:
+                    known_tokens_by_exchange[exch] = exch_set
+            except Exception:
+                pass
+
+        if known_tokens_by_exchange:
             before_tokens = [int(t) for t in tokens]
             before = len(before_tokens)
             before_counts = _count_by_exchange(before_tokens)
-            tokens = [t for t in before_tokens if int(t) in known_tokens or int(t) in preserve_tokens]
-            kept_set = set(int(t) for t in tokens)
-            dropped_tokens = [int(t) for t in before_tokens if int(t) not in kept_set]
+            filtered_tokens: list[int] = []
+            dropped_tokens: list[int] = []
+            for t in before_tokens:
+                t_int = int(t)
+                if t_int in preserve_tokens:
+                    filtered_tokens.append(t_int)
+                    continue
+                exch = str(token_exchange_hint.get(t_int, "NFO")).upper()
+                known_for_exch = known_tokens_by_exchange.get(exch)
+                if known_for_exch is not None:
+                    # Exchange registry is known: strictly enforce membership
+                    if t_int in known_for_exch:
+                        filtered_tokens.append(t_int)
+                    else:
+                        dropped_tokens.append(t_int)
+                else:
+                    # Exchange registry was not returned/populated: preserve candidate
+                    filtered_tokens.append(t_int)
+            tokens = filtered_tokens
             dropped = len(dropped_tokens)
+            for dropped_tok in dropped_tokens:
+                option_rank_by_token.pop(int(dropped_tok), None)
             dropped_counts = _count_by_exchange(dropped_tokens)
-            after_counts = _count_by_exchange([int(t) for t in tokens])
+            after_counts = _count_by_exchange(tokens)
             _log_ws(
                 "FEED_TOKEN_FILTER_COUNTS",
                 {
@@ -8652,6 +8679,31 @@ def ensure_subscribed_tokens(tokens: list[int], reason: str = "on_demand", symbo
             new_tokens = [t for t in tokens if t not in existing]
             if not new_tokens:
                 return True
+            max_tokens = int(getattr(cfg, "DEPTH_SUBSCRIPTION_MAX_TOKENS", 123) or 123)
+            available = max(0, max_tokens - len(existing))
+            if available <= 0:
+                _log_ws(
+                    "FEED_SUBSCRIBE_SKIPPED",
+                    {
+                        "reason": reason,
+                        "detail": "budget_exhausted",
+                        "max_tokens": max_tokens,
+                        "existing_count": len(existing),
+                        "requested_count": len(new_tokens),
+                    },
+                )
+                return False
+            if len(new_tokens) > available:
+                _log_ws(
+                    "FEED_SUBSCRIBE_CLAMPED",
+                    {
+                        "reason": reason,
+                        "requested": len(new_tokens),
+                        "clamped_to": available,
+                        "max_tokens": max_tokens,
+                    },
+                )
+                new_tokens = new_tokens[:available]
             base_snapshot, invalidated = _begin_applied_option_mutation(
                 reason, affected_tokens=new_tokens
             )
@@ -9227,6 +9279,15 @@ def on_ticks(ws, ticks, *, socket_generation: int | None = None):
         return
 
     if sequence is None:
+        from core.feed.tick_callback_coordinator import get_tick_quarantine
+        get_tick_quarantine().quarantine(
+            token=None,
+            reason="ABANDONED_GENERATION",
+            callback_gen=callback_socket_generation,
+            active_gen=active_socket_generation or _current_socket_generation(),
+            receipt_epoch=float(time.time()),
+            payload_sample={"batch_size": len(ticks)},
+        )
         _log_ws(
             "FEED_OLD_GENERATION_CALLBACK_IGNORED",
             {"socket_generation": callback_socket_generation, "active_generation": active_socket_generation, "callback": "on_ticks_delegate", "result": "ignored_before_ingest"},
@@ -9283,6 +9344,27 @@ def _process_on_ticks(
     if not ticks:
         return
     callback_socket_generation = int(socket_generation)
+    current_active_gen = _current_socket_generation()
+    if callback_socket_generation < current_active_gen:
+        from core.feed.tick_callback_coordinator import get_tick_quarantine
+        get_tick_quarantine().quarantine(
+            token=None,
+            reason="ABANDONED_GENERATION_EXECUTION_FENCE",
+            callback_gen=callback_socket_generation,
+            active_gen=current_active_gen,
+            receipt_epoch=float(callback_receive_epoch or time.time()),
+            payload_sample={"batch_size": len(ticks)},
+        )
+        _log_ws(
+            "FEED_OLD_GENERATION_CALLBACK_IGNORED",
+            {
+                "socket_generation": callback_socket_generation,
+                "active_generation": current_active_gen,
+                "callback": "_process_on_ticks",
+                "result": "ignored_at_execution_fence",
+            },
+        )
+        return
     callback_sequence = int(callback_sequence or 0)
     applied_option_ownership = get_applied_option_ownership_snapshot()
     callback_option_ownership_known = bool(
@@ -9369,6 +9451,27 @@ def _process_on_ticks(
         observation_registry = None
     observation_token_set = set(int(token) for token in (getattr(observation_registry, "all_tokens", []) or []))
     for t in ticks:
+        # Re-check generation mid-batch: abort immediately if generation bumped
+        if callback_socket_generation < _current_socket_generation():
+            from core.feed.tick_callback_coordinator import get_tick_quarantine
+            get_tick_quarantine().quarantine(
+                token=None,
+                reason="MID_BATCH_GENERATION_BUMP_ABORT",
+                callback_gen=callback_socket_generation,
+                active_gen=_current_socket_generation(),
+                receipt_epoch=now_epoch,
+                payload_sample={"aborted_mid_batch": True},
+            )
+            _log_ws(
+                "FEED_OLD_GENERATION_CALLBACK_IGNORED",
+                {
+                    "socket_generation": callback_socket_generation,
+                    "active_generation": _current_socket_generation(),
+                    "callback": "_process_on_ticks_mid_batch",
+                    "result": "aborted_mid_batch",
+                },
+            )
+            break
         _FEED_ON_TICKS_ROW_SEQ += 1
         if not isinstance(t, Mapping):
             continue
@@ -9382,6 +9485,15 @@ def _process_on_ticks(
         if token_int is not None and payload_tick_epoch is not None:
             prev_payload = _coerce_epoch(_LAST_PAYLOAD_TS_BY_TOKEN.get(token_int))
             if prev_payload is not None and payload_tick_epoch < prev_payload:
+                from core.feed.tick_callback_coordinator import get_tick_quarantine
+                get_tick_quarantine().quarantine(
+                    token=token_int,
+                    reason="OUT_OF_ORDER_TIMESTAMP",
+                    callback_gen=callback_socket_generation,
+                    active_gen=_current_socket_generation(),
+                    tick_epoch=payload_tick_epoch,
+                    receipt_epoch=now_epoch,
+                )
                 _log_ws("FEED_TICK_DROPPED_OUT_OF_ORDER", {"token": token_int, "payload_epoch": payload_tick_epoch, "prev_epoch": prev_payload, "callback_sequence": callback_sequence, "socket_generation": callback_socket_generation})
                 continue
             _LAST_PAYLOAD_TS_BY_TOKEN[token_int] = payload_tick_epoch
@@ -11538,6 +11650,24 @@ def _start_depth_ws_impl(
                 runtime_state="STOPPED",
                 last_error=_LAST_RUNTIME_ERROR,
             )
+            return
+        if not is_market_open_ist():
+            _log_ws("FEED_CLOSE_MARKET_CLOSED", {"code": code, "reason": str(reason)})
+            _RUNTIME_STATE = "STOPPED"
+            _LAST_RUNTIME_ERROR = f"{code}:{reason}"[:1000]
+            _persist_runtime_snapshot_row(
+                ws_connected=False,
+                source=f"on_close_market_closed:{code}",
+                runtime_state="STOPPED",
+                last_error=_LAST_RUNTIME_ERROR,
+                disconnected_code=code_int,
+                disconnected_reason=reason_text,
+            )
+            if hasattr(ws, "stop_retry") and callable(ws.stop_retry):
+                try:
+                    ws.stop_retry()
+                except Exception:
+                    pass
             return
         _log_ws("FEED_CLOSE", {"code": code, "reason": str(reason)})
         _RUNTIME_STATE = "SUBSCRIBE_FAILED"
