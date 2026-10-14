@@ -68,7 +68,8 @@ class SentinelLiveFeedAdvisor:
         self.ticker = ticker.upper()
         self.profile: AssetProfile = get_asset_profile(self.ticker)
         self.target_expiry = str(target_expiry).strip().upper() if target_expiry else None
-        self.slippage = DynamicOptionSlippageModel(base_brokerage_pts=0.40)
+        exch_name = "BSE" if "BSE" in self.profile.fo_exchange_prefix else "NSE"
+        self.slippage = DynamicOptionSlippageModel(base_brokerage_pts=0.40, exchange=exch_name)
         wal_path = f"runtime/sentinel_apm_wal_{self.ticker.lower()}.json" if self.ticker != "NIFTY" else "runtime/sentinel_apm_wal.json"
         self.apm = ActivePositionManager(wal_path=wal_path, profile=self.profile)
         self.spread_threshold = self.profile.max_spread_pct
@@ -486,6 +487,35 @@ class SentinelLiveFeedAdvisor:
         )
 
         if opt_q:
+            opt_prem = float(opt_q.get("ltp", 0.0) or 0.0)
+            opt_b = float(opt_q.get("bid", 0.0) or 0.0)
+            opt_a = float(opt_q.get("ask", 0.0) or 0.0)
+
+            # Layer 2 Net Yield & Friction Gate:
+            passes_yield, yield_reason, net_prem_yield, fric = self.slippage.validate_net_yield_gate(
+                premium=opt_prem,
+                expected_index_gain_pts=target_pts,
+                delta=0.55,
+                bid=opt_b,
+                ask=opt_a,
+                max_spread_pct=self.spread_threshold,
+                max_absolute_spread_pts=3.50 if self.ticker == "SENSEX" else 1.50,
+                min_yield_to_friction_ratio=2.5
+            )
+
+            if not passes_yield:
+                candidate_status = "NOT_EVALUABLE"
+                candidate_reason = yield_reason
+                signal_display = f"{signal_display} -> SUPPRESSED ({yield_reason})"
+                risk_flag = "VETO_FRICTION_INEFFICIENCY"
+                return {
+                    "signal_display": signal_display,
+                    "risk_flag": risk_flag,
+                    "candidate_status": candidate_status,
+                    "candidate_reason": candidate_reason,
+                    "option_candidate": option_candidate,
+                }
+
             # Descriptive capture/receive-time observation only; exchange timestamp is unverified.
             candidate_status = "CAPTURE_RECEIVE_TIME_REPLAY_ONLY"
             option_candidate = {
