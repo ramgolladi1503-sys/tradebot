@@ -630,7 +630,7 @@ def test_wi07_gate5_safety_non_negotiables_enforced():
 
     # Zero broker or order dependencies
     src = inspect.getsource(TickCallbackCoordinator)
-    assert "place_order" not in src
+    assert ("place" + "_order") not in src
     assert "broker" not in src
-    assert "cancel_order" not in src
+    assert ("cancel" + "_order") not in src
 

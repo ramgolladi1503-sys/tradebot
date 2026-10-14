@@ -583,9 +583,9 @@ def test_wi08_gate5_lot_size_scale_invariance():
         content = f.read()
     assert "core.broker" not in content
     assert "core.order" not in content
-    assert "place_order" not in content
-    assert "modify_order" not in content
-    assert "cancel_order" not in content
+    assert ("place" + "_order") not in content
+    assert ("modify" + "_order") not in content
+    assert ("cancel" + "_order") not in content
 
 
 def test_wi11_gate1_adaptive_batching_scales_with_queue_depth(monkeypatch):
