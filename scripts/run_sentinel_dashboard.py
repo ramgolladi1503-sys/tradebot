@@ -313,37 +313,6 @@ with col_left:
     curr_bid = live_q.get("bid", curr_ltp) if live_q else None
     curr_ask = live_q.get("ask", curr_ltp) if live_q else None
 
-    # Locked Entry Quote: look up quote at the signal bar timestamp
-    locked_entry_q = None
-    if signal_bar_timestamp:
-        try:
-            # Parse ISO timestamp to epoch
-            sig_epoch = datetime.fromisoformat(signal_bar_timestamp).timestamp()
-            today_dash = datetime.now().strftime("%Y-%m-%d")
-            for base in [Path("/Volumes/TradeBot/live market capture"), Path("/Volumes/TradeBotData/live market capture")]:
-                chunks_dir = base / today_dash / "chunks"
-                if chunks_dir.exists():
-                    all_chunks = sorted(chunks_dir.glob("*.parquet"))
-                    for c_path in reversed(all_chunks):
-                        try:
-                            c_df = pd.read_parquet(c_path)
-                            c_sub = c_df[(c_df["symbol"] == active_contract_symbol) & (c_df["ts"] <= sig_epoch)]
-                            if not c_sub.empty:
-                                r_match = c_sub.iloc[-1]
-                                locked_entry_q = {
-                                    "ltp": float(r_match["ltp"]),
-                                    "bid": float(r_match["bid"]),
-                                    "ask": float(r_match["ask"]),
-                                    "ts": float(r_match["ts"]),
-                                }
-                                break
-                        except Exception:
-                            continue
-                if locked_entry_q:
-                    break
-        except Exception:
-            pass
-
     # Only display the Active Option Spotlight Card when APM is actively IN_FLIGHT or has an open payload
     # When a trade is won, lost, or liquidated, it is gone from the top spotlight card.
     is_actively_in_flight = (wal_state in {"IN_FLIGHT", "TRAIL_LOCK", "EXIT_PENDING"} and wal_payload is not None)
