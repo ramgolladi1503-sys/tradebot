@@ -83,13 +83,31 @@ st.sidebar.title("Config & Status")
 auto_refresh = st.sidebar.checkbox("Auto-Refresh Feed", value=True)
 refresh_rate = st.sidebar.slider("Refresh Interval (seconds)", min_value=1, max_value=10, value=2)
 
+if auto_refresh:
+    try:
+        from streamlit_autorefresh import st_autorefresh
+        st_autorefresh(interval=refresh_rate * 1000, key="sentinel_feed_counter")
+    except Exception:
+        pass
+
 if st.sidebar.button("🔄 Refresh Now", use_container_width=True):
     st.rerun()
 
-WORKTREE = Path("/private/tmp/tradebot-pr968-b1d10ff-repair")
+# Dynamic path resolution: prefer current working directory, fallback to known paths
+WORKTREE = Path(".")
 today_str = datetime.now().strftime("%Y%m%d")
 audit_log_path = WORKTREE / f"runtime/audit/sentinel_execution_paths_{today_str}.jsonl"
 wal_path = WORKTREE / "runtime/sentinel_apm_wal.json"
+
+# Fallback check if audit log or wal exists in relative or absolute workspace
+if not audit_log_path.exists():
+    fallback_audit = Path("/Users/madhuram/tradebot") / f"runtime/audit/sentinel_execution_paths_{today_str}.jsonl"
+    if fallback_audit.exists():
+        audit_log_path = fallback_audit
+if not wal_path.exists():
+    fallback_wal = Path("/Users/madhuram/tradebot") / "runtime/sentinel_apm_wal.json"
+    if fallback_wal.exists():
+        wal_path = fallback_wal
 
 # Helper to read latest option quotes from live capture parquet
 def get_live_option_quotes() -> dict:
@@ -124,7 +142,7 @@ live_option_book = get_live_option_quotes()
 if live_option_book:
     st.sidebar.markdown("### ⚡ Live Option Stream")
     for sym, q in sorted(live_option_book.items()):
-        if "NIFTY" in sym and any(s in sym for s in ["22500", "22550", "22600", "22450"]):
+        if "NIFTY" in sym and any(s in sym for s in ["22650", "22700", "22750", "22600", "22800", "22550", "22500"]):
             st.sidebar.markdown(f"**{sym}**")
             st.sidebar.text(f"LTP: ₹{q['ltp']} | Bid: ₹{q['bid']} | Ask: ₹{q['ask']}")
 
@@ -144,65 +162,70 @@ if wal_path.exists():
     except Exception:
         pass
 
-# Fallback: Extract all executed trades today across running task logs if WAL was rotated
+# Extract all executed trades today from authoritative APM WAL history
 def get_all_executed_trades_today() -> list:
     trades_dict = {}
-    import glob, re
-    # Only inspect task logs from today (matching current conversation tasks)
-    today_logs = [
-        "/Users/madhuram/.gemini/antigravity/brain/162de38c-8263-4254-8b50-0c5fa8538833/.system_generated/tasks/task-12038.log",
-        "/Users/madhuram/.gemini/antigravity/brain/162de38c-8263-4254-8b50-0c5fa8538833/.system_generated/tasks/task-12231.log",
-        "/Users/madhuram/.gemini/antigravity/brain/162de38c-8263-4254-8b50-0c5fa8538833/.system_generated/tasks/task-12296.log"
-    ]
-    for p in today_logs:
-        try:
-            with open(p, "r", encoding="utf-8", errors="ignore") as lf:
-                for l in lf:
-                    if "NEW POSITION OPENED" in l:
-                        m = re.search(r"NEW POSITION OPENED\] (\w+) \| (.*?) @ Spot ([\d\.]+) \|.*?Option LTP: ₹([\d\.]+)", l)
-                        if m:
-                            pid = m.group(1)
-                            # Format Date and Time from TRADE_HHMM_DIR
-                            tm_match = re.search(r"TRADE_(\d{2})(\d{2})_", pid)
-                            time_str = f"2026-10-12 {tm_match.group(1)}:{tm_match.group(2)}:00" if tm_match else "2026-10-12"
-                            trades_dict[pid] = {
-                                "trade_time": time_str,
-                                "position_id": pid,
-                                "strike_contract": m.group(2).strip(),
-                                "entry_price": float(m.group(3)),
-                                "opt_entry_ltp": float(m.group(4)),
-                                "exit_reason": "IN_FLIGHT",
-                                "exit_price": None,
-                                "pnl_pts": None,
-                                "opt_exit_ltp": None,
-                                "opt_pnl_pts": None,
-                            }
-                    elif "POSITION EXITED" in l and trades_dict:
-                        m = re.search(r"Reason: (\w+) \| Exit Spot: ([\d\.]+) \| Spot PnL: [^\d\+\-]+([\+\-]?[\d\.]+) pts \| Option PnL: ([\+\-]?[\d\.]+) pts", l)
-                        if m:
-                            last_pid = list(trades_dict.keys())[-1]
-                            trades_dict[last_pid].update({
-                                "exit_reason": m.group(1),
-                                "exit_price": float(m.group(2)),
-                                "pnl_pts": float(m.group(3)),
-                                "opt_pnl_pts": float(m.group(4)),
-                                "opt_exit_ltp": round(trades_dict[last_pid]["opt_entry_ltp"] + float(m.group(4)), 2)
-                            })
-        except Exception:
-            continue
-    # Merge with wal_history if available
-    res = list(trades_dict.values())
+    today_dash = datetime.now().strftime("%Y-%m-%d")
+
+    # 1. Primary Source: Authoritative WAL trade_history from runtime/sentinel_apm_wal.json
     for item in wal_history:
         if isinstance(item, dict) and item.get("position_id"):
             pid = item["position_id"]
-            if pid not in [x.get("position_id") for x in res]:
-                tm_match = re.search(r"TRADE_(\d{2})(\d{2})_", pid)
-                time_str = f"2026-10-12 {tm_match.group(1)}:{tm_match.group(2)}:00" if tm_match else "2026-10-12"
-                item_copy = dict(item)
-                item_copy["trade_time"] = item_copy.get("entry_time", time_str)
-                res.append(item_copy)
+            # Ensure trade belongs strictly to today's session date
+            entry_t = str(item.get("entry_time", ""))
+            if entry_t and today_dash in entry_t:
+                time_str = entry_t.replace("T", " ")[:19]
+                t1 = "✅ Hit" if item.get("target_1_hit") else "❌"
+                t2 = "✅ Hit" if item.get("target_2_hit") else "❌"
+                max_s = float(item.get("max_spot_excursion", 0.0) or 0.0)
+                max_o = float(item.get("max_opt_excursion", 0.0) or 0.0)
+
+                trades_dict[pid] = {
+                    "trade_time": time_str,
+                    "position_id": pid,
+                    "strike_contract": item.get("strike_contract", "N/A"),
+                    "entry_price": item.get("entry_price"),
+                    "exit_price": item.get("exit_price"),
+                    "pnl_pts": item.get("pnl_pts"),
+                    "max_spot_gain": max_s,
+                    "opt_entry_ltp": item.get("opt_entry_ltp"),
+                    "opt_exit_ltp": item.get("opt_exit_ltp"),
+                    "opt_pnl_pts": item.get("opt_pnl_pts"),
+                    "max_opt_gain": max_o,
+                    "t1_milestone": t1,
+                    "t2_milestone": t2,
+                    "exit_reason": item.get("exit_reason", "COMPLETED"),
+                }
+
+    # 2. If a position is currently actively in-flight, show it at the top as IN_FLIGHT
+    if wal_payload and isinstance(wal_payload, dict) and wal_payload.get("position_id"):
+        cur_pid = wal_payload["position_id"]
+        entry_t = str(wal_payload.get("entry_time", ""))
+        time_str = entry_t.replace("T", " ")[:19] if entry_t else f"{today_dash}"
+        t1 = "✅ Hit" if wal_payload.get("target_1_hit") else "❌"
+        t2 = "✅ Hit" if wal_payload.get("target_2_hit") else "❌"
+        max_s = float(wal_payload.get("max_spot_excursion", 0.0) or 0.0)
+        max_o = float(wal_payload.get("max_opt_excursion", 0.0) or 0.0)
+
+        trades_dict[cur_pid] = {
+            "trade_time": time_str,
+            "position_id": cur_pid,
+            "strike_contract": wal_payload.get("strike_contract", "N/A"),
+            "entry_price": wal_payload.get("entry_price"),
+            "exit_price": None,
+            "pnl_pts": None,
+            "max_spot_gain": max_s,
+            "opt_entry_ltp": wal_payload.get("opt_entry_ltp"),
+            "opt_exit_ltp": wal_payload.get("opt_current_ltp"),
+            "opt_pnl_pts": None,
+            "max_opt_gain": max_o,
+            "t1_milestone": t1,
+            "t2_milestone": t2,
+            "exit_reason": "IN_FLIGHT",
+        }
 
     # Sort strictly descending by trade_time (newest trade at the top)
+    res = list(trades_dict.values())
     res.sort(key=lambda x: str(x.get("trade_time", "")), reverse=True)
     return res
 
@@ -388,9 +411,13 @@ with col_left:
                 "entry_price": st.column_config.NumberColumn("Spot Entry", format="₹%.2f"),
                 "exit_price": st.column_config.NumberColumn("Spot Exit", format="₹%.2f"),
                 "pnl_pts": st.column_config.NumberColumn("Spot PnL (pts)", format="%+.1f"),
+                "max_spot_gain": st.column_config.NumberColumn("Max Spot Gain", format="+%.1f pts"),
                 "opt_entry_ltp": st.column_config.NumberColumn("Option Entry LTP", format="₹%.2f"),
                 "opt_exit_ltp": st.column_config.NumberColumn("Option Exit LTP", format="₹%.2f"),
                 "opt_pnl_pts": st.column_config.NumberColumn("Option PnL (pts)", format="%+.2f"),
+                "max_opt_gain": st.column_config.NumberColumn("Max Opt Gain", format="+%.2f pts"),
+                "t1_milestone": st.column_config.TextColumn("Target 1 (+15)", width="small"),
+                "t2_milestone": st.column_config.TextColumn("Target 2 (+30)", width="small"),
                 "exit_reason": st.column_config.TextColumn("Exit Reason / Result", width="medium"),
             }
         )
@@ -399,6 +426,17 @@ with col_left:
 
     st.subheader("📈 Live Market Track & Opening Range Bounds")
     if not df_rows.empty:
+        # Dynamically compute today's Opening Range bounds (09:15 to 09:45)
+        or_high_val = 22543.05
+        or_low_val = 22288.45
+        try:
+            or_bars = df_rows[df_rows["timestamp"].apply(lambda t: "09:15" <= str(t)[11:16] <= "09:45")]
+            if not or_bars.empty and "high" in or_bars.columns and "low" in or_bars.columns:
+                or_high_val = float(or_bars["high"].max())
+                or_low_val = float(or_bars["low"].min())
+        except Exception:
+            pass
+
         fig = go.Figure()
         fig.add_trace(go.Scatter(
             x=df_rows["timestamp"],
@@ -407,8 +445,8 @@ with col_left:
             name="Spot Close",
             line=dict(color="#29B6F6", width=2)
         ))
-        fig.add_hline(y=22651.10, line_dash="dash", line_color="#81C784", annotation_text="OR High 22651.10")
-        fig.add_hline(y=22512.00, line_dash="dash", line_color="#E57373", annotation_text="OR Low 22512.00")
+        fig.add_hline(y=or_high_val, line_dash="dash", line_color="#81C784", annotation_text=f"OR High {or_high_val:.2f}")
+        fig.add_hline(y=or_low_val, line_dash="dash", line_color="#E57373", annotation_text=f"OR Low {or_low_val:.2f}")
         fig.update_layout(
             template="plotly_dark",
             height=280,
@@ -472,7 +510,3 @@ with col_right:
     6. **Spread Expansion** (Bid-ask spread <= 4.0%)
     7. **Quote Uniqueness** (Single unique contract/token match)
     """)
-
-if auto_refresh:
-    time.sleep(refresh_rate)
-    st.rerun()
