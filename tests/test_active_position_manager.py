@@ -11,6 +11,7 @@ Proves:
 import pytest
 import os
 import json
+import math
 from datetime import time as dtime
 from pathlib import Path
 
@@ -179,51 +180,45 @@ def test_gate4_energy_gate_spvd_proof(tmp_wal):
     """Gate 4: Session Phase Variance Decay correctly gates trades when remaining energy is depleted."""
     apm = ActivePositionManager(wal_path=tmp_wal)
 
-    # 1. Early morning 10:00 AM (Lots of energy remaining) -> Allowed
-    can_enter_morning, e_atr_morn, req_morn = apm.check_session_energy_gate(
+    # 1. Normal Volatility (ATR_1m = 12.0) -> Expected 15m diffusion = 12.0 * sqrt(15) = 46.5 pts >= 15.0 pts target -> Allowed
+    can_enter_normal, diff_norm, req_norm = apm.check_session_energy_gate(
         current_time=dtime(10, 0),
-        daily_norm_atr=120.0,
-        target_pts=18.0,
-        buffer_multiplier=1.5
+        target_pts=15.0,
+        atr_1m=12.0,
+        trade_horizon_mins=15
     )
-    assert can_enter_morning is True
-    assert e_atr_morn > req_morn
+    assert can_enter_normal is True
+    assert diff_norm > req_norm
+    assert diff_norm == round(12.0 * math.sqrt(15), 2)
 
-    # 2. Final 15 minutes of session (15:15 PM) -> Exhausted & Rejected
-    can_enter_close, e_atr_close, req_close = apm.check_session_energy_gate(
-        current_time=dtime(15, 15),
-        daily_norm_atr=120.0,
-        target_pts=18.0,
-        buffer_multiplier=1.5
+    # 2. Dead Compressed Volatility (ATR_1m = 2.0 pts) -> Expected 15m diffusion = 2.0 * sqrt(15) = 7.75 pts < 15.0 pts target -> Rejected!
+    can_enter_dead, diff_dead, req_dead = apm.check_session_energy_gate(
+        current_time=dtime(13, 0),
+        target_pts=15.0,
+        atr_1m=2.0,
+        trade_horizon_mins=15
+    )
+    assert can_enter_dead is False
+    assert diff_dead < req_dead
+
+    # 3. Afternoon Breakdown Impulse (ATR_1m = 18.5 pts at 13:05 PM) -> 18.5 * sqrt(15) = 71.65 pts >= 15.0 pts target -> Allowed!
+    can_enter_breakdown, diff_bd, req_bd = apm.check_session_energy_gate(
+        current_time=dtime(13, 5),
+        target_pts=15.0,
+        atr_1m=18.5,
+        trade_horizon_mins=15
+    )
+    assert can_enter_breakdown is True
+    assert diff_bd >= req_bd
+
+    # 4. Final 3 minutes of session (15:27 PM < 5m to close) -> Vetoed for overnight risk
+    can_enter_close, diff_close, req_close = apm.check_session_energy_gate(
+        current_time=dtime(15, 27),
+        target_pts=15.0,
+        atr_1m=18.5,
+        trade_horizon_mins=15
     )
     assert can_enter_close is False
-    assert e_atr_close < req_close
-
-    # 3. Afternoon 14:00 PM on a severe RANGE day (e.g., today Oct 7 with KER = 0.0463)
-    # The low directional efficiency collapses expected variance -> Rejected
-    can_enter_range, e_atr_range, req_range = apm.check_session_energy_gate(
-        current_time=dtime(14, 0),
-        daily_norm_atr=120.0,
-        target_pts=18.0,
-        buffer_multiplier=1.5,
-        session_ker=0.0463,
-        is_expansion=False
-    )
-    assert can_enter_range is False
-    assert e_atr_range < req_range
-
-    # 4. Afternoon 13:05 PM during an active Opening Range Breakdown (is_expansion=True)
-    # Impulse energy overrides backward-looking morning chop KER -> Allowed!
-    can_enter_exp, e_atr_exp, req_exp = apm.check_session_energy_gate(
-        current_time=dtime(13, 5),
-        daily_norm_atr=120.0,
-        target_pts=15.0,
-        buffer_multiplier=1.2,
-        session_ker=0.0436,
-        is_expansion=True
-    )
-    assert can_enter_exp is True
-    assert e_atr_exp >= req_exp
 
 
 def test_15_minute_time_exit_proof(tmp_wal):

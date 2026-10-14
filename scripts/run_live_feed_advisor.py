@@ -902,15 +902,13 @@ class SentinelLiveFeedAdvisor:
                 is_or_expansion = (c < self.or_low or c > self.or_high) and or_width >= 70.0
                 current_gear = "GEAR_2_TREND" if (is_or_expansion or (self.ewma_ker >= 0.35 and or_width >= 70.0)) else "GEAR_1_RANGE"
 
-                # Dynamic Session Phase Variance Decay (SPVD) Energy Gate Check
-                # During an active OR expansion / breakdown, impulse energy overrides backward chop KER
+                # First-Principles Stochastic Diffusion Horizon Energy Gate Check
+                # Derived from Brownian maximum excursion over the 15-minute holding horizon: E[D] = ATR_1m * sqrt(15)
                 can_enter_energy, e_atr_rem, req_energy = self.apm.check_session_energy_gate(
                     current_time=btime,
-                    daily_norm_atr=120.0,
                     target_pts=target_pts,
-                    buffer_multiplier=1.2 if is_or_expansion else 1.5,
-                    session_ker=self.ewma_ker,
-                    is_expansion=is_or_expansion
+                    atr_1m=atr_1m,
+                    trade_horizon_mins=15
                 )
 
                 if c > self.or_high:

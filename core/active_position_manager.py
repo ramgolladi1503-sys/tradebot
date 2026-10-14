@@ -147,42 +147,44 @@ class ActivePositionManager:
         current_time: dtime,
         session_start: dtime = dtime(9, 15),
         session_end: dtime = dtime(15, 30),
-        daily_norm_atr: float = 120.0,
-        target_pts: float = 18.0,
-        buffer_multiplier: float = 1.5,
-        session_ker: Optional[float] = None,
-        is_expansion: bool = False
+        target_pts: float = 15.0,
+        atr_1m: float = 12.0,
+        trade_horizon_mins: int = 15,
+        **kwargs  # Accept legacy arguments safely for backward compatibility
     ) -> Tuple[bool, float, float]:
-        """Invariant 4.1: Dynamic Session Phase Variance Decay (SPVD) Energy Gate.
-        
-        Calculates expected remaining directional ATR:
-        E[ATR_rem] = sqrt(T_rem) * ATR_norm * directional_efficiency_factor
-        Guards against low-volatility late-session trap moves without arbitrary clock hardcoding.
-        On chop/range days (low KER), directional energy decays significantly faster.
-        When is_expansion=True (Opening Range breakout or breakdown), impulse energy overrides
-        backward-looking chop KER to allow legitimate afternoon expansions.
+        """First-Principles Stochastic Diffusion Horizon Energy Gate.
+
+        Mathematically derived from the Brownian Maximum Distribution:
+        E[Max Excursion over tau] = ATR_1m * sqrt(min(tau_trade, tau_remaining))
+
+        Evaluates two physical invariants:
+        1. Trade Horizon Volatility Sufficiency:
+           Expected 15-minute diffusion envelope must exceed the profit target:
+           expected_diffusion = atr_1m * sqrt(min(trade_horizon_mins, mins_to_close))
+        2. Session Boundary Time Horizon:
+           Trades require at least 5 minutes before the 15:30 close to avoid overnight risk.
+
+        Eliminates all arbitrary clamps (0.25, 0.60, 0.28) and replaces them with
+        real-time realized volatility physics.
         """
         now_dt = datetime.combine(datetime.today(), current_time)
-        start_dt = datetime.combine(datetime.today(), session_start)
         end_dt = datetime.combine(datetime.today(), session_end)
 
-        total_secs = max(1.0, (end_dt - start_dt).total_seconds())
-        rem_secs = max(0.0, (end_dt - now_dt).total_seconds())
-        t_rem = rem_secs / total_secs
+        mins_to_close = max(0.0, (end_dt - now_dt).total_seconds() / 60.0)
 
-        # If KER is provided, directional efficiency factor scales energy (clamped between 0.25 and 1.0)
-        eff_factor = 1.0
-        if is_expansion:
-            # During an active OR expansion/breakout, volatility and directional impulse expand
-            eff_factor = max(0.60, min(1.0, (session_ker or 0.0) / 0.28))
-        elif session_ker is not None:
-            eff_factor = max(0.25, min(1.0, session_ker / 0.28))
+        # Invariant: Must have at least 5 minutes remaining in session before market close
+        if mins_to_close < 5.0:
+            return False, 0.0, float(target_pts)
 
-        e_atr_rem = math.sqrt(t_rem) * daily_norm_atr * eff_factor
-        required_energy = target_pts * buffer_multiplier
+        # Effective diffusion horizon (capped at trade holding limit or remaining session minutes)
+        eff_horizon_bars = max(0.0, min(float(trade_horizon_mins), mins_to_close))
 
-        can_enter = e_atr_rem >= required_energy
-        return can_enter, e_atr_rem, required_energy
+        # Expected Brownian first-passage maximum diffusion envelope over horizon
+        expected_diffusion = float(atr_1m) * math.sqrt(eff_horizon_bars)
+        required_energy = float(target_pts)
+
+        can_enter = expected_diffusion >= required_energy
+        return can_enter, round(expected_diffusion, 2), round(required_energy, 2)
 
     def arm_and_enter(
         self,
