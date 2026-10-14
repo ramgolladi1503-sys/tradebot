@@ -71,10 +71,14 @@ def get_today_data_dir() -> Path:
 
 def ensure_single_instance():
     lock_file_path = "/tmp/upstox_daily_pipeline.lock"
-    lock_file = open(lock_file_path, "w")
+    lock_file = open(lock_file_path, "a+")
     try:
         fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
+        lock_file.seek(0)
+        lock_file.truncate()
+        lock_file.write(f"{os.getpid()}\n")
+        lock_file.flush()
+    except (BlockingIOError, OSError, IOError):
         logger.error("Another instance of upstox_daily_pipeline is already running. Exiting.")
         sys.exit(0)
     return lock_file
