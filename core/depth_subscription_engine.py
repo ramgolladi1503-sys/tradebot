@@ -339,19 +339,24 @@ def _prune_stale_option_subscription_tokens(*, tokens, option_rank_by_token, tok
     }
 
 
-def _resolve_known_tokens(ws: Any) -> set[int]:
+def _resolve_known_tokens_by_exchange(ws: Any) -> dict[str, set[int]]:
     conf = _cfg(ws)
-    known: set[int] = set()
-    try:
-        for exch in ("NFO", "BFO", "NSE", "BSE"):
+    known_by_exch: dict[str, set[int]] = {}
+    for exch in ("NFO", "BFO", "NSE", "BSE"):
+        try:
+            exch_set = set()
             for inst in list(ws.kite_client.instruments_cached(exch, ttl_sec=getattr(conf, "KITE_INSTRUMENTS_TTL", 3600)) or []):
                 try:
-                    known.add(int(inst.get("instrument_token")))
+                    tok = inst.get("instrument_token")
+                    if tok is not None:
+                        exch_set.add(int(tok))
                 except Exception:
                     continue
-    except Exception:
-        pass
-    return known
+            if exch_set:
+                known_by_exch[exch] = exch_set
+        except Exception:
+            pass
+    return known_by_exch
 
 
 def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None = None) -> tuple[list[int], list[dict[str, Any]]]:
@@ -408,6 +413,7 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
     option_rank: dict[int, tuple] = {}
     option_token_set: set[int] = set()
     option_contract_by_token: dict[int, dict[str, Any]] = {}
+    token_exchange_hint: dict[int, str] = {}
 
     for symbol in symbols_l:
         exchange = "BFO" if symbol == "SENSEX" else "NFO"
@@ -482,10 +488,12 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
             underlying_tokens.add(index_token)
             underlying_map[index_token] = symbol
             token_to_symbol[index_token] = symbol
+            token_exchange_hint[index_token] = "BSE" if symbol == "SENSEX" else "NSE"
         selected_strikes: dict[float, set[str]] = {}
         for token in option_tokens:
             row_tokens.append(int(token))
             token_to_symbol[int(token)] = symbol
+            token_exchange_hint[int(token)] = str(exchange).upper()
             option_token_set.add(int(token))
             option_rank[int(token)] = _rank(meta.get(int(token)), atm, step, int(token))
             m = meta.get(int(token)) or {}
@@ -541,11 +549,26 @@ def build_subscription_tokens(symbols: list[str] | None, max_tokens: int | None 
     tokens, prune_meta = ws._prune_stale_option_subscription_tokens(tokens=tokens, option_rank_by_token=option_rank, token_to_symbol=token_to_symbol, min_required_by_symbol=min_required)
 
     if bool(getattr(conf, "DEPTH_SUBSCRIPTION_VALIDATE_TOKENS", True)):
-        known = _resolve_known_tokens(ws)
-        if known:
+        known_by_exch = _resolve_known_tokens_by_exchange(ws)
+        if known_by_exch:
             preserve = set(underlying_tokens) | set(sticky)
-            dropped_tokens = [t for t in tokens if t not in known and t not in preserve]
-            tokens = [t for t in tokens if t in known or t in preserve]
+            filtered_tokens: list[int] = []
+            dropped_tokens: list[int] = []
+            for t in tokens:
+                t_int = int(t)
+                if t_int in preserve:
+                    filtered_tokens.append(t_int)
+                    continue
+                exch = str(token_exchange_hint.get(t_int, "NFO")).upper()
+                known_for_exch = known_by_exch.get(exch)
+                if known_for_exch is not None:
+                    if t_int in known_for_exch:
+                        filtered_tokens.append(t_int)
+                    else:
+                        dropped_tokens.append(t_int)
+                else:
+                    filtered_tokens.append(t_int)
+            tokens = filtered_tokens
             for dropped_tok in dropped_tokens:
                 option_rank.pop(int(dropped_tok), None)
 
