@@ -69,6 +69,11 @@ class PositionPayload:
     session_gear: str = "GEAR_1_RANGE"  # "GEAR_1_RANGE" or "GEAR_2_TREND"
     opt_stop_loss_pct: Optional[float] = None  # e.g. 0.20 for -20% option stop
     opt_initial_sl: Optional[float] = None
+    # Milestone & Max Favorable Excursion (MFE) Observability Telemetry
+    target_1_hit: bool = False
+    target_2_hit: bool = False
+    max_spot_excursion: float = 0.0
+    max_opt_excursion: float = 0.0
 
 
 class ActivePositionManager:
@@ -145,7 +150,8 @@ class ActivePositionManager:
         daily_norm_atr: float = 120.0,
         target_pts: float = 18.0,
         buffer_multiplier: float = 1.5,
-        session_ker: Optional[float] = None
+        session_ker: Optional[float] = None,
+        is_expansion: bool = False
     ) -> Tuple[bool, float, float]:
         """Invariant 4.1: Dynamic Session Phase Variance Decay (SPVD) Energy Gate.
         
@@ -153,6 +159,8 @@ class ActivePositionManager:
         E[ATR_rem] = sqrt(T_rem) * ATR_norm * directional_efficiency_factor
         Guards against low-volatility late-session trap moves without arbitrary clock hardcoding.
         On chop/range days (low KER), directional energy decays significantly faster.
+        When is_expansion=True (Opening Range breakout or breakdown), impulse energy overrides
+        backward-looking chop KER to allow legitimate afternoon expansions.
         """
         now_dt = datetime.combine(datetime.today(), current_time)
         start_dt = datetime.combine(datetime.today(), session_start)
@@ -164,14 +172,16 @@ class ActivePositionManager:
 
         # If KER is provided, directional efficiency factor scales energy (clamped between 0.25 and 1.0)
         eff_factor = 1.0
-        if session_ker is not None:
+        if is_expansion:
+            # During an active OR expansion/breakout, volatility and directional impulse expand
+            eff_factor = max(0.60, min(1.0, (session_ker or 0.0) / 0.28))
+        elif session_ker is not None:
             eff_factor = max(0.25, min(1.0, session_ker / 0.28))
 
         e_atr_rem = math.sqrt(t_rem) * daily_norm_atr * eff_factor
         required_energy = target_pts * buffer_multiplier
 
         can_enter = e_atr_rem >= required_energy
-        return can_enter, e_atr_rem, required_energy
         return can_enter, e_atr_rem, required_energy
 
     def arm_and_enter(
@@ -281,6 +291,22 @@ class ActivePositionManager:
             p.opt_current_ltp = current_opt_ltp
             if p.opt_peak_hwm is None or current_opt_ltp > p.opt_peak_hwm:
                 p.opt_peak_hwm = current_opt_ltp
+            if p.opt_entry_ltp is not None:
+                opt_gain = current_opt_ltp - p.opt_entry_ltp
+                if opt_gain > p.max_opt_excursion:
+                    p.max_opt_excursion = round(opt_gain, 2)
+                if opt_gain >= 15.0:
+                    p.target_1_hit = True
+                if opt_gain >= 30.0:
+                    p.target_2_hit = True
+
+        spot_gain = (current_spot - p.entry_price) if is_ce else (p.entry_price - current_spot)
+        if spot_gain > p.max_spot_excursion:
+            p.max_spot_excursion = round(spot_gain, 2)
+        if spot_gain >= 15.0:
+            p.target_1_hit = True
+        if spot_gain >= 30.0:
+            p.target_2_hit = True
 
         # Helper to execute liquidation on tick
         def _record_tick_exit(reason: str, exit_spot: float):
@@ -383,6 +409,14 @@ class ActivePositionManager:
             # Update peak option high-watermark
             if p.opt_peak_hwm is None or current_opt_ltp > p.opt_peak_hwm:
                 p.opt_peak_hwm = current_opt_ltp
+            if p.opt_entry_ltp is not None:
+                opt_gain = current_opt_ltp - p.opt_entry_ltp
+                if opt_gain > p.max_opt_excursion:
+                    p.max_opt_excursion = round(opt_gain, 2)
+                if opt_gain >= 15.0:
+                    p.target_1_hit = True
+                if opt_gain >= 30.0:
+                    p.target_2_hit = True
 
         # 1. Check Intrabar Hits
         if is_ce:
@@ -393,6 +427,13 @@ class ActivePositionManager:
             hit_tp = bar_low <= p.target_price
             hit_sl = bar_high >= p.current_sl
             gain = p.entry_price - bar_low
+
+        if gain > p.max_spot_excursion:
+            p.max_spot_excursion = round(gain, 2)
+        if gain >= 15.0:
+            p.target_1_hit = True
+        if gain >= 30.0:
+            p.target_2_hit = True
 
         # Helper to compute empirical option strike PnL
         def _record_exit(exit_reason: str, exit_spot: float):

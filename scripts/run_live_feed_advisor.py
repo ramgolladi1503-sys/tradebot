@@ -763,10 +763,38 @@ class SentinelLiveFeedAdvisor:
                 btime = bar_dt.time()
                 o, h, l, c = float(closed_bar[1]), float(closed_bar[2]), float(closed_bar[3]), float(closed_bar[4])
 
+                # 1m Realized ATR calculation across last 14 bars
+                lookback_bars = candles[-14:] if len(candles) >= 14 else candles
+                atr_1m = sum(max(float(b[2]) - float(b[3]), 0.1) for b in lookback_bars) / max(1, len(lookback_bars))
+
                 # Opening Shock Stand-Aside: 09:15 - 09:45
                 if btime < dtime(9, 45, 0):
                     self.or_high = max(self.or_high, h)
                     self.or_low = min(self.or_low, l)
+                    
+                    # Emit live shock telemetry row to audit log so dashboard displays spot & ATR
+                    shock_row = {
+                        "timestamp": bar_time_str,
+                        "run_id": getattr(self, "run_id", "UNKNOWN"),
+                        "pid": getattr(self, "pid", None),
+                        "git_sha": getattr(self, "git_sha", "UNKNOWN"),
+                        "execution_mode": "CAPTURE_RECEIVE_TIME_REPLAY_ONLY",
+                        "receive_time_verified": True,
+                        "exchange_event_time_verified": False,
+                        "spot_nifty": c,
+                        "high": h,
+                        "low": l,
+                        "atr_1m": round(atr_1m, 2),
+                        "raw_ker": 0.0,
+                        "ewma_ker": 0.5,
+                        "drag_pts": 0.8,
+                        "spread_ratio": 0.02,
+                        "advisory": f"⏳ [OPENING SHOCK CALIBRATION] Stand-Aside until 09:45 | OR: {self.or_low:.1f} - {self.or_high:.1f}",
+                        "risk_flag": "OPENING_SHOCK_STAND_ASIDE",
+                        "apm_state": self.apm.state,
+                        "candidate_status": "CALIBRATING_OR",
+                    }
+                    self.emit_and_append_audit_log(shock_row)
                     print(f"⏳ [OPENING SHOCK] [{btime.strftime('%H:%M:%S')}] Bar Close: {c:.2f} | OR High: {self.or_high:.2f} | OR Low: {self.or_low:.2f}")
                     time.sleep(3.0)
                     continue
@@ -869,13 +897,20 @@ class SentinelLiveFeedAdvisor:
                 contract_choice = None
                 chosen_strike = None
 
+                # Dynamic Regime Classification: Gear 1 (Range Scalper) vs Gear 2 (Trend Expansion)
+                or_width = self.or_high - self.or_low
+                is_or_expansion = (c < self.or_low or c > self.or_high) and or_width >= 70.0
+                current_gear = "GEAR_2_TREND" if (is_or_expansion or (self.ewma_ker >= 0.35 and or_width >= 70.0)) else "GEAR_1_RANGE"
+
                 # Dynamic Session Phase Variance Decay (SPVD) Energy Gate Check
+                # During an active OR expansion / breakdown, impulse energy overrides backward chop KER
                 can_enter_energy, e_atr_rem, req_energy = self.apm.check_session_energy_gate(
                     current_time=btime,
                     daily_norm_atr=120.0,
                     target_pts=target_pts,
-                    buffer_multiplier=1.5,
-                    session_ker=self.ewma_ker
+                    buffer_multiplier=1.2 if is_or_expansion else 1.5,
+                    session_ker=self.ewma_ker,
+                    is_expansion=is_or_expansion
                 )
 
                 if c > self.or_high:
@@ -917,11 +952,6 @@ class SentinelLiveFeedAdvisor:
                         insufficient_displacement = True
                     elif entry_dir == "CE" and (c - self.last_exit_price) < min_disp_pts:
                         insufficient_displacement = True
-
-                # Dynamic Regime Classification: Gear 1 (Range Scalper) vs Gear 2 (Trend Expansion)
-                or_width = self.or_high - self.or_low
-                is_or_expansion = (c < self.or_low or c > self.or_high) and or_width >= 70.0
-                current_gear = "GEAR_2_TREND" if (is_or_expansion or (self.ewma_ker >= 0.35 and or_width >= 70.0)) else "GEAR_1_RANGE"
 
                 # Gear 1 Range Day: Enforce Lunch Dead-Zone Freeze (11:00 AM - 13:30 PM) ONLY if trapped within OR
                 # When market is in macro trend expansion outside OR, bypass lunch freeze to capture trend legs

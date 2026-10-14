@@ -206,10 +206,24 @@ def test_gate4_energy_gate_spvd_proof(tmp_wal):
         daily_norm_atr=120.0,
         target_pts=18.0,
         buffer_multiplier=1.5,
-        session_ker=0.0463
+        session_ker=0.0463,
+        is_expansion=False
     )
     assert can_enter_range is False
     assert e_atr_range < req_range
+
+    # 4. Afternoon 13:05 PM during an active Opening Range Breakdown (is_expansion=True)
+    # Impulse energy overrides backward-looking morning chop KER -> Allowed!
+    can_enter_exp, e_atr_exp, req_exp = apm.check_session_energy_gate(
+        current_time=dtime(13, 5),
+        daily_norm_atr=120.0,
+        target_pts=15.0,
+        buffer_multiplier=1.2,
+        session_ker=0.0436,
+        is_expansion=True
+    )
+    assert can_enter_exp is True
+    assert e_atr_exp >= req_exp
 
 
 def test_15_minute_time_exit_proof(tmp_wal):
@@ -456,4 +470,58 @@ def test_real_time_sub_second_tick_defense_proof(tmp_wal):
     assert summary["exit_reason"] == "OPTION_NATIVE_STOP_LOSS_HIT"
     assert summary["opt_exit_ltp"] == 95.0
     assert summary["opt_pnl_pts"] == -25.0
+
+
+def test_milestone_and_max_favorable_excursion_proof(tmp_wal):
+    """Proves that APM accurately tracks Target 1 hit, Target 2 hit, and MFE excursion in-flight."""
+    apm = ActivePositionManager(wal_path=tmp_wal)
+    apm.arm_and_enter(
+        position_id="TEST_MFE",
+        direction="CE",
+        contract="NIFTY 22500 CE",
+        entry_price=22550.0,
+        entry_time_str="2026-10-13T10:00:00",
+        sl_pts=12.0,
+        tp_pts=18.0,
+        opt_quote={"symbol": "NIFTY 22500 CE 13 OCT 26", "token": "44612", "ltp": 80.0, "bid": 79.9, "ask": 80.1},
+        session_gear="GEAR_2_TREND",
+        is_runner_mode=True
+    )
+    assert apm.payload.max_spot_excursion == 0.0
+    assert apm.payload.max_opt_excursion == 0.0
+    assert apm.payload.target_1_hit is False
+    assert apm.payload.target_2_hit is False
+
+    # Tick 1: Spot reaches +16 pts (22566.0), Option reaches +18 pts (98.0)
+    apm.evaluate_tick(
+        current_spot=22566.0,
+        current_opt_ltp=98.0,
+        tick_time_str="2026-10-13T10:01:00"
+    )
+    assert apm.payload.target_1_hit is True
+    assert apm.payload.target_2_hit is False
+    assert apm.payload.max_spot_excursion == 16.0
+    assert apm.payload.max_opt_excursion == 18.0
+
+    # Tick 2: Spot pulls back to 22560 (+10 pts) and Option pulls back to 92.0 (+12 pts)
+    # MFE must NOT decrease
+    apm.evaluate_tick(
+        current_spot=22560.0,
+        current_opt_ltp=92.0,
+        tick_time_str="2026-10-13T10:02:00"
+    )
+    assert apm.payload.max_spot_excursion == 16.0
+    assert apm.payload.max_opt_excursion == 18.0
+    assert apm.payload.target_1_hit is True
+
+    # Tick 3: Massive secondary surge, Spot reaches +32 pts (22582.0), Option reaches +33 pts (113.0)
+    apm.evaluate_tick(
+        current_spot=22582.0,
+        current_opt_ltp=113.0,
+        tick_time_str="2026-10-13T10:03:00"
+    )
+    assert apm.payload.target_1_hit is True
+    assert apm.payload.target_2_hit is True
+    assert apm.payload.max_spot_excursion == 32.0
+    assert apm.payload.max_opt_excursion == 33.0
 
