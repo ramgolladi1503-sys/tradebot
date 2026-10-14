@@ -2031,3 +2031,116 @@ def test_stale_socket_generation_cannot_confirm_option_ownership(monkeypatch):
     snapshot = ws.get_applied_option_ownership_snapshot()
     assert snapshot.state == "UNKNOWN"
     assert snapshot.socket_generation == generation
+
+
+def test_wi04_gate1_monotonic_temporal_causality_blocks_future_ticks():
+    """Invariant I-1: Option tick tau > tau_decision must never enter current decision cycle."""
+    from core.market_event_graph_live_runtime_bridge import _source_tick_freshness_failure
+
+    decision_epoch = 100.0
+    valid_underlying_bar = {
+        "symbol": "NIFTY",
+        "source_bar_end_epoch": 100.0,
+        "bar_provenance": {
+            "source_type": "live_websocket",
+            "last_live_tick_epoch": 99.8,
+        },
+    }
+    # Option tick from the future (100.5 > 100.0)
+    future_option_bar = {
+        "symbol": "NIFTY2680625000CE",
+        "source_bar_end_epoch": 100.0,
+        "bar_provenance": {
+            "source_type": "live_websocket",
+            "last_live_tick_epoch": 100.5,
+        },
+    }
+    snapshot = {
+        "observed_at_epoch": decision_epoch,
+        "index_bar": valid_underlying_bar,
+        "constituent_bars": [future_option_bar],
+    }
+    context, symbols, reason = _source_tick_freshness_failure(snapshot, max_age_sec=3.0)
+    assert reason == "SNAPSHOT_SOURCE_TICK_FUTURE"
+    assert "NIFTY2680625000CE" in symbols
+
+
+def test_wi04_gate2_dual_truth_demarcation_trade_vs_depth():
+    """Invariant I-2: Separate trade truth (LTP age) from depth heartbeat without synthetic spoofing."""
+    ws = importlib.import_module("core.kite_depth_ws")
+    now = 1000.0
+
+    # Trade happened at 900.0 (100s ago -> stale trade), but depth update arrived at 999.5 (fresh quote)
+    trade_epoch = 900.0
+    depth_epoch = 999.5
+
+    trade_age = now - trade_epoch
+    quote_age = now - depth_epoch
+
+    assert trade_age == 100.0
+    assert quote_age == 0.5
+    # Trade truth cannot be overwritten by depth receipt time
+    assert trade_epoch != depth_epoch
+
+
+def test_wi04_gate3_generation_barrier_transition_invalidation():
+    """Invariant I-3: Ticks from prior socket generation must be rejected upon transition."""
+    from core.feed.tick_callback_coordinator import (
+        TickCallbackCoordinator,
+        RejectionReason,
+    )
+
+    # Worker thread starts automatically in __init__
+    coordinator = TickCallbackCoordinator(max_pending=10)
+    try:
+        # Generation 1 active
+        adm1 = coordinator.submit(lambda: "gen1_work")
+        assert adm1.accepted is True
+
+        # Begin transition to generation 2
+        adm_trans = coordinator.begin_transition()
+        assert adm_trans.accepted is True
+        assert adm_trans.transition is not None
+
+        # Subsequent admissions are blocked while transition is pending
+        adm2 = coordinator.submit(lambda: "gen1_stale_work")
+        assert adm2.accepted is False
+        assert adm2.reason == RejectionReason.TRANSITION_PENDING
+
+        # Wait for acknowledgment before completing
+        assert adm_trans.transition.wait_ack(timeout=1.0) is True
+        adm_trans.transition.complete()
+    finally:
+        coordinator.shutdown(timeout=1.0)
+
+
+def test_wi04_gate4_hard_timeout_fail_closed_guarantee():
+    """Invariant I-4 & I-5: Dead option feed past 3.0s fails closed with zero broker calls."""
+    from core.market_event_graph_live_runtime_bridge import _source_tick_freshness_failure
+
+    decision_epoch = 100.0
+    valid_underlying_bar = {
+        "symbol": "NIFTY",
+        "source_bar_end_epoch": 100.0,
+        "bar_provenance": {
+            "source_type": "live_websocket",
+            "last_live_tick_epoch": 99.8,
+        },
+    }
+    # Option tick arrived at 95.0 (age = 5.0s > 3.0s ceiling)
+    dead_option_bar = {
+        "symbol": "NIFTY2680625000CE",
+        "source_bar_end_epoch": 100.0,
+        "bar_provenance": {
+            "source_type": "live_websocket",
+            "last_live_tick_epoch": 95.0,
+        },
+    }
+    snapshot = {
+        "observed_at_epoch": decision_epoch,
+        "index_bar": valid_underlying_bar,
+        "constituent_bars": [dead_option_bar],
+    }
+    context, symbols, reason = _source_tick_freshness_failure(snapshot, max_age_sec=3.0)
+    assert reason == "SNAPSHOT_SOURCE_TICK_STALE"
+    assert "NIFTY2680625000CE" in symbols

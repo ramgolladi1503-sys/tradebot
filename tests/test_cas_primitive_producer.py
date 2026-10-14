@@ -79,6 +79,64 @@ def test_pre_target_whole_second_event_is_rejected_even_after_target_receive(tmp
     assert row["capture_status"]=="BLOCKED"
     assert row["price"] is None
 
+def test_submillisecond_exchange_quantization_tolerance(tmp_path):
+    store=CASPrimitiveStore(tmp_path/"quantization.json",session_id="s",source_sha="x",underlying_token=1)
+    # 50ms before target epoch due to exchange clock quantization
+    quantized=tick(100,99.95)
+    quantized["receive_timestamp_epoch"]=100.05
+    row=store.capture("0915",100.0,quantized,capture_timestamp_ist="x")
+    assert row["capture_status"]=="CAPTURED"
+    assert row["lateness_ms"]==-50
+    assert verify_primitive(row,session_id="s",source_sha="x",underlying_token=1)==(True,"ok")
+
+def test_pre_target_beyond_quantization_tolerance_is_rejected(tmp_path):
+    store=CASPrimitiveStore(tmp_path/"beyond_tolerance.json",session_id="s",source_sha="x",underlying_token=1)
+    # 101ms before target epoch is rejected
+    too_early=tick(100,99.899)
+    too_early["receive_timestamp_epoch"]=100.05
+    row=store.capture("0915",100.0,too_early,capture_timestamp_ist="x")
+    assert row["capture_status"]=="BLOCKED"
+    assert row["price"] is None
+
+def test_quantized_primitive_passes_causal_strategy_harness_primitive_pair(tmp_path):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from core.causal_strategy_harness import _primitive_pair, NativePulse
+
+    IST = ZoneInfo("Asia/Kolkata")
+    # Date 2026-09-04
+    dt_0915 = datetime(2026, 9, 4, 9, 15, tzinfo=IST)
+    dt_1000 = datetime(2026, 9, 4, 10, 0, tzinfo=IST)
+    epoch_0915 = dt_0915.timestamp()
+    epoch_1000 = dt_1000.timestamp()
+
+    store = CASPrimitiveStore(tmp_path / "cas_quantized.json", session_id="s", source_sha="x", underlying_token=1)
+    # 09:14:59.950 (50ms before top-of-minute)
+    tick_0915 = tick(24000.0, epoch_0915 - 0.050)
+    tick_0915["receive_timestamp_epoch"] = epoch_0915 + 0.010
+    # 09:59:59.950 (50ms before top-of-hour)
+    tick_1000 = tick(24100.0, epoch_1000 - 0.050)
+    tick_1000["receive_timestamp_epoch"] = epoch_1000 + 0.010
+
+    a = store.capture("0915", epoch_0915, tick_0915, capture_timestamp_ist="2026-09-04T09:15:00+05:30")
+    b = store.capture("1000", epoch_1000, tick_1000, capture_timestamp_ist="2026-09-04T10:00:00+05:30")
+    assert a["capture_status"] == "CAPTURED"
+    assert b["capture_status"] == "CAPTURED"
+
+    pulse = NativePulse(
+        pulse_id="p1",
+        sequence_num=1,
+        timestamp_epoch=epoch_1000 + 10.0,
+        timestamp_ist="2026-09-04T10:00:10+05:30",
+        session_id="s",
+        producer_sha="x",
+        payload_sha256="0" * 64,
+    )
+    cas_input, error = _primitive_pair(store, pulse=pulse, token=1)
+    assert error is None
+    assert isinstance(cas_input, dict)
+    assert cas_input["signal_direction"] == "DOWN"
+
 def test_primitive_verifier_recomputes_frozen_target_window(tmp_path):
     import core.cas_primitive_producer as producer
     store=CASPrimitiveStore(tmp_path/"target.json",session_id="s",source_sha="x",underlying_token=1)

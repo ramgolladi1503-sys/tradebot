@@ -825,6 +825,30 @@ def insert_depth_snapshots_batch(items):
     return 0
 
 
+def checkpoint_depth_wal(mode: str = "PASSIVE") -> tuple[int, int, int]:
+    """Execute non-blocking PRAGMA wal_checkpoint(PASSIVE).
+    Returns (busy_flag, log_pages, checkpointed_pages).
+    Never blocks hot loops or executes destructive TRUNCATE/RESTART.
+    """
+    if str(mode).upper() != "PASSIVE":
+        raise ValueError(f"Unsupported WAL checkpoint mode: {mode}. Only PASSIVE is permitted.")
+    init_db()
+    try:
+        with _conn() as conn:
+            cursor = conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
+            row = cursor.fetchone()
+            if row:
+                return int(row[0]), int(row[1]), int(row[2])
+            return (0, 0, 0)
+    except Exception as exc:
+        if _is_database_locked_error(exc):
+            _warn_depth_db_lock_once(exc)
+            return (1, -1, -1)
+        logger.warning("wal_checkpoint_failed mode=%s err=%s", mode, type(exc).__name__)
+        return (1, -1, -1)
+
+
+
 def insert_broker_fill(row):
     init_db()
     now_epoch = time.time()

@@ -295,12 +295,95 @@ def _derive_option_price_fields(last_price, best_bid, best_ask, quote_age_sec, m
     }
 
 
+from decimal import Decimal, ROUND_HALF_UP
+
+def infer_atm_strike_decimal(spot: float | int | Decimal | None, step: float | int | Decimal | None) -> float | None:
+    """
+    Computes ATM strike with exact Decimal ROUND_HALF_UP tie-breaking.
+    Guarantees deterministic behavior across platforms and halfway boundary invariants.
+    """
+    if spot is None or step is None:
+        return None
+    try:
+        d_spot = Decimal(str(spot))
+        d_step = Decimal(str(step))
+    except Exception:
+        return None
+
+    if d_spot <= Decimal("0") or d_step <= Decimal("0"):
+        return None
+
+    ratio = d_spot / d_step
+    rounded_ratio = ratio.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    atm = rounded_ratio * d_step
+    return float(atm)
+
+
+def compute_gap_aware_strike_window(
+    spot: float | None,
+    available_strikes: list[float] | set[float],
+    step: float | None,
+    strikes_around: int = 6,
+) -> list[float]:
+    """
+    Selects up to strikes_around strikes below and above ATM from available listed strikes.
+    Handles irregular strike steps and arbitrary missing strike gaps.
+    """
+    if spot is None or step is None or not available_strikes:
+        return []
+
+    atm = infer_atm_strike_decimal(spot, step)
+    if atm is None:
+        return []
+
+    unique_strikes = sorted({float(k) for k in available_strikes if k is not None and float(k) > 0})
+    if not unique_strikes:
+        return []
+
+    # Find closest strike to ATM, tie-breaking to higher strike
+    anchor_idx = None
+    min_dist = float("inf")
+    for i, strike in enumerate(unique_strikes):
+        dist = abs(strike - atm)
+        if dist < min_dist:
+            min_dist = dist
+            anchor_idx = i
+        elif dist == min_dist and strike > unique_strikes[anchor_idx]:
+            anchor_idx = i
+
+    if anchor_idx is None:
+        return []
+
+    start_idx = max(0, anchor_idx - int(strikes_around))
+    end_idx = min(len(unique_strikes), anchor_idx + int(strikes_around) + 1)
+
+    return unique_strikes[start_idx:end_idx]
+
+
+class StrikeWindowHysteresisState:
+    """Stateful anti-churn tracker for dynamic ATM strike selection."""
+
+    def __init__(self, hysteresis_pct: float = 0.20):
+        self.hysteresis_pct = float(hysteresis_pct)
+        self.pinned_atm: float | None = None
+
+    def should_recenter(self, spot: float, step: float) -> bool:
+        if self.pinned_atm is None:
+            return True
+        threshold = float(step) * (1.0 + self.hysteresis_pct)
+        return abs(float(spot) - self.pinned_atm) >= threshold
+
+    def update(self, new_atm: float) -> None:
+        self.pinned_atm = float(new_atm)
+
+
 def _infer_atm_strike(ltp, step):
     ltp_val = _to_pos_float(ltp)
     step_val = _to_float_or_none(step)
     if ltp_val is None or step_val is None or not (step_val > 0.0):
         return None
-    return int(round(float(ltp_val) / float(step_val)) * float(step_val))
+    res = infer_atm_strike_decimal(ltp_val, step_val)
+    return int(res) if res is not None else None
 
 _PREV_OI = {}
 _PREV_LTP = {}
@@ -574,28 +657,13 @@ def fetch_option_chain(symbol, ltp, strikes_around=None, force_synthetic: bool =
                 selection_mode=next_mode,
             )
             expiry_date_str = _exp_str(expiry_date)
-            opt_rows = []
-            for inst in symbol_instruments:
-                if _exp_str(inst.get("expiry")) != expiry_date_str:
-                    continue
-                strike = inst.get("strike")
-                if strike is None:
-                    continue
-                if abs(strike - atm) > strikes_around * step:
-                    continue
-                opt_rows.append(inst)
-
-            # Fallback: if strict ATM window is empty, choose nearest strikes by distance to ATM.
-            if not opt_rows:
-                expiry_rows = [
-                    inst for inst in symbol_instruments
-                    if _exp_str(inst.get("expiry")) == expiry_date_str and inst.get("strike") is not None
-                ]
-                if expiry_rows:
-                    unique_strikes = sorted({float(inst.get("strike")) for inst in expiry_rows})
-                    nearest = sorted(unique_strikes, key=lambda strike: abs(strike - atm))[: (2 * strikes_around + 1)]
-                    nearest_set = set(nearest)
-                    opt_rows = [inst for inst in expiry_rows if float(inst.get("strike")) in nearest_set]
+            expiry_insts = [
+                inst for inst in symbol_instruments
+                if _exp_str(inst.get("expiry")) == expiry_date_str and inst.get("strike") is not None
+            ]
+            available_strikes = [inst["strike"] for inst in expiry_insts]
+            selected_strikes = set(compute_gap_aware_strike_window(ltp, available_strikes, step, strikes_around))
+            opt_rows = [inst for inst in expiry_insts if inst.get("strike") in selected_strikes]
 
             tradingsymbols = [f"{exchange}:{c['tradingsymbol']}" for c in opt_rows]
             # For term structure, collect next expiry too

@@ -48,7 +48,7 @@ class MarketCloseFeedStateDecision:
 
     @property
     def feed_ok(self) -> bool:
-        return self.state == FEED_STATE_HEALTHY and not self.blockers
+        return (self.state in {FEED_STATE_HEALTHY, CLOSE_WINDOW_TICK_SLOWDOWN}) and not self.blockers
 
     @property
     def is_order_action(self) -> bool:
@@ -129,6 +129,7 @@ def classify_market_close_feed_state(
 
     state, reason = _classify_state(
         market_closed=market_closed,
+        seconds_to_close=seconds_to_close,
         ws_connected=ws_connected,
         websocket_ok=websocket_ok,
         ltp_age_sec=ltp_age_sec,
@@ -139,8 +140,8 @@ def classify_market_close_feed_state(
         max_option_feed_age_sec=safe_max_option,
         max_cycle_latency_sec=safe_max_cycle,
     )
-    blockers = () if state == FEED_STATE_HEALTHY else (reason,)
-    warnings = (CLOSE_WINDOW_TICK_SLOWDOWN,) if close_window_active and state in {LTP_STALE, OPTION_FEED_STALE} else ()
+    blockers = () if (state == FEED_STATE_HEALTHY or (close_window_active and state == CLOSE_WINDOW_TICK_SLOWDOWN)) else (reason,)
+    warnings = (CLOSE_WINDOW_TICK_SLOWDOWN,) if (close_window_active and state in {CLOSE_WINDOW_TICK_SLOWDOWN, LTP_STALE, OPTION_FEED_STALE}) else ()
     return MarketCloseFeedStateDecision(
         state=state,
         decision_gate_reason=reason,
@@ -174,6 +175,7 @@ def classify_market_close_feed_state(
 def _classify_state(
     *,
     market_closed: bool,
+    seconds_to_close: float | None = None,
     ws_connected: bool | None,
     websocket_ok: bool | None,
     ltp_age_sec: float | None,
@@ -184,7 +186,7 @@ def _classify_state(
     max_option_feed_age_sec: float,
     max_cycle_latency_sec: float,
 ) -> tuple[str, str]:
-    if market_closed:
+    if market_closed or (seconds_to_close is not None and seconds_to_close <= 0.0):
         return MARKET_CLOSED, MARKET_CLOSED
     if ws_connected is False or websocket_ok is False:
         return WEBSOCKET_DISCONNECTED, WEBSOCKET_DISCONNECTED
@@ -260,4 +262,133 @@ __all__ = [
     "WEBSOCKET_DISCONNECTED",
     "MarketCloseFeedStateDecision",
     "classify_market_close_feed_state",
+    "EODReconciliationResult",
+    "SessionHandoffManifest",
+    "reconcile_eod_session",
 ]
+
+
+# ---------------------------------------------------------------------------
+# WI-14: End-of-Day Reconciliation & Clean Session Handoff Models
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class EODReconciliationResult:
+    session_date: str
+    reconciliation_state: str  # RECONCILED_CLEAN, UNRECONCILED_OPEN_ORDERS_DETECTED, RECONCILIATION_FAILED
+    market_closed: bool
+    open_orders_count: int
+    open_positions_count: int
+    schema_version: int = 1
+    read_only: bool = True
+    is_order_action: bool = False
+    broker_api_called: bool = False
+    allowed_for_live_execution: bool = False
+    warnings: tuple[str, ...] = ()
+    blockers: tuple[str, ...] = ()
+    metadata: dict[str, Any] = field(default_factory=dict)
+    reconciled_epoch: float = field(default_factory=time.time)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "session_date": self.session_date,
+            "reconciliation_state": self.reconciliation_state,
+            "market_closed": self.market_closed,
+            "open_orders_count": self.open_orders_count,
+            "open_positions_count": self.open_positions_count,
+            "read_only": self.read_only,
+            "is_order_action": False,
+            "broker_api_called": False,
+            "allowed_for_live_execution": False,
+            "warnings": list(self.warnings),
+            "blockers": list(self.blockers),
+            "metadata": dict(self.metadata),
+            "reconciled_epoch": self.reconciled_epoch,
+        }
+
+
+@dataclass(frozen=True)
+class SessionHandoffManifest:
+    session_date: str
+    feed_session_id: str
+    universe_hash: str
+    total_bars_exported: int
+    queue_drain_certified: bool
+    remaining_queue_depth: int
+    dropped_evidence_writes: int
+    reconciliation_result: EODReconciliationResult
+    handoff_status: str  # CLEAN_HANDOFF_CERTIFIED, DIRTY_HANDOFF_UNRESOLVED_WRITES, DIRTY_HANDOFF_UNRECONCILED_ORDERS
+    manifest_sha256: str
+    schema_version: int = 1
+    read_only: bool = True
+    is_order_action: bool = False
+    broker_api_called: bool = False
+    allowed_for_live_execution: bool = False
+    created_epoch: float = field(default_factory=time.time)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "session_date": self.session_date,
+            "feed_session_id": self.feed_session_id,
+            "universe_hash": self.universe_hash,
+            "total_bars_exported": self.total_bars_exported,
+            "queue_drain_certified": self.queue_drain_certified,
+            "remaining_queue_depth": self.remaining_queue_depth,
+            "dropped_evidence_writes": self.dropped_evidence_writes,
+            "reconciliation_result": self.reconciliation_result.to_dict(),
+            "handoff_status": self.handoff_status,
+            "manifest_sha256": self.manifest_sha256,
+            "read_only": self.read_only,
+            "is_order_action": False,
+            "broker_api_called": False,
+            "allowed_for_live_execution": False,
+            "created_epoch": self.created_epoch,
+        }
+
+
+def reconcile_eod_session(
+    *,
+    session_date: str,
+    market_closed: bool,
+    open_orders: Sequence[Any] | None = None,
+    open_positions: Sequence[Any] | None = None,
+    metadata: Mapping[str, Any] | None = None,
+) -> EODReconciliationResult:
+    """Pure, read-only EOD reconciliation certifying session closure without placing or modifying orders.
+
+    Adheres strictly to Hermes Invariant I-2:
+    - Never calls broker APIs.
+    - If open orders persist, tags UNRECONCILED_OPEN_ORDERS_DETECTED as a warning for human audit.
+    """
+    open_orders_list = list(open_orders or [])
+    open_positions_list = list(open_positions or [])
+    warnings: list[str] = []
+    blockers: list[str] = []
+
+    if not market_closed:
+        blockers.append("MARKET_NOT_CLOSED")
+
+    if open_orders_list:
+        warnings.append("UNRECONCILED_OPEN_ORDERS_DETECTED")
+        recon_state = "UNRECONCILED_OPEN_ORDERS_DETECTED"
+    elif blockers:
+        recon_state = "RECONCILIATION_FAILED"
+    else:
+        recon_state = "RECONCILED_CLEAN"
+
+    return EODReconciliationResult(
+        session_date=str(session_date),
+        reconciliation_state=recon_state,
+        market_closed=bool(market_closed),
+        open_orders_count=len(open_orders_list),
+        open_positions_count=len(open_positions_list),
+        warnings=tuple(warnings),
+        blockers=tuple(blockers),
+        metadata=dict(metadata or {}),
+        read_only=True,
+        is_order_action=False,
+        broker_api_called=False,
+        allowed_for_live_execution=False,
+    )

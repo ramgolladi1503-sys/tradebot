@@ -766,3 +766,138 @@ def test_build_depth_subscription_tokens_fallback_preserves_symbols_argument(mon
     assert calls == [["NIFTY"]]
     assert tokens == [101]
     assert resolution == [{"symbol": "NIFTY", "count": 1}]
+
+
+
+def test_wi06_gate1_validate_tokens_drops_phantom_option_tokens(monkeypatch):
+    """GATE-WI06-1: Option tokens not in known_tokens are dropped and pruned from option_rank_by_token."""
+    ctx = _setup_depth_window_mocks(monkeypatch)
+    monkeypatch.setattr(cfg, "DEPTH_SUBSCRIPTION_VALIDATE_TOKENS", True, raising=False)
+
+    # Populate known_tokens for NFO with all NIFTY tokens except phantom token 999999
+    known_rows = []
+    for token, meta in ctx["token_meta"].items():
+        if str(meta.get("symbol") or "").upper() == "NIFTY":
+            known_rows.append({"instrument_token": int(token)})
+    for symbol, token in ctx["index_tokens"].items():
+        if str(symbol).upper() == "NIFTY":
+            known_rows.append({"instrument_token": int(token)})
+
+    def _instruments_cached(exchange=None, ttl_sec=3600):
+        if str(exchange or "").upper() == "NFO":
+            return list(known_rows)
+        return []
+
+    monkeypatch.setattr(ws.kite_client, "instruments_cached", _instruments_cached)
+
+    # Inject phantom option token 999999 into option resolver output
+    orig_resolve = ws.kite_client.resolve_option_tokens_window
+
+    def _fake_resolve(**kwargs):
+        toks = orig_resolve(**kwargs)
+        return toks + [999999]
+
+    monkeypatch.setattr(ws.kite_client, "resolve_option_tokens_window", _fake_resolve)
+
+    tokens, resolution = ws.build_depth_subscription_tokens(["NIFTY"], max_tokens=200)
+
+    # 999999 must NOT be in subscribed tokens
+    assert 999999 not in tokens
+
+
+def test_wi06_gate2_validate_tokens_preserves_underlying_and_open_trades(monkeypatch):
+    """GATE-WI06-2: Underlying tokens and active open trades are preserved even if not in options universe."""
+    ctx = _setup_depth_window_mocks(monkeypatch)
+    monkeypatch.setattr(cfg, "DEPTH_SUBSCRIPTION_VALIDATE_TOKENS", True, raising=False)
+
+    index_token = ctx["index_tokens"]["NIFTY"]
+    active_trade_token = 888888
+    monkeypatch.setattr(ws, "get_sticky_tokens", lambda: {active_trade_token})
+
+    monkeypatch.setattr(
+        ws.kite_client,
+        "instruments_cached",
+        lambda exchange=None, ttl_sec=3600: [{"instrument_token": int(index_token)}],
+    )
+
+    tokens, resolution = ws.build_depth_subscription_tokens(
+        ["NIFTY"],
+        max_tokens=200,
+    )
+
+    # Both index token and active open trade token must be preserved
+    assert index_token in tokens
+    assert active_trade_token in tokens
+
+
+def test_wi06_gate3_stale_local_cache_bypassed_for_broker_fetch(tmp_path, monkeypatch):
+    """GATE-WI06-3: Local cache older than current IST date is marked stale and bypassed for broker fetch."""
+    import os
+    import json
+    import core.option_token_resolver as resolver
+    from datetime import datetime, timedelta
+    from core.time_utils import IST_TZ
+
+    fake_data_dir = tmp_path / "data"
+    fake_data_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(resolver, "data_root", lambda: fake_data_dir)
+
+    stale_cache_file = fake_data_dir / "kite_instruments.json"
+    stale_cache_file.write_text(json.dumps({"NFO": [{"instrument_token": 111111}]}))
+
+    # Set mtime to 2 days ago
+    past_time = (datetime.now(tz=IST_TZ) - timedelta(days=2)).timestamp()
+    os.utime(str(stale_cache_file), (past_time, past_time))
+
+    broker_called = []
+
+    def _fake_broker(exchange, ttl_sec=3600):
+        broker_called.append(exchange)
+        return [{"instrument_token": 222222}]
+
+    monkeypatch.setattr(resolver.kite_client, "instruments_cached", _fake_broker)
+
+    inst, source = resolver._load_instruments("NFO")
+    assert source == "kite_client_cache"
+    assert inst == [{"instrument_token": 222222}]
+    assert broker_called == ["NFO"]
+
+
+def test_wi06_gate4_stale_cache_broker_unreachable_fails_closed(tmp_path, monkeypatch):
+    """GATE-WI06-4: When local cache is stale and broker is unreachable, fail closed with TokenCoverageError."""
+    import os
+    import json
+    import core.option_token_resolver as resolver
+    from datetime import datetime, timedelta
+    from core.time_utils import IST_TZ
+
+    fake_data_dir = tmp_path / "data"
+    fake_data_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(resolver, "data_root", lambda: fake_data_dir)
+
+    stale_cache_file = fake_data_dir / "kite_instruments.json"
+    stale_cache_file.write_text(json.dumps({"NFO": [{"instrument_token": 111111}]}))
+
+    past_time = (datetime.now(tz=IST_TZ) - timedelta(days=3)).timestamp()
+    os.utime(str(stale_cache_file), (past_time, past_time))
+
+    # Broker is unreachable or returns empty
+    monkeypatch.setattr(
+        resolver.kite_client,
+        "instruments_cached",
+        lambda exchange, ttl_sec=3600: [],
+    )
+
+    with pytest.raises(resolver.TokenCoverageError) as exc_info:
+        resolver._load_instruments("NFO")
+
+    assert exc_info.value.code == "CACHE_STALE_AND_BROKER_UNREACHABLE"
+
+
+def test_wi06_gate5_temporal_alignment_ist_date(monkeypatch):
+    """GATE-WI06-5: Instrument caching and option token resolving strictly use canonical IST date."""
+    from core.time_utils import now_ist
+    import core.option_token_resolver as resolver
+
+    ist_today = now_ist().date()
+    assert resolver._trading_date() == ist_today

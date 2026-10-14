@@ -529,3 +529,107 @@ def test_registered_callback_rejects_retired_generation_before_processing(monkey
     )
     callback(None, [{"instrument_token": 1}])
     assert processed == []
+
+
+def test_wi07_gate1_admission_fence_quarantines_abandoned_generation(monkeypatch, callback_owner):
+    """Gate G1: Callback from retired generation is rejected at admission and recorded in TickQuarantine."""
+    from core.feed.tick_callback_coordinator import get_tick_quarantine
+    quarantine = get_tick_quarantine()
+    initial_count = quarantine.total_count
+
+    monkeypatch.setattr(ws, "_SOCKET_GENERATION", 80)
+    # Incoming callback with old generation 79
+    ws.on_ticks(None, [{"instrument_token": 101, "last_price": 100.0}], socket_generation=79)
+
+    assert quarantine.total_count == initial_count + 1
+    recent = quarantine.recent_records(1)[-1]
+    assert recent.callback_gen == 79
+    assert recent.active_gen == 80
+    assert recent.reason == "ABANDONED_GENERATION"
+
+
+def test_wi07_gate2_mid_batch_generation_bump_aborts_loop_and_quarantines(monkeypatch, callback_owner):
+    """Gate G2: In a multi-tick batch, if generation increments mid-batch, subsequent ticks are quarantined."""
+    _install_minimal_real_processor(monkeypatch)
+    from core.feed.tick_callback_coordinator import get_tick_quarantine
+    quarantine = get_tick_quarantine()
+    initial_count = quarantine.total_count
+
+    processed_tokens = []
+    orig_record = ws.record_tick
+
+    def _track_record_tick(**kwargs):
+        tok = kwargs.get("token")
+        processed_tokens.append(tok)
+        # Advance generation mid-batch after processing first token
+        if tok == 101:
+            monkeypatch.setattr(ws, "_SOCKET_GENERATION", 72)
+
+    monkeypatch.setattr(ws, "record_tick", _track_record_tick)
+    monkeypatch.setattr(ws, "insert_tick", lambda **kwargs: True)
+
+    batch = [
+        {"instrument_token": 101, "last_price": 500.0},
+        {"instrument_token": 102, "last_price": 505.0},
+        {"instrument_token": 103, "last_price": 510.0},
+    ]
+
+    ws._process_on_ticks(None, batch, socket_generation=71)
+
+    # First token processed, subsequent aborted
+    assert 101 in processed_tokens
+    assert 102 not in processed_tokens
+    assert 103 not in processed_tokens
+    assert quarantine.total_count > initial_count
+    recent = quarantine.recent_records(1)[-1]
+    assert recent.reason == "MID_BATCH_GENERATION_BUMP_ABORT"
+    assert recent.callback_gen == 71
+    assert recent.active_gen == 72
+
+
+def test_wi07_gate3_out_of_order_timestamp_quarantined(monkeypatch, callback_owner):
+    """Gate G3: Tick with timestamp earlier than previous payload timestamp is quarantined."""
+    _install_minimal_real_processor(monkeypatch)
+    from core.feed.tick_callback_coordinator import get_tick_quarantine
+    quarantine = get_tick_quarantine()
+    initial_count = quarantine.total_count
+
+    monkeypatch.setattr(ws, "_LAST_PAYLOAD_TS_BY_TOKEN", {201: 1000.0})
+    monkeypatch.setattr(ws, "insert_tick", lambda **kwargs: True)
+
+    out_of_order_tick = {
+        "instrument_token": 201,
+        "last_price": 250.0,
+        "exchange_timestamp": 990.0,
+    }
+
+    ws._process_on_ticks(None, [out_of_order_tick], socket_generation=70)
+
+    assert quarantine.total_count == initial_count + 1
+    recent = quarantine.recent_records(1)[-1]
+    assert recent.token == 201
+    assert recent.reason == "OUT_OF_ORDER_TIMESTAMP"
+    assert recent.tick_epoch == 990.0
+
+
+def test_wi07_gate4_quarantine_ring_buffer_bounded():
+    """Gate G4: Flooding quarantine ring buffer does not exceed max capacity."""
+    from core.feed.tick_callback_coordinator import TickQuarantine
+    q = TickQuarantine(maxlen=10)
+    for i in range(100):
+        q.quarantine(token=i, reason="TEST", callback_gen=1, active_gen=2)
+
+    assert q.total_count == 100
+    assert len(q.recent_records(50)) == 10
+
+
+def test_wi07_gate5_safety_non_negotiables_enforced():
+    """Gate G5: Static verification of trading safety non-negotiables."""
+    import inspect
+    from core.feed.tick_callback_coordinator import TickCallbackCoordinator, get_tick_quarantine
+
+    # Zero broker or order dependencies
+    src = inspect.getsource(TickCallbackCoordinator)
+    assert ("place" + "_order") not in src
+    assert "broker" not in src
+    assert ("cancel" + "_order") not in src

@@ -154,6 +154,7 @@ def test_depth_accounting_invariant_under_lock_contention(tmp_path, monkeypatch)
     import core.depth_store as ds_mod
     monkeypatch.setattr(cfg, "LOGS_ROOT", str(tmp_path / "logs"), raising=False)
     monkeypatch.setattr(cfg, "DEPTH_PERSIST_BATCH_SIZE", 10, raising=False)
+    monkeypatch.setattr(cfg, "PERSISTENCE_BATCH_MAX_ITEMS", 10, raising=False)
     monkeypatch.setattr(cfg, "DEPTH_SNAPSHOT_WRITE_MIN_INTERVAL_SEC", 0.0, raising=False)
 
     # Force insert_depth_snapshots_batch to simulate partial lock skip (write 4 out of 10)
@@ -481,3 +482,170 @@ def test_depth_retention_prune_requires_fully_idle_persistence():
     assert _retention_prune_allowed(queue_depth=1, in_flight=0) is False
     assert _retention_prune_allowed(queue_depth=0, in_flight=1) is False
     assert _retention_prune_allowed(queue_depth=1, in_flight=1) is False
+
+
+def test_wi08_gate1_empty_book_is_unquantified_and_not_balanced():
+    from core.depth_store import compute_depth_imbalance
+    # Empty dictionary
+    res_empty = compute_depth_imbalance({})
+    assert res_empty.depth_state == "EMPTY_BOOK"
+    assert res_empty.is_valid is False
+    assert res_empty.imbalance == 0.0
+
+    # Zero quantities across tiers
+    zero_tiers = {
+        "buy": [{"price": 100.0, "quantity": 0}],
+        "sell": [{"price": 101.0, "quantity": 0}],
+    }
+    res_zero = compute_depth_imbalance(zero_tiers)
+    assert res_zero.depth_state == "EMPTY_BOOK"
+    assert res_zero.is_valid is False
+    assert res_zero.imbalance == 0.0
+
+
+def test_wi08_gate2_crossed_book_fails_closed():
+    from core.depth_store import compute_depth_imbalance
+    # Best bid >= best ask
+    crossed = {
+        "buy": [{"price": 105.0, "quantity": 25}],
+        "sell": [{"price": 104.0, "quantity": 50}],
+    }
+    res = compute_depth_imbalance(crossed)
+    assert res.depth_state == "CROSSED_BOOK"
+    assert res.is_valid is False
+    assert res.imbalance == 0.0
+    assert res.spread == -1.0
+    assert res.best_bid == 105.0
+    assert res.best_ask == 104.0
+
+
+def test_wi08_gate3_non_monotonic_tiers_rejected():
+    from core.depth_store import compute_depth_imbalance
+    # Ascending bids (violation)
+    bad_bids = {
+        "buy": [{"price": 100.0, "quantity": 10}, {"price": 101.0, "quantity": 10}],
+        "sell": [{"price": 102.0, "quantity": 10}],
+    }
+    res = compute_depth_imbalance(bad_bids)
+    assert res.depth_state == "INVALID_BOOK"
+    assert res.is_valid is False
+    assert res.imbalance == 0.0
+
+    # Descending asks (violation)
+    bad_asks = {
+        "buy": [{"price": 100.0, "quantity": 10}],
+        "sell": [{"price": 105.0, "quantity": 10}, {"price": 104.0, "quantity": 10}],
+    }
+    res_ask = compute_depth_imbalance(bad_asks)
+    assert res_ask.depth_state == "INVALID_BOOK"
+    assert res_ask.is_valid is False
+
+
+def test_wi08_gate4_bounds_and_finite_float_and_serialization():
+    import math
+    from core.depth_store import compute_depth_imbalance
+    for buy_q, sell_q in [(1, 0), (0, 1), (50, 50), (100, 20), (10, 90), (10**7, 10**7)]:
+        depth = {
+            "buy": [{"price": 100.0, "quantity": buy_q}],
+            "sell": [{"price": 101.0, "quantity": sell_q}],
+        }
+        res = compute_depth_imbalance(depth)
+        assert math.isfinite(res.imbalance)
+        assert -1.0 <= res.imbalance <= 1.0
+        # Serializes with allow_nan=False
+        dumped = json.dumps(res.to_dict(), allow_nan=False)
+        assert isinstance(dumped, str)
+
+
+def test_wi08_gate5_lot_size_scale_invariance():
+    from core.depth_store import compute_depth_imbalance
+    base = {
+        "buy": [{"price": 100.0, "quantity": 15}],
+        "sell": [{"price": 101.0, "quantity": 45}],
+    }
+    res_base = compute_depth_imbalance(base)
+    assert res_base.imbalance == pytest.approx(-0.5)
+
+    # Scale across NSE / BSE lot multiples
+    for k in (2, 5, 25, 50, 100):
+        scaled = {
+            "buy": [{"price": 100.0, "quantity": 15 * k}],
+            "sell": [{"price": 101.0, "quantity": 45 * k}],
+        }
+        res_scaled = compute_depth_imbalance(scaled)
+        assert res_scaled.imbalance == pytest.approx(res_base.imbalance)
+        assert res_scaled.depth_state == "VALID_BOOK"
+        assert res_scaled.is_valid is True
+
+
+    # Confirm zero forbidden order/broker imports
+    with open("core/depth_store.py", "r", encoding="utf-8") as f:
+        content = f.read()
+    assert "core.broker" not in content
+    assert "core.order" not in content
+    assert ("place" + "_order") not in content
+    assert ("modify" + "_order") not in content
+    assert ("cancel" + "_order") not in content
+
+
+def test_wi11_gate1_adaptive_batching_scales_with_queue_depth(monkeypatch):
+    import core.depth_store as depth_store_mod
+    batches_received = []
+
+    def fake_batch_insert(items):
+        batches_received.append(len(items))
+        return len(items)
+
+    monkeypatch.setattr(depth_store_mod, "insert_depth_snapshots_batch", fake_batch_insert)
+    monkeypatch.setattr(cfg, "DEPTH_PERSIST_BATCH_SIZE", 50, raising=False)
+    monkeypatch.setattr(cfg, "PERSISTENCE_BATCH_MAX_ITEMS", 500, raising=False)
+    monkeypatch.setattr(cfg, "DEPTH_SNAPSHOT_WRITE_MIN_INTERVAL_SEC", 0.0, raising=False)
+
+    store = DepthStore()
+    sample = {
+        "buy": [{"price": 100.0, "quantity": 10}],
+        "sell": [{"price": 101.0, "quantity": 10}],
+    }
+
+    # Enqueue a burst of 300 updates
+    for i in range(300):
+        store.update(800_000 + i, sample)
+
+    state = store.shutdown_persistence(deadline_seconds=5.0)
+    assert state["accounting_invariant_ok"] is True
+    assert state["unaccounted_remainder"] == 0
+    assert state["persisted"] == 300
+    # Proven that batches scaled above minimum batch size (50) up to available queue size
+    assert any(b > 50 for b in batches_received)
+
+
+def test_wi11_gate2_wal_checkpoint_passive_executes_safely():
+    from core.trade_store import checkpoint_depth_wal
+    # PASSIVE checkpoint runs without error and returns 3-tuple (busy, log, checkpointed)
+    res = checkpoint_depth_wal(mode="PASSIVE")
+    assert isinstance(res, tuple)
+    assert len(res) == 3
+    assert res[0] in (0, 1) # busy status is boolean/int
+
+    # Destructive or non-PASSIVE modes fail closed
+    with pytest.raises(ValueError, match="Only PASSIVE is permitted"):
+        checkpoint_depth_wal(mode="TRUNCATE")
+
+    with pytest.raises(ValueError, match="Only PASSIVE is permitted"):
+        checkpoint_depth_wal(mode="RESTART")
+
+
+def test_wi11_gate3_in_memory_depth_lookups_unaffected_by_persistence_worker():
+    store = DepthStore()
+    sample = {
+        "buy": [{"price": 100.0, "quantity": 50}],
+        "sell": [{"price": 101.0, "quantity": 50}],
+    }
+    store.update(999999, sample)
+
+    # Lookups are immediate in-memory and synchronous
+    book = store.books[999999]
+    assert book["depth_state"] == "VALID_BOOK"
+    assert book["is_valid"] is True
+    assert book["imbalance"] == 0.0
+    store.shutdown_persistence(deadline_seconds=1.0)
