@@ -69,12 +69,22 @@ class PositionPayload:
     session_gear: str = "GEAR_1_RANGE"  # "GEAR_1_RANGE" or "GEAR_2_TREND"
     opt_stop_loss_pct: Optional[float] = None  # e.g. 0.20 for -20% option stop
     opt_initial_sl: Optional[float] = None
+    # Milestone & Max Favorable Excursion (MFE) Observability Telemetry
+    target_1_hit: bool = False
+    target_2_hit: bool = False
+    max_spot_excursion: float = 0.0
+    max_opt_excursion: float = 0.0
 
 
 class ActivePositionManager:
-    def __init__(self, wal_path: str = "runtime/sentinel_apm_wal.json"):
+    def __init__(
+        self,
+        wal_path: str = "runtime/sentinel_apm_wal.json",
+        profile: Optional[Any] = None,
+    ):
         self.wal_path = Path(wal_path)
         self.wal_path.parent.mkdir(parents=True, exist_ok=True)
+        self.profile = profile
         self.state = STATE_STANDBY
         self.payload: Optional[PositionPayload] = None
         self.last_completed_trade: Optional[Dict[str, Any]] = None
@@ -281,6 +291,22 @@ class ActivePositionManager:
             p.opt_current_ltp = current_opt_ltp
             if p.opt_peak_hwm is None or current_opt_ltp > p.opt_peak_hwm:
                 p.opt_peak_hwm = current_opt_ltp
+            if p.opt_entry_ltp is not None:
+                opt_gain = current_opt_ltp - p.opt_entry_ltp
+                if opt_gain > p.max_opt_excursion:
+                    p.max_opt_excursion = round(opt_gain, 2)
+                if opt_gain >= 15.0:
+                    p.target_1_hit = True
+                if opt_gain >= 30.0:
+                    p.target_2_hit = True
+
+        spot_gain = (current_spot - p.entry_price) if is_ce else (p.entry_price - current_spot)
+        if spot_gain > p.max_spot_excursion:
+            p.max_spot_excursion = round(spot_gain, 2)
+        if spot_gain >= 15.0:
+            p.target_1_hit = True
+        if spot_gain >= 30.0:
+            p.target_2_hit = True
 
         # Helper to execute liquidation on tick
         def _record_tick_exit(reason: str, exit_spot: float):
@@ -333,17 +359,22 @@ class ActivePositionManager:
                 _record_tick_exit("RUNNER_HWM_TRAILING_EXIT", current_spot)
                 return self.liquidate()
 
-        # 5. Dynamic Ratchet Locks
+        # 5. Dynamic Ratchet Locks (Scaled via AssetProfile if provided)
+        ratchet_trig = getattr(self.profile, "ratchet_trigger_pts", 8.0) if self.profile else 8.0
+        ratchet_lock = getattr(self.profile, "ratchet_lock_pts", 4.0) if self.profile else 4.0
+        be_trig = getattr(self.profile, "breakeven_trigger_pts", 12.0) if self.profile else 12.0
+        be_lock = getattr(self.profile, "breakeven_lock_pts", 1.0) if self.profile else 1.0
+
         gain = (current_spot - p.entry_price) if is_ce else (p.entry_price - current_spot)
-        if gain >= 12.0 and not p.trail_locked:
-            be_sl = (p.entry_price + 1.0) if is_ce else (p.entry_price - 1.0)
+        if gain >= be_trig and not p.trail_locked:
+            be_sl = (p.entry_price + be_lock) if is_ce else (p.entry_price - be_lock)
             if (is_ce and be_sl > p.current_sl) or (not is_ce and be_sl < p.current_sl):
                 p.current_sl = be_sl
                 p.trail_locked = True
                 if self.state == STATE_IN_FLIGHT:
                     self._transition_to(STATE_TRAIL_LOCK)
-        elif gain >= 8.0 and not p.trail_locked:
-            new_sl = (p.entry_price + 4.0) if is_ce else (p.entry_price - 4.0)
+        elif gain >= ratchet_trig and not p.trail_locked:
+            new_sl = (p.entry_price + ratchet_lock) if is_ce else (p.entry_price - ratchet_lock)
             if (is_ce and new_sl > p.current_sl) or (not is_ce and new_sl < p.current_sl):
                 p.current_sl = new_sl
                 p.trail_locked = True
@@ -383,6 +414,14 @@ class ActivePositionManager:
             # Update peak option high-watermark
             if p.opt_peak_hwm is None or current_opt_ltp > p.opt_peak_hwm:
                 p.opt_peak_hwm = current_opt_ltp
+            if p.opt_entry_ltp is not None:
+                opt_gain = current_opt_ltp - p.opt_entry_ltp
+                if opt_gain > p.max_opt_excursion:
+                    p.max_opt_excursion = round(opt_gain, 2)
+                if opt_gain >= 15.0:
+                    p.target_1_hit = True
+                if opt_gain >= 30.0:
+                    p.target_2_hit = True
 
         # 1. Check Intrabar Hits
         if is_ce:
@@ -393,6 +432,13 @@ class ActivePositionManager:
             hit_tp = bar_low <= p.target_price
             hit_sl = bar_high >= p.current_sl
             gain = p.entry_price - bar_low
+
+        if gain > p.max_spot_excursion:
+            p.max_spot_excursion = round(gain, 2)
+        if gain >= 15.0:
+            p.target_1_hit = True
+        if gain >= 30.0:
+            p.target_2_hit = True
 
         # Helper to compute empirical option strike PnL
         def _record_exit(exit_reason: str, exit_spot: float):
@@ -469,18 +515,24 @@ class ActivePositionManager:
             _record_exit("TRAILING_STOP_HIT", p.current_sl)
             return self.liquidate()
 
-        # Invariant: Breakeven Lock at +12.0 Spot Points Gain (Snaps SL to entry + 1.0 pt)
-        if gain >= 12.0 and not p.trail_locked:
-            be_sl = (p.entry_price + 1.0) if is_ce else (p.entry_price - 1.0)
+        # Dynamic Ratchet and Breakeven Locks (Scaled via AssetProfile if provided)
+        ratchet_trig = getattr(self.profile, "ratchet_trigger_pts", 8.0) if self.profile else 8.0
+        ratchet_lock = getattr(self.profile, "ratchet_lock_pts", 4.0) if self.profile else 4.0
+        be_trig = getattr(self.profile, "breakeven_trigger_pts", 12.0) if self.profile else 12.0
+        be_lock = getattr(self.profile, "breakeven_lock_pts", 1.0) if self.profile else 1.0
+
+        # Invariant: Breakeven Lock at Breakeven Trigger Spot Points Gain
+        if gain >= be_trig and not p.trail_locked:
+            be_sl = (p.entry_price + be_lock) if is_ce else (p.entry_price - be_lock)
             if (is_ce and be_sl > p.current_sl) or (not is_ce and be_sl < p.current_sl):
                 p.current_sl = be_sl
                 p.trail_locked = True
                 if self.state == STATE_IN_FLIGHT:
                     self._transition_to(STATE_TRAIL_LOCK)
 
-        # 2. Monotonic Trailing Ratchet (+8 pts move locks +4 pts profit)
-        elif gain >= 8.0 and not p.trail_locked:
-            new_sl = (p.entry_price + 4.0) if is_ce else (p.entry_price - 4.0)
+        # 2. Monotonic Trailing Ratchet (Move locks profit)
+        elif gain >= ratchet_trig and not p.trail_locked:
+            new_sl = (p.entry_price + ratchet_lock) if is_ce else (p.entry_price - ratchet_lock)
             # Invariant 1.1: Compare-And-Swap monotonicity check
             if (is_ce and new_sl > p.current_sl) or (not is_ce and new_sl < p.current_sl):
                 p.current_sl = new_sl
