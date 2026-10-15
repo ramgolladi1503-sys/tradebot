@@ -1110,5 +1110,16 @@ class SentinelLiveFeedAdvisor:
                 time.sleep(3.0)
 
 if __name__ == "__main__":
-    advisor = SentinelLiveFeedAdvisor()
+    import argparse
+    parser = argparse.ArgumentParser(description="Sentinel Live Feed Advisor")
+    parser.add_argument("--ticker", type=str, default="NIFTY", help="Asset ticker (e.g. NIFTY, SENSEX)")
+    parser.add_argument("--artifacts-dir", type=str, default="artifacts", help="Path to artifacts directory")
+    parser.add_argument("--expiry", type=str, default=None, help="Explicit target expiry date")
+    args = parser.parse_args()
+
+    advisor = SentinelLiveFeedAdvisor(
+        artifacts_dir=args.artifacts_dir,
+        ticker=args.ticker,
+        target_expiry=args.expiry
+    )
     advisor.run_loop()
