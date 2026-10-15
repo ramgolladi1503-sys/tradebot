@@ -132,7 +132,9 @@ def poll_wal_source(
 
     # 2. Ingest active in-flight position if currently open in WAL payload
     # This is the genuine source of prospective proposal observation!
-    if current_payload and data.get("state") in ("ARMED", "OPEN"):
+    # Compatible with ActivePositionManager states: IN_FLIGHT, TRAIL_LOCK, EXIT_PENDING (and ARMED/OPEN)
+    wal_state = data.get("state")
+    if current_payload and wal_state in ("IN_FLIGHT", "TRAIL_LOCK", "EXIT_PENDING", "ARMED", "OPEN"):
         open_pid = current_payload.get("position_id")
         open_date = (current_payload.get("entry_time") or "")[:10]
         open_dir = current_payload.get("direction")

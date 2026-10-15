@@ -74,7 +74,7 @@ def test_live_os_subprocess_wal_mutation_and_restart_recovery(tmp_path):
             "entry_price": 23050.0
         }
         wal_with_open = {
-            "state": "ARMED",
+            "state": "IN_FLIGHT",
             "payload": open_trade,
             "last_completed_trade": None,
             "trade_history": []
