@@ -218,23 +218,31 @@ class GovernedAuthCallbackServer:
                         self.wfile.write(b"Internal Error: symlinks forbidden for token path")
                         return
 
-                    from core.kite_client import kite_client
-                    from scripts.kite_autologin_localhost import (
-                        _resolve_api_key,
-                        _resolve_api_secret,
-                    )
+                    try:
+                        from core.kite_client import kite_client
+                        from scripts.kite_autologin_localhost import (
+                            _resolve_api_key,
+                            _resolve_api_secret,
+                        )
 
-                    api_key = _resolve_api_key()
-                    api_secret = _resolve_api_secret()
-                    data = kite_client.generate_session(
-                        request_token, api_secret=api_secret, api_key=api_key
-                    )
-                    access_token = str(data.get("access_token", "")).strip()
-                    if not access_token:
-                        server_instance.error = "empty_access_token"
+                        api_key = _resolve_api_key()
+                        api_secret = _resolve_api_secret()
+                        data = kite_client.generate_session(
+                            request_token, api_secret=api_secret, api_key=api_key
+                        )
+                        access_token = str(data.get("access_token", "")).strip()
+                        if not access_token:
+                            server_instance.error = "empty_access_token"
+                            self.send_response(500)
+                            self.end_headers()
+                            self.wfile.write(b"Failed to generate access token: broker returned empty token")
+                            return
+                    except BaseException as exc:
+                        server_instance.error = f"auth_exception: {exc}"
                         self.send_response(500)
                         self.end_headers()
-                        self.wfile.write(b"Failed to generate access token: broker returned empty token")
+                        err_msg = f"Authentication Error: {exc}".encode("utf-8")
+                        self.wfile.write(err_msg)
                         return
 
                     # 8. Atomic fsync token write with mode 0600
@@ -339,6 +347,8 @@ class GovernedMorningOrchestrator:
         supervise: bool = True,
         status_interval_seconds: float = 3600.0,
         telemetry_callback: Callable[[str, str, str], None] | None = None,
+        heritage_manifest: Path | None = None,
+        heritage_manifest_sha256: str | None = None,
     ) -> None:
         self.repo_root = Path(repo_root).resolve()
         self.state_root = Path(state_root).resolve()
@@ -359,6 +369,9 @@ class GovernedMorningOrchestrator:
         self.supervise = supervise
         self.status_interval_seconds = float(status_interval_seconds)
         self.telemetry_callback = telemetry_callback
+        self.heritage_manifest = Path(heritage_manifest).resolve() if heritage_manifest else None
+        self.heritage_manifest_sha256 = heritage_manifest_sha256
+        self.heritage_manifest_resolution: Any = None
 
         self.state = LauncherState.START
         self.state_history: list[dict[str, Any]] = []
@@ -877,6 +890,33 @@ class GovernedMorningOrchestrator:
             mros_cmd.extend(["--kite-instruments-file", str(master_file)])
         if authority_file.exists():
             mros_cmd.extend(["--authority-artifact", str(authority_file)])
+
+        # Auto-resolve T-1 heritage manifest (ARCH-01 Invariant I-4)
+        from core.heritage_manifest_resolver import HeritageManifestResolver, ResolutionStatus
+        if self.heritage_manifest and self.heritage_manifest.is_file():
+            import hashlib
+            digest = self.heritage_manifest_sha256 or hashlib.sha256(self.heritage_manifest.read_bytes()).hexdigest()
+            mros_cmd.extend(["--heritage-manifest", str(self.heritage_manifest), "--heritage-manifest-sha256", digest])
+            self.emit("HERITAGE", "OVERRIDE_WIRED", f"Path: {self.heritage_manifest.name} SHA: {digest[:8]}")
+        else:
+            search_roots = [
+                self.state_root / "sessions",
+                self.state_root / "heritage",
+                self.repo_root / "runtime" / "sessions",
+            ]
+            resolution = HeritageManifestResolver.resolve(
+                target_date=self.session_date,
+                search_roots=search_roots,
+            )
+            self.heritage_manifest_resolution = resolution
+            if resolution.status == ResolutionStatus.RESOLVED and resolution.manifest_path:
+                mros_cmd.extend([
+                    "--heritage-manifest", str(resolution.manifest_path),
+                    "--heritage-manifest-sha256", str(resolution.manifest_sha256),
+                ])
+                self.emit("HERITAGE", "RESOLVED_WIRED", f"T-1: {resolution.predecessor_date} Path: {resolution.manifest_path.name} SHA: {str(resolution.manifest_sha256)[:8]}")
+            else:
+                self.emit("HERITAGE", resolution.status.value, resolution.error_message or "Standby unanchored")
 
         try:
             if spawn_collector:

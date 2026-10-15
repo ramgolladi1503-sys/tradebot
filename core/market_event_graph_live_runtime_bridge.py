@@ -12,6 +12,7 @@ import atexit
 import hashlib
 import json
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -97,12 +98,14 @@ class LiveSourceRuntimeBridge:
         exporter: LiveCapturedMetadataExporter | None = None,
         universe_contract: Mapping[str, Any] | None = None,
         subscription_evidence_provider: Callable[[LiveUniverseContract], Mapping[str, Any]] | None = None,
+        decoupled_options_mode: bool = False,
     ) -> None:
         self.exporter = exporter or LiveCapturedMetadataExporter(
             Path(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_PATH", default_live_capture_path()))
         )
         self._explicit_universe_contract = dict(universe_contract or {})
         self._subscription_evidence_provider = subscription_evidence_provider
+        self.decoupled_options_mode = decoupled_options_mode or str(os.getenv("MEG_DECOUPLED_OPTIONS_MODE", "")).lower() in {"1", "true", "yes"}
         self._last_source_bar_end_epoch: float | None = None
         self._last_session_date: str | None = None
         self._write_failures = 0
@@ -288,7 +291,10 @@ class LiveSourceRuntimeBridge:
         contract: LiveUniverseContract,
         evidence: Mapping[str, Any],
     ) -> tuple[bool, str, tuple[str, ...]]:
-        required = tuple([contract.index_symbol, *contract.constituent_symbols])
+        if self.decoupled_options_mode:
+            required = (contract.index_symbol,)
+        else:
+            required = tuple([contract.index_symbol, *contract.constituent_symbols])
         required_set = set(required)
         rejected: list[str] = []
         if not str(evidence.get("subscription_evidence_id") or "").strip():
@@ -305,12 +311,17 @@ class LiveSourceRuntimeBridge:
             for symbol, token in (evidence.get("token_by_symbol") or {}).items()
             if token is not None
         }
-        expected_tokens = {
-            contract.index_symbol: contract.index_instrument_token,
-            **{str(row["symbol"]).upper(): int(row["instrument_token"]) for row in contract.constituents},
-        }
-        if observed_tokens != expected_tokens:
-            return False, BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION, tuple(required)
+        if self.decoupled_options_mode:
+            expected_tokens = {contract.index_symbol: contract.index_instrument_token}
+            if contract.index_symbol not in observed_tokens:
+                return False, BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION, tuple(required)
+        else:
+            expected_tokens = {
+                contract.index_symbol: contract.index_instrument_token,
+                **{str(row["symbol"]).upper(): int(row["instrument_token"]) for row in contract.constituents},
+            }
+            if observed_tokens != expected_tokens:
+                return False, BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION, tuple(required)
         token_lifecycle = evidence.get("token_lifecycle") or {}
         if not isinstance(token_lifecycle, Mapping):
             return False, BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION, tuple(required)
@@ -373,8 +384,12 @@ class LiveSourceRuntimeBridge:
             observed = tuple(str(symbol).upper() for symbol in evidence.get(field, []) or [])
             observed_set = set(observed)
             duplicate = sorted({symbol for symbol in observed if observed.count(symbol) > 1})
-            extra = sorted(observed_set - required_set)
             missing = [symbol for symbol in required if symbol not in observed_set]
+            if self.decoupled_options_mode:
+                # Decoupled options mode allows extra subscribed options without failing
+                extra = []
+            else:
+                extra = sorted(observed_set - required_set)
             if duplicate or extra or missing:
                 rejected.extend(missing)
                 rejected.extend(extra)

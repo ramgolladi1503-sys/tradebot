@@ -325,7 +325,7 @@ class ObservationLifecycle:
             return dict(self._shutdown_report)
 
 
-def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_path: Path, session_date: str, max_runtime_sec: float | None = None) -> int:
+def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_path: Path, session_date: str, max_runtime_sec: float | None = None, heritage_manifest: Path | None = None, heritage_manifest_sha256: str | None = None) -> int:
     from core.runtime_storage_authority import StorageAuthorityError, establish, revalidate
     storage_authority = establish(volume=Path("/Volumes/TradeBotData"), runtime_root=output_root)
     env = safe_environment()
@@ -409,6 +409,8 @@ def run_observation(*, launch_plan: Mapping[str, Any], output_root: Path, token_
         session_date=session_date,
         launch_plan=launch_plan,
         data_dir=Path("runtime/preflight"),
+        heritage_manifest=heritage_manifest,
+        heritage_manifest_sha256=heritage_manifest_sha256,
     )
     shadow_evidence_root = output_root / "strategy_shadow"
     shadow_registry = StrategyShadowAdapterRegistry(

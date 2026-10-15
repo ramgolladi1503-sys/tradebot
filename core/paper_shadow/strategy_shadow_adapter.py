@@ -1136,13 +1136,16 @@ def load_canonical_t1_prerequisites(
     session_date: str,
     launch_plan: Optional[Mapping[str, Any]] = None,
     data_dir: Optional[Path | str] = None,
+    heritage_manifest: Optional[Path | str] = None,
+    heritage_manifest_sha256: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Loads canonical T-1 market facts for strategy shadow adapters without requiring manual environment variables.
     Lookup precedence:
     1. Explicit environment overrides (if set by operator)
-    2. launch_plan["t1_facts"] / launch_plan["preflight_facts"] / launch_plan metadata
-    3. Persisted disk manifest in data_dir or runtime/sessions / runtime/preflight
+    2. Explicit verified heritage manifest (if passed by orchestrator)
+    3. launch_plan["t1_facts"] / launch_plan["preflight_facts"] / launch_plan metadata
+    4. Persisted disk manifest in data_dir or runtime/sessions / runtime/preflight
 
     Returns a dict containing:
     - opening_drive_prev_contract_key: Optional[str]
@@ -1159,7 +1162,36 @@ def load_canonical_t1_prerequisites(
         "overnight_prev_sma200": None,
     }
 
-    # 1. Inspect launch_plan
+    # 1. Inspect explicit heritage manifest
+    if heritage_manifest:
+        h_path = Path(heritage_manifest)
+        if h_path.is_file():
+            try:
+                import hashlib
+                content_bytes = h_path.read_bytes()
+                computed_hash = hashlib.sha256(content_bytes).hexdigest()
+                if heritage_manifest_sha256 is None or computed_hash == heritage_manifest_sha256:
+                    h_data = json.loads(content_bytes.decode("utf-8"))
+                    # Extract node-level facts for NIFTY
+                    for node in (h_data.get("nodes") or []):
+                        sym = str(node.get("symbol") or "").upper()
+                        if sym in {"NIFTY", "NIFTY 50"}:
+                            if res["overnight_prev_daily_close"] is None and node.get("close_price") is not None:
+                                res["overnight_prev_daily_close"] = float(node["close_price"])
+                            if res["overnight_prev_sma200"] is None and node.get("sma200") is not None:
+                                res["overnight_prev_sma200"] = float(node["sma200"])
+                            if res["opening_drive_prev_close_1529"] is None and node.get("close_1529") is not None:
+                                res["opening_drive_prev_close_1529"] = float(node["close_1529"])
+                            elif res["opening_drive_prev_close_1529"] is None and node.get("close_price") is not None:
+                                res["opening_drive_prev_close_1529"] = float(node["close_price"])
+                            if res["opening_drive_prev_contract_key"] is None and node.get("contract_key"):
+                                res["opening_drive_prev_contract_key"] = str(node["contract_key"])
+                            if res["opening_drive_target_expiry"] is None and node.get("expiry"):
+                                res["opening_drive_target_expiry"] = str(node["expiry"])
+            except Exception as exc:
+                logger.warning("Failed parsing heritage manifest at %s: %s", h_path, exc)
+
+    # 2. Inspect launch_plan
     if isinstance(launch_plan, Mapping):
         facts = (
             launch_plan.get("t1_facts")

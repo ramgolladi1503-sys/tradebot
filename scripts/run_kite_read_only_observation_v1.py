@@ -40,6 +40,8 @@ def main() -> int:
     parser.add_argument("--parquet-export", action="store_true")
     parser.add_argument("--parquet-export-interval-seconds", type=float, default=15.0)
     parser.add_argument("--disk-budget-contract", type=Path)
+    parser.add_argument("--heritage-manifest", type=Path, default=None)
+    parser.add_argument("--heritage-manifest-sha256", default=None)
     args = parser.parse_args()
     if not args.token_path.is_file():
         raise SystemExit("KITE_ACCESS_TOKEN_MISSING")
@@ -98,6 +100,8 @@ def main() -> int:
             output_root=args.output_root,
             token_path=args.token_path,
             session_date=args.session_date,
+            heritage_manifest=args.heritage_manifest,
+            heritage_manifest_sha256=args.heritage_manifest_sha256,
         )
     finally:
         if exporter is not None and exporter.poll() is None:

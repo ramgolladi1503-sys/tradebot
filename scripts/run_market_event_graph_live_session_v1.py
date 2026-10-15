@@ -228,6 +228,8 @@ def main() -> int:
     parser.add_argument("--static-preflight-only", action="store_true")
     parser.add_argument("--launch-preflight-only", action="store_true")
     parser.add_argument("--authority-artifact", type=Path, default=None)
+    parser.add_argument("--heritage-manifest", type=Path, default=None, help="Verified T-1 market heritage manifest")
+    parser.add_argument("--heritage-manifest-sha256", default=None, help="Verified T-1 market heritage manifest SHA-256")
     args = parser.parse_args()
 
     session_date = _validate_session_date(args.session_date)
@@ -301,6 +303,8 @@ def main() -> int:
         "order_authority": False,
         "broker_write_authority": False,
         "allowed_for_paper_execution": False,
+        "heritage_manifest": str(args.heritage_manifest) if args.heritage_manifest else None,
+        "heritage_manifest_sha256": args.heritage_manifest_sha256,
     }
     (capture_dir / "presession_manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     log_path = capture_dir / "live_observation.log"
@@ -318,16 +322,22 @@ def main() -> int:
             "TRADEBOT_FEED_FORENSICS_ROOT": str(capture_dir),
         }
     )
+    obs_cmd = [
+        sys.executable, "-B", "scripts/run_kite_read_only_observation_v1.py",
+        "--session-date", session_date,
+        "--output-root", str(capture_dir),
+        "--kite-instruments-file", str(master_path),
+        "--launch-plan", str(launch_plan_path),
+        "--token-path", str(token_path),
+        "--authority-artifact", str(args.authority_artifact),
+    ]
+    if args.heritage_manifest:
+        obs_cmd.extend(["--heritage-manifest", str(args.heritage_manifest)])
+    if args.heritage_manifest_sha256:
+        obs_cmd.extend(["--heritage-manifest-sha256", str(args.heritage_manifest_sha256)])
+
     with log_path.open("w", encoding="utf-8") as log_file:
-        proc = subprocess.run([
-            sys.executable, "-B", "scripts/run_kite_read_only_observation_v1.py",
-            "--session-date", session_date,
-            "--output-root", str(capture_dir),
-            "--kite-instruments-file", str(master_path),
-            "--launch-plan", str(launch_plan_path),
-            "--token-path", str(token_path),
-            "--authority-artifact", str(args.authority_artifact),
-        ], cwd=REPO_ROOT, env=env, stdout=log_file, stderr=subprocess.STDOUT)
+        proc = subprocess.run(obs_cmd, cwd=REPO_ROOT, env=env, stdout=log_file, stderr=subprocess.STDOUT)
     return int(proc.returncode)
 
 
