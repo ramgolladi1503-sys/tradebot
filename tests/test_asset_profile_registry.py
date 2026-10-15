@@ -54,7 +54,7 @@ def test_sensex_profile_mathematical_scaling():
     assert sensex.breakeven_trigger_pts == 40.0
     assert sensex.breakeven_lock_pts == 3.0
     assert sensex.or_min_expansion_width == 300.0
-    assert sensex.macro_exhaustion_cap_pts == 1100.0
+    assert sensex.macro_exhaustion_cap_pts == 1500.0
     assert sensex.max_spread_pct == 0.05
     assert sensex.weekly_expiry_day_of_week == 3  # Thursday
 

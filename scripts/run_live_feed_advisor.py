@@ -673,7 +673,7 @@ class SentinelLiveFeedAdvisor:
             signal_display = f"🛑 [DISPLACEMENT VETO] {signal_display} -> SUPPRESSED (Re-entry requires >= {max(8.0, 1.0 * atr_1m):.1f}pts progress from prior exit {self.last_exit_price:.1f})"
             risk_flag = "VETO_INSUFFICIENT_DISPLACEMENT"
         elif atr_extension_exhausted and entry_dir and ("Breakout" in signal_display or "Breakdown" in signal_display):
-            signal_display = f"🛑 [ATR EXTENSION VETO] {signal_display} -> SUPPRESSED (Session Range {session_range:.1f}pts > 300.0pts Exhaustion Cap)"
+            signal_display = f"🛑 [ATR EXTENSION VETO] {signal_display} -> SUPPRESSED (Session Range {session_range:.1f}pts > {self.profile.macro_exhaustion_cap_pts:.1f}pts Exhaustion Cap)"
             risk_flag = "VETO_ATR_EXTENSION_EXHAUSTED"
         elif spread_ratio > self.spread_threshold and entry_dir:
             signal_display = f"🚨 [SPREAD VETO] {signal_display} -> SUPPRESSED (>4.0% spread)"
