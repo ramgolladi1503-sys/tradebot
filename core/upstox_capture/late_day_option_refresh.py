@@ -1,5 +1,7 @@
 from __future__ import annotations
 import logging
+import threading
+from contextlib import nullcontext
 from datetime import datetime
 import pandas as pd
 
@@ -11,6 +13,8 @@ def refresh_late_day_option_subscriptions(
     df_inst: pd.DataFrame,
     current_spot_price: float | dict[str, float] | None = None,
     current_spot_prices: dict[str, float] | None = None,
+    subscriptions_lock: threading.Lock | None = None,
+    lock: threading.Lock | None = None,
 ) -> int:
     """
     Dynamically refreshes and subscribes ATM +/- 10 option strikes
@@ -64,12 +68,14 @@ def refresh_late_day_option_subscriptions(
         df_exp = df_sym[df_sym["expiry_date"] == nearest_expiry]
         df_strikes = df_exp[df_exp["strike_price"].isin(desired_strikes)]
 
+        effective_lock = subscriptions_lock if subscriptions_lock is not None else lock
         sym_new_keys = []
-        for _, row in df_strikes.iterrows():
-            key = row["instrument_key"]
-            if key not in subscriptions:
-                subscriptions[key] = row["trading_symbol"]
-                sym_new_keys.append(key)
+        with effective_lock if effective_lock is not None else nullcontext():
+            for _, row in df_strikes.iterrows():
+                key = row["instrument_key"]
+                if key not in subscriptions:
+                    subscriptions[key] = row["trading_symbol"]
+                    sym_new_keys.append(key)
 
         if sym_new_keys:
             new_keys.extend(sym_new_keys)

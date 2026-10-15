@@ -51,12 +51,77 @@ PRIMARY_BASE_DIRS = [
 ]
 FALLBACK_BASE_DIR = ROOT / ".runtime" / "market_data"
 
-def get_today_data_dir() -> Path:
+DEFAULT_TICK_SCHEMA = pa.schema([
+    ("ts", pa.float64()),
+    ("token", pa.string()),
+    ("symbol", pa.string()),
+    ("ltp", pa.float64()),
+    ("bid", pa.float64()),
+    ("ask", pa.float64()),
+    ("vol", pa.float64()),
+    ("oi", pa.float64()),
+    ("depth", pa.string()),
+])
+
+def get_today_data_dir(allow_local_fallback: bool = False) -> Path:
     today_str = datetime.now().strftime("%Y-%m-%d")
-    base_dir = next((p for p in PRIMARY_BASE_DIRS if p.exists()), FALLBACK_BASE_DIR)
+    primary_dir = next((p for p in PRIMARY_BASE_DIRS if p.exists()), None)
+    if primary_dir is None:
+        if not allow_local_fallback:
+            raise RuntimeError(
+                f"Fail-closed: None of PRIMARY_BASE_DIRS exist ({PRIMARY_BASE_DIRS}) "
+                "and allow_local_fallback is False."
+            )
+        base_dir = FALLBACK_BASE_DIR
+    else:
+        base_dir = primary_dir
     d = base_dir / today_str
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+def flush_buffer(
+    tick_buffer: list,
+    buffer_lock: threading.Lock,
+    chunks_dir: Path,
+    today_compact: str,
+    schema: pa.Schema | None = None,
+) -> list:
+    """
+    Flushes buffered ticks to an atomic Parquet chunk.
+    If writing fails, preserves and re-queues ticks back into tick_buffer.
+    """
+    if schema is None:
+        schema = DEFAULT_TICK_SCHEMA
+
+    with buffer_lock:
+        if not tick_buffer:
+            return tick_buffer
+        to_flush = list(tick_buffer)
+        tick_buffer.clear()
+
+    now_dt = datetime.now()
+    chunk_file = chunks_dir / f"chunk_{today_compact}_{int(now_dt.timestamp() * 1000)}.parquet"
+
+    try:
+        df = pd.DataFrame(to_flush)
+        df["ts"] = df["ts"].astype(float)
+        df["token"] = df["token"].astype(str)
+        df["symbol"] = df["symbol"].astype(str)
+        df["ltp"] = df["ltp"].astype(float)
+        df["bid"] = df["bid"].astype(float)
+        df["ask"] = df["ask"].astype(float)
+        df["vol"] = df["vol"].astype(float)
+        df["oi"] = df["oi"].astype(float)
+        df["depth"] = df["depth"].astype(str)
+
+        table = pa.Table.from_pandas(df, schema=schema)
+        pq.write_table(table, chunk_file, compression="snappy")
+        logger.info(f"Flushed {len(df)} ticks to {chunk_file.name}")
+    except Exception as e:
+        logger.error(f"Failed to write parquet chunk: {e}")
+        with buffer_lock:
+            tick_buffer[:0] = to_flush
+    return tick_buffer
 
 def ensure_single_instance():
     lock_file_path = "/tmp/upstox_daily_pipeline.lock"
@@ -365,56 +430,28 @@ def main():
     df_inst = fetch_instruments()
     prices = get_underlying_prices(access_token)
     subscriptions = get_options_subscriptions(df_inst, prices)
+    subscriptions_lock = threading.Lock()
     logger.info(f"Subscribing to {len(subscriptions)} tokens (ATM +- 10 options + indices).")
 
     tick_buffer = []
     buffer_lock = threading.Lock()
-
-    schema = pa.schema([
-        ("ts", pa.float64()),
-        ("token", pa.string()),
-        ("symbol", pa.string()),
-        ("ltp", pa.float64()),
-        ("bid", pa.float64()),
-        ("ask", pa.float64()),
-        ("vol", pa.float64()),
-        ("oi", pa.float64()),
-        ("depth", pa.string())
-    ])
+    schema = DEFAULT_TICK_SCHEMA
 
     today_str = datetime.now().strftime("%Y-%m-%d")
     today_compact = datetime.now().strftime("%Y%m%d")
-    data_dir = get_today_data_dir()
+    allow_fallback = os.getenv("UPSTOX_ALLOW_LOCAL_FALLBACK", "").strip().lower() in ("1", "true", "yes")
+    data_dir = get_today_data_dir(allow_local_fallback=allow_fallback)
     chunks_dir = data_dir / "chunks"
     chunks_dir.mkdir(parents=True, exist_ok=True)
 
-    def flush_buffer():
-        nonlocal tick_buffer
-        with buffer_lock:
-            if not tick_buffer:
-                return
-            to_flush = tick_buffer
-            tick_buffer = []
-
-        now_dt = datetime.now()
-        chunk_file = chunks_dir / f"chunk_{today_compact}_{int(now_dt.timestamp() * 1000)}.parquet"
-        df = pd.DataFrame(to_flush)
-        df["ts"] = df["ts"].astype(float)
-        df["token"] = df["token"].astype(str)
-        df["symbol"] = df["symbol"].astype(str)
-        df["ltp"] = df["ltp"].astype(float)
-        df["bid"] = df["bid"].astype(float)
-        df["ask"] = df["ask"].astype(float)
-        df["vol"] = df["vol"].astype(float)
-        df["oi"] = df["oi"].astype(float)
-        df["depth"] = df["depth"].astype(str)
-
-        try:
-            table = pa.Table.from_pandas(df, schema=schema)
-            pq.write_table(table, chunk_file, compression="snappy")
-            logger.info(f"Flushed {len(df)} ticks to {chunk_file.name}")
-        except Exception as e:
-            logger.error(f"Failed to write parquet chunk: {e}")
+    def flush_current_buffer():
+        return flush_buffer(
+            tick_buffer=tick_buffer,
+            buffer_lock=buffer_lock,
+            chunks_dir=chunks_dir,
+            today_compact=today_compact,
+            schema=schema,
+        )
 
     last_msg_time = time.time()
     streamer = None
@@ -459,10 +496,13 @@ def main():
             else:
                 continue
 
+            with subscriptions_lock:
+                sym_name = subscriptions.get(key, key)
+
             record = {
                 "ts": time.time(),
                 "token": key,
-                "symbol": subscriptions.get(key, key),
+                "symbol": sym_name,
                 "ltp": ltp,
                 "bid": bid,
                 "ask": ask,
@@ -476,7 +516,9 @@ def main():
     def on_open():
         logger.info("Connected to Upstox WebSocket (Full Mode). Subscribing...")
         if streamer:
-            streamer.subscribe(list(subscriptions.keys()), mode="full")
+            with subscriptions_lock:
+                sub_keys = list(subscriptions.keys())
+            streamer.subscribe(sub_keys, mode="full")
 
     def on_close(code, reason):
         logger.warning(f"WebSocket closed: {code} - {reason}")
@@ -532,14 +574,22 @@ def main():
             last_dynamic_refresh_time = now_ts
             try:
                 from core.upstox_capture.late_day_option_refresh import refresh_late_day_option_subscriptions
-                added = refresh_late_day_option_subscriptions(streamer, subscriptions, df_inst, current_spot_prices=prices)
+                added = refresh_late_day_option_subscriptions(
+                    streamer,
+                    subscriptions,
+                    df_inst,
+                    current_spot_prices=prices,
+                    subscriptions_lock=subscriptions_lock,
+                )
                 if added > 0:
-                    logger.info(f"[Periodic Dynamic Refresh] Added {added} new strikes across {list(prices.keys())}")
+                    with subscriptions_lock:
+                        total_subs = len(subscriptions)
+                    logger.info(f"[Periodic Dynamic Refresh] Added {added} new strikes across {list(prices.keys())} (Total: {total_subs})")
             except Exception as e:
                 logger.error(f"[Dynamic Strike Refresh Error] {e}")
 
         if now_ts - last_flush_time >= 60:
-            flush_buffer()
+            flush_current_buffer()
             last_flush_time = now_ts
 
         if now_ts - last_msg_time > 35:
@@ -550,7 +600,7 @@ def main():
         time.sleep(1)
 
     # 1. Final Flush
-    flush_buffer()
+    flush_current_buffer()
     if streamer:
         try:
             streamer.disconnect()
