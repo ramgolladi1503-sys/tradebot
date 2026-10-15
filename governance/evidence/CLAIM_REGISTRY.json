@@ -155,6 +155,38 @@
       "source_ids": [],
       "evidence_refs": [],
       "limitation": "This claim is limited to the reviewed code and focused SQLite tests. It does not establish the original live lock holder, eliminate all SQLite contention, prove the cause of the observed lock, or establish exact-head CI, merge, deployment, or production/live behavior."
+    },
+    {
+      "claim_id": "LIVE-OBS-SHUTDOWN-BUDGET-001",
+      "statement": "The shutdown lifecycle bounds its optional pre-drain wait and apportions remaining deadline among persistence shutdown calls; focused tests cover normal and full-slice timing while incomplete drains remain FAILED/PARTIAL.",
+      "claim_kind": "operational_reliability",
+      "scope_paths": [
+        "core/kite_read_only_observation_runtime.py",
+        "tests/test_kite_read_only_observation_runtime.py"
+      ],
+      "status": "UNVERIFIED",
+      "source_ids": [
+        "TRADEBOT_AGENT_RULES"
+      ],
+      "evidence_refs": [],
+      "limitation": "AI role labels are unauthenticated; full lifecycle, independent UAT, exact-head CI, worker failure cause, WAL checkpoint cause, and live runtime outcome remain unverified."
+    },
+    {
+      "claim_id": "LIVE_OBSERVATION_LAUNCH_PLAN_SUBSCRIPTION_CANDIDATE",
+      "statement": "When activate_market_event_graph_launch_plan validates a sealed presession launch plan, it atomically records the desired subscription candidate under _OPTION_OWNERSHIP_LOCK, and invalidates fail-closed on unsealed or metadata-blocked plans.",
+      "claim_kind": "implementation",
+      "scope_paths": [
+        "core/kite_depth_ws.py",
+        "tests/test_kite_depth_ws_stability.py",
+        "docs/tradebot_delivery/live_audit_top30_signals.md",
+        "docs/agent_reviews/pr984_launch_plan_candidate_registration.md",
+        "governance/evidence/CLAIM_REGISTRY.json",
+        "governance/evidence/work_items/LIVE-OBS-LAUNCH-PLAN-CANDIDATE-20261015.json"
+      ],
+      "status": "UNVERIFIED",
+      "source_ids": [],
+      "evidence_refs": [],
+      "limitation": "This claim covers candidate registration logic only; it does not authorize live orders or guarantee strategy profitability."
     }
   ]
 }

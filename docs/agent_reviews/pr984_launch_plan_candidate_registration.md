@@ -25,7 +25,7 @@
 - Requested paths:
   - `core/kite_depth_ws.py`
   - `tests/test_kite_depth_ws_stability.py`
-  - `docs/live_audit_top30_signals.md`
+  - `docs/tradebot_delivery/live_audit_top30_signals.md`
   - `docs/agent_reviews/pr984_launch_plan_candidate_registration.md`
 - Allowed paths: the requested paths above only.
 - Forbidden paths/behaviors: broker order placement or modification, secrets, live trading enablement, bypassing risk gates or feed freshness checks, credentials, .env files.

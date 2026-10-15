@@ -2876,7 +2876,7 @@ def test_audit_top30_gate_g1_valid_launch_plan_registers_candidate(monkeypatch):
     monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True, raising=False)
     ws.invalidate_desired_subscription_candidate("test_prep")
     monkeypatch.setattr(ws, "_load_option_token_meta", _mock_load_option_token_meta)
-    
+
     plan = {
         "ok": True,
         "verdict": "PASS_LIVE_SOURCE_PRESESSION_READINESS",
@@ -2915,7 +2915,7 @@ def test_audit_top30_gate_g2_invalid_or_unsealed_plan_invalidates_candidate(monk
     _patch_common(monkeypatch)
     monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True, raising=False)
     monkeypatch.setattr(ws, "_load_option_token_meta", _mock_load_option_token_meta)
-    
+
     # First establish a valid candidate
     valid_plan = {
         "ok": True,
@@ -2951,7 +2951,7 @@ def test_audit_top30_gate_g2_invalid_or_unsealed_plan_invalidates_candidate(monk
     }
     res = ws.activate_market_event_graph_launch_plan(invalid_plan)
     assert res["enabled"] is False
-    
+
     candidate = ws._DESIRED_SUBSCRIPTION_CANDIDATE
     assert candidate.complete is False
     assert candidate.source == "launch_plan_not_ok_or_unsealed"
@@ -2961,7 +2961,7 @@ def test_audit_top30_gate_g3_metadata_blocked_invalidates_candidate(monkeypatch)
     """Gate G-3: Launch plan with mismatched metadata invalidates subscription candidate."""
     _patch_common(monkeypatch)
     monkeypatch.setattr(ws, "_load_option_token_meta", _mock_load_option_token_meta)
-    
+
     mismatched_plan = {
         "ok": True,
         "verdict": "PASS_LIVE_SOURCE_PRESESSION_READINESS",
@@ -2983,7 +2983,7 @@ def test_audit_top30_gate_g3_metadata_blocked_invalidates_candidate(monkeypatch)
         "launch_plan_sha256": "plan-sha-mismatch",
     }
     res = ws.activate_market_event_graph_launch_plan(mismatched_plan)
-    
+
     candidate = ws._DESIRED_SUBSCRIPTION_CANDIDATE
     assert candidate.complete is False
     assert candidate.source == "launch_plan_option_metadata_blocked"
@@ -2994,7 +2994,7 @@ def test_audit_top30_gate_g4_observation_sync_reconciles_candidate_tokens(monkey
     _patch_common(monkeypatch)
     monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True, raising=False)
     monkeypatch.setattr(ws, "_load_option_token_meta", _mock_load_option_token_meta)
-    
+
     plan_with_observation = {
         "ok": True,
         "verdict": "PASS_LIVE_SOURCE_PRESESSION_READINESS",
@@ -3017,7 +3017,7 @@ def test_audit_top30_gate_g4_observation_sync_reconciles_candidate_tokens(monkey
         "launch_plan_sha256": "plan-sha-obs",
     }
     ws.activate_market_event_graph_launch_plan(plan_with_observation)
-    
+
     candidate = ws._DESIRED_SUBSCRIPTION_CANDIDATE
     assert candidate.complete is True
     assert set(candidate.tokens) == {101, 201, 301}

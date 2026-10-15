@@ -1,0 +1,122 @@
+{
+  "work_item_id": "LIVE-OBS-LAUNCH-PLAN-CANDIDATE-20261015",
+  "type": "BUG",
+  "parent_epic": "TRADEBOT-LIVE-OBSERVATION-RELIABILITY",
+  "parent_feature": "FEED-SUBSCRIPTION-CANDIDATE",
+  "title": "Atomically record desired subscription candidate upon launch plan activation",
+  "schema_version": 1,
+  "current_state": "BACKLOG",
+  "priority": "P0",
+  "business_goal": "Record desired subscription candidate atomically under _OPTION_OWNERSHIP_LOCK when a valid sealed presession launch plan is activated, ensuring subscription state synchronization reaches complete=True and unblocking downstream candidate signal evaluation.",
+  "current_behavior": "activate_market_event_graph_launch_plan stages option contracts but does not record the desired subscription candidate, leaving complete=False and tripping desired_subscription_candidate_invalid_or_stale -> SUBSCRIBE_FAILED -> ownership.state=UNKNOWN -> global_feed_unhealthy.",
+  "expected_behavior": "activate_market_event_graph_launch_plan records the desired subscription candidate atomically upon validation, and invalidates fail-closed if the plan is unsealed, not OK, or option metadata resolution is blocked.",
+  "in_scope": [
+    "core/kite_depth_ws.py",
+    "tests/test_kite_depth_ws_stability.py",
+    "docs/tradebot_delivery/live_audit_top30_signals.md",
+    "docs/agent_reviews/pr984_launch_plan_candidate_registration.md",
+    "governance/evidence/CLAIM_REGISTRY.json",
+    "governance/evidence/work_items/LIVE-OBS-LAUNCH-PLAN-CANDIDATE-20261015.json"
+  ],
+  "out_of_scope": [
+    "broker order execution or modification",
+    "live risk limits weakening or threshold bypassing",
+    "credentials or environment files",
+    "unrelated strategy code"
+  ],
+  "dependencies": [
+    "presession launch plan verification contract",
+    "option token resolver metadata"
+  ],
+  "acceptance_criteria": [
+    "Valid sealed launch plan records desired subscription candidate atomically",
+    "Unsealed or invalid launch plan invalidates candidate fail-closed",
+    "Blocked option metadata resolution invalidates candidate fail-closed",
+    "Candidate tokens reconcile against observation final_union_tokens",
+    "Safety non-negotiables are preserved (read_only=true, is_order_action=false, broker_api_called=false)"
+  ],
+  "safety_constraints": [
+    "read_only=true",
+    "is_order_action=false",
+    "broker_api_called=false",
+    "allowed_for_live_execution=false"
+  ],
+  "architecture_impact": "Ensures deterministic atomic transition of WebSocket subscription candidate state from validated presession launch plans without race conditions or deadlocks.",
+  "allowed_paths": [
+    "core/kite_depth_ws.py",
+    "tests/test_kite_depth_ws_stability.py",
+    "docs/tradebot_delivery/live_audit_top30_signals.md",
+    "docs/agent_reviews/pr984_launch_plan_candidate_registration.md",
+    "governance/evidence/CLAIM_REGISTRY.json",
+    "governance/evidence/work_items/LIVE-OBS-LAUNCH-PLAN-CANDIDATE-20261015.json"
+  ],
+  "forbidden_paths": [
+    "main.py",
+    "run_live.sh",
+    "config/",
+    "credentials.py",
+    "core/broker/",
+    "core/order/",
+    "core/risk/",
+    "strategies/",
+    "runtime/live/"
+  ],
+  "expected_tests": [
+    "pytest -q tests/test_kite_depth_ws_stability.py",
+    "git diff --check",
+    "python scripts/validate_agent_review_evidence.py"
+  ],
+  "qa_attack_plan": [
+    "test valid sealed launch plan records candidate",
+    "test unsealed or not ok launch plan invalidates candidate",
+    "test metadata blocked plan invalidates candidate",
+    "test observation sync reconciles candidate tokens",
+    "test safety non-negotiables invariant verification"
+  ],
+  "uat_criteria": [
+    "offline stability tests verify candidate registration and fail-closed invalidations"
+  ],
+  "release_gates": [
+    "required delivery lifecycle evidence",
+    "focused unit stability tests",
+    "trusted material evidence check"
+  ],
+  "rollback_plan": "Revert this scoped candidate registration change and its tests.",
+  "evidence_refs": [],
+  "acting_role": "",
+  "state_history": [],
+  "defect_history": [],
+  "evidence": [],
+  "defects": [],
+  "required_ci_checks": [],
+  "extensions": {
+    "evidence_standard": {
+      "schema_version": 1,
+      "enforcement_mode": "REPORT_ONLY",
+      "applicability": "REQUIRED",
+      "applicability_reason": "This work changes material feed subscription candidate tracking behavior and its focused regression coverage.",
+      "assessed_paths": [
+        "core/kite_depth_ws.py",
+        "tests/test_kite_depth_ws_stability.py",
+        "docs/tradebot_delivery/live_audit_top30_signals.md",
+        "docs/agent_reviews/pr984_launch_plan_candidate_registration.md",
+        "governance/evidence/CLAIM_REGISTRY.json",
+        "governance/evidence/work_items/LIVE-OBS-LAUNCH-PLAN-CANDIDATE-20261015.json"
+      ],
+      "subject_commit_sha": null,
+      "claims": [
+        {
+          "claim_id": "LIVE_OBSERVATION_LAUNCH_PLAN_SUBSCRIPTION_CANDIDATE",
+          "statement": "When activate_market_event_graph_launch_plan validates a sealed presession launch plan, it atomically records the desired subscription candidate under _OPTION_OWNERSHIP_LOCK, and invalidates fail-closed on unsealed or metadata-blocked plans.",
+          "claim_kind": "implementation",
+          "status": "UNVERIFIED",
+          "source_ids": [],
+          "evidence_refs": [],
+          "assumptions": [],
+          "gate_evidence": {},
+          "limitation": "This claim covers candidate registration logic only; it does not authorize live orders or guarantee strategy profitability."
+        }
+      ]
+    }
+  }
+}
