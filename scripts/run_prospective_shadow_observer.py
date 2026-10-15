@@ -29,9 +29,9 @@ from core.shadow_circuit_breaker_evaluator import ShadowCircuitBreakerEvaluator
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("sentinel.shadow_observer_daemon")
 
-LIVE_STATE_PATH = "runtime/shadow_evaluator_live_state.json"
-NIFTY_WAL_PATH = "/Users/madhuram/tradebot/runtime/sentinel_apm_wal.json"
-SENSEX_WAL_PATH = "/private/tmp/tradebot-sensex-engine/runtime/sentinel_apm_wal_sensex.json"
+LIVE_STATE_PATH = os.environ.get("SHADOW_STATE_PATH", "runtime/shadow_evaluator_live_state.json")
+NIFTY_WAL_PATH = os.environ.get("SHADOW_NIFTY_WAL_PATH", "/Users/madhuram/tradebot/runtime/sentinel_apm_wal.json")
+SENSEX_WAL_PATH = os.environ.get("SHADOW_SENSEX_WAL_PATH", "/private/tmp/tradebot-sensex-engine/runtime/sentinel_apm_wal_sensex.json")
 
 RUNNING = True
 
@@ -71,7 +71,10 @@ def poll_wal_source(
     duplicates_count = 0
     in_flight_count = 0
 
-    # 1. Ingest completed trades from history
+    # 1. Ingest completed trades from history.
+    # CRITICAL PROVENANCE RULE: Any trade discovered already complete in trade_history
+    # must be classified as RETROSPECTIVE_BACKFILL, UNLESS its proposal was previously
+    # captured in the in-flight registry during a prior poll cycle when it was open!
     for t in trade_history:
         pid = t.get("position_id")
         date = (t.get("entry_time") or "")[:10]
@@ -80,7 +83,13 @@ def poll_wal_source(
         entry_time = t.get("entry_time") or ""
         exit_time = t.get("exit_time") or ""
         
-        # Step A: Observe proposal
+        scoped_key = evaluator._make_scoped_key(asset, date, pid)
+        was_observed_in_flight_prior = (scoped_key in evaluator.proposal_registry and 
+                                        evaluator.proposal_registry[scoped_key].get("provenance_mode") == "PROSPECTIVE_OBSERVED")
+        
+        # Step A: Observe proposal if not already captured
+        # If discovered completed in trade_history without prior prospective proposal capture, is_live_event MUST BE False!
+        is_prop_live = was_observed_in_flight_prior
         prop = evaluator.observe_trade_proposal(
             position_id=pid,
             asset=asset,
@@ -88,7 +97,7 @@ def poll_wal_source(
             direction=direction,
             contract=contract,
             proposal_timestamp=entry_time,
-            is_live_event=is_live_stream
+            is_live_event=is_prop_live
         )
         if prop.get("status") != "IDEMPOTENT_PROPOSAL_REPLAYED":
             proposals_count += 1
@@ -100,6 +109,9 @@ def poll_wal_source(
         opt_bid = t.get("opt_bid")
         opt_ask = t.get("opt_ask")
 
+        # Exit is PROSPECTIVE_OBSERVED only if proposal was captured before exit occurred
+        is_exit_live = was_observed_in_flight_prior and is_live_stream
+
         exit_res = evaluator.observe_trade_exit(
             position_id=pid,
             asset=asset,
@@ -110,7 +122,7 @@ def poll_wal_source(
             exit_timestamp=exit_time,
             opt_entry_bid=opt_bid,
             opt_entry_ask=opt_ask,
-            is_live_event=is_live_stream
+            is_live_event=is_exit_live
         )
         
         if exit_res.get("status") == "DUPLICATE_EXIT_IGNORED":
@@ -118,7 +130,8 @@ def poll_wal_source(
         elif exit_res.get("status") not in ("QUARANTINED", "UNMATCHED_EXIT_QUARANTINED"):
             new_exits_count += 1
 
-    # 2. Ingest active in-flight position if currently open in WAL
+    # 2. Ingest active in-flight position if currently open in WAL payload
+    # This is the genuine source of prospective proposal observation!
     if current_payload and data.get("state") in ("ARMED", "OPEN"):
         open_pid = current_payload.get("position_id")
         open_date = (current_payload.get("entry_time") or "")[:10]
@@ -135,6 +148,8 @@ def poll_wal_source(
             proposal_timestamp=open_time,
             is_live_event=True
         )
+        if prop_open.get("status") != "IDEMPOTENT_PROPOSAL_REPLAYED":
+            proposals_count += 1
         in_flight_count += 1
 
     return {
@@ -174,14 +189,25 @@ def main():
     
     # 2. Continuous prospective polling loop
     logger.info("Executing Phase 2: Continuous Prospective Polling Service Active (PROSPECTIVE_OBSERVED)...")
-    poll_iterations = int(os.environ.get("SHADOW_POLL_ITERATIONS", "1"))
+    
+    # Check both SHADOW_MAX_POLL_ITERATIONS and SHADOW_POLL_ITERATIONS for test mode;
+    # Default to None (continuous infinite operation until SIGINT/SIGTERM)
+    max_iter_env = os.environ.get("SHADOW_MAX_POLL_ITERATIONS") or os.environ.get("SHADOW_POLL_ITERATIONS")
+    max_iterations = int(max_iter_env) if max_iter_env else None
     poll_interval = float(os.environ.get("SHADOW_POLL_INTERVAL_SEC", "1.0"))
     
+    if max_iterations is not None:
+        logger.info(f"Operating in TEST FINITE MODE: max {max_iterations} cycles")
+    else:
+        logger.info("Operating in CONTINUOUS SERVICE DAEMON MODE (infinite loop)")
+        
     iteration = 0
-    while RUNNING and iteration < poll_iterations:
+    while RUNNING:
+        if max_iterations is not None and iteration >= max_iterations:
+            break
         iteration += 1
         live_res = run_single_poll_cycle(evaluator, is_live=True)
-        if live_res['NIFTY']['new_exits'] > 0 or live_res['SENSEX']['new_exits'] > 0:
+        if live_res['NIFTY']['new_exits'] > 0 or live_res['SENSEX']['new_exits'] > 0 or live_res['NIFTY']['proposals'] > 0:
             logger.info(f"Poll #{iteration}: Detected and ingested new events: {live_res}")
         time.sleep(poll_interval)
         

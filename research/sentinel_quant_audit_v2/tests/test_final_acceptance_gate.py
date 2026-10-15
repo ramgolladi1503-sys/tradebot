@@ -87,3 +87,53 @@ def test_provenance_distinguishes_prospective_vs_retrospective():
     e_live = evaluator.observe_trade_exit("T_LIVE", "NIFTY", date, 5.0, 2.0, "TARGET_HIT", "2026-10-15T10:15:00+05:30", is_live_event=True)
     assert p_live["provenance_mode"] == "PROSPECTIVE_OBSERVED"
     assert e_live["provenance_mode"] == "PROSPECTIVE_OBSERVED"
+
+def test_persistence_failure_blocks_evaluator_into_degraded_state(monkeypatch):
+    evaluator = ShadowCircuitBreakerEvaluator(max_consecutive_losses=2, log_path=TEST_LOG_PATH)
+    date = "2026-10-15"
+    
+    # Force os.replace to fail, simulating disk full or permission error
+    def mock_replace(src, dst):
+        raise IOError("Disk quota exceeded on volume")
+    monkeypatch.setattr(os, "replace", mock_replace)
+    
+    with pytest.raises(IOError):
+        evaluator.observe_trade_proposal("T_FAIL", "NIFTY", date, "CE", "C", "2026-10-15T10:00:00+05:30")
+        
+    assert evaluator.operational_health == "DEGRADED_PERSISTENCE_FAILED"
+    assert "Disk quota exceeded" in str(evaluator.persistence_error)
+    
+    # Subsequent calls must be blocked
+    blocked = evaluator.observe_trade_proposal("T_NEXT", "NIFTY", date, "CE", "C", "2026-10-15T10:05:00+05:30")
+    assert blocked["shadow_decision"] == "DEGRADED_BLOCKED"
+
+def test_late_quarantine_reconciliation_after_subsequent_events():
+    """
+    Tests that an exit quarantined early can be reconciled much later after subsequent valid
+    trades have been processed, without retroactively invalidating causal ordering.
+    """
+    evaluator = ShadowCircuitBreakerEvaluator(max_consecutive_losses=2, log_path=TEST_LOG_PATH)
+    date = "2026-10-15"
+    
+    # Trade 1 registered at 10:00
+    evaluator.observe_trade_proposal("T1", "NIFTY", date, "CE", "C", "2026-10-15T10:00:00+05:30")
+    # Exit 1 arrives out of order (09:50) -> Quarantined
+    evaluator.observe_trade_exit("T1", "NIFTY", date, 5.0, 2.0, "TARGET_HIT", "2026-10-15T09:50:00+05:30")
+    assert "NIFTY::2026-10-15::T1" in evaluator.quarantined_exit_keys
+    
+    # Trade 2 executes normally at 10:10 -> 10:20
+    evaluator.observe_trade_proposal("T2", "NIFTY", date, "CE", "C", "2026-10-15T10:10:00+05:30")
+    evaluator.observe_trade_exit("T2", "NIFTY", date, -5.0, -2.0, "SL_HIT", "2026-10-15T10:20:00+05:30")
+    
+    # Now reconcile T1 with late corrected timestamp (10:05 - before T2)
+    # The evaluator accepts the corrected timestamp and creates audit entry
+    recon = evaluator.reconcile_quarantined_exit("T1", "NIFTY", date, "2026-10-15T10:05:00+05:30")
+    assert recon["status"] == "RECONCILED"
+    assert "NIFTY::2026-10-15::T1" not in evaluator.quarantined_exit_keys
+    assert len(evaluator.reconciliation_audit_trail) == 1
+    
+    # Verify crash recovery of reconciled state
+    evaluator_reloaded = ShadowCircuitBreakerEvaluator(max_consecutive_losses=2, log_path=TEST_LOG_PATH)
+    assert len(evaluator_reloaded.shadow_ledger) == 2
+    assert len(evaluator_reloaded.reconciliation_audit_trail) == 1
+

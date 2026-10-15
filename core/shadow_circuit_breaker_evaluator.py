@@ -65,6 +65,10 @@ class ShadowCircuitBreakerEvaluator:
         self.unmatched_exit_queue: List[Dict[str, Any]] = []
         self.reconciliation_audit_trail: List[Dict[str, Any]] = []
         
+        # Persistence health state: 'HEALTHY' | 'DEGRADED_PERSISTENCE_FAILED'
+        self.operational_health: str = "HEALTHY"
+        self.persistence_error: Optional[str] = None
+        
         # Load persisted snapshot if file exists
         if self.log_path and os.path.exists(self.log_path):
             self.load_snapshot(self.log_path)
@@ -88,10 +92,12 @@ class ShadowCircuitBreakerEvaluator:
             }
         return self.asset_states[k]
 
-    def _parse_and_validate_timestamp(self, asset: str, ts_str: str) -> Tuple[bool, Optional[datetime], str]:
+    def _parse_and_validate_timestamp(self, asset: str, ts_str: str, is_reconciliation: bool = False) -> Tuple[bool, Optional[datetime], str]:
         """
         Parses and validates ISO 8601 timestamps, enforcing non-decreasing chronological order.
         Normalizes timezone-naive timestamps to IST (+05:30) to eliminate naive vs aware errors.
+        For reconciliations of past quarantined events, retrograde order check is skipped relative
+        to subsequent events, but proposal-before-exit ordering is preserved.
         """
         if not ts_str:
             return False, None, "MISSING_TIMESTAMP"
@@ -105,11 +111,12 @@ class ShadowCircuitBreakerEvaluator:
             return False, None, f"MALFORMED_TIMESTAMP_FORMAT: {e}"
 
         last_dt = self.last_event_datetimes.get(asset)
-        if last_dt is not None:
+        if last_dt is not None and not is_reconciliation:
             if dt < last_dt:
                 return False, None, f"OUT_OF_ORDER_RETROGRADE: {dt} < {last_dt}"
 
-        self.last_event_datetimes[asset] = dt
+        if not is_reconciliation or last_dt is None or dt > last_dt:
+            self.last_event_datetimes[asset] = dt
         return True, dt, "VALID"
 
     def observe_trade_proposal(
@@ -125,7 +132,16 @@ class ShadowCircuitBreakerEvaluator:
         """
         Observes a proposed trade entry idempotently.
         Classifies provenance as PROSPECTIVE_OBSERVED only if captured live before exit.
+        Fails closed or marks degraded if persistence has failed.
         """
+        if self.operational_health != "HEALTHY":
+            return {
+                "position_id": position_id,
+                "asset": asset,
+                "shadow_decision": "DEGRADED_BLOCKED",
+                "reason": f"OPERATIONAL_HEALTH_DEGRADED: {self.persistence_error}"
+            }
+
         scoped_key = self._make_scoped_key(asset, session_date, position_id)
         received_at = datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
         
@@ -203,12 +219,21 @@ class ShadowCircuitBreakerEvaluator:
         opt_entry_ask: Optional[float] = None,
         opt_exit_bid: Optional[float] = None,
         opt_exit_ask: Optional[float] = None,
-        is_live_event: bool = False
+        is_live_event: bool = False,
+        is_reconciliation: bool = False
     ) -> Dict[str, Any]:
         """
         Observes a completed trade exit idempotently and causally updates the breaker state.
         Enforces proposal matching and quarantines unmatched exits.
         """
+        if self.operational_health != "HEALTHY":
+            return {
+                "position_id": position_id,
+                "asset": asset,
+                "status": "DEGRADED_BLOCKED",
+                "reason": f"OPERATIONAL_HEALTH_DEGRADED: {self.persistence_error}"
+            }
+
         scoped_key = self._make_scoped_key(asset, session_date, position_id)
         received_at = datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
         
@@ -240,10 +265,14 @@ class ShadowCircuitBreakerEvaluator:
             return unmatched_rec
 
         # Timestamp validation
-        is_valid, dt, err_reason = self._parse_and_validate_timestamp(asset, exit_timestamp)
+        is_valid, dt, err_reason = self._parse_and_validate_timestamp(asset, exit_timestamp, is_reconciliation=is_reconciliation)
         if not is_valid:
-            # Special Handling for TRADE_1513_PE Historical Unresolved Risk:
-            if position_id == "TRADE_1513_PE" and err_reason == "MISSING_TIMESTAMP":
+            # Generic Rule for Historical Unresolved Risk (Crash Recovery / Missing Exit Timestamp):
+            # If an exit has missing timestamp and missing PnL (or crash recovery exit_reason),
+            # it is classified as HISTORICAL_UNRESOLVED_RISK and triggers a safety risk pause.
+            is_unresolved_recovery = (not exit_timestamp and (opt_pnl is None and spot_pnl is None)) or \
+                                     ("CRASH_RECOVERY" in (exit_reason or ""))
+            if is_unresolved_recovery:
                 st = self._get_state(asset, session_date)
                 st["unresolved_risk_positions"] += 1
                 st["is_shadow_halted"] = True
@@ -254,10 +283,10 @@ class ShadowCircuitBreakerEvaluator:
                     "position_id": position_id,
                     "asset": asset,
                     "session_date": session_date,
-                    "exit_timestamp": "HISTORICAL_MISSING",
+                    "exit_timestamp": exit_timestamp or "HISTORICAL_MISSING",
                     "observer_received_at": received_at,
-                    "spot_pnl": None,
-                    "opt_pnl": None,
+                    "spot_pnl": spot_pnl,
+                    "opt_pnl": opt_pnl,
                     "exit_reason": exit_reason or "CRASH_RECOVERY_FAIL_CLOSED",
                     "lifecycle_state": "HISTORICAL_UNRESOLVED_RISK",
                     "depth_coverage": "NON_EVALUABLE",
@@ -412,7 +441,8 @@ class ShadowCircuitBreakerEvaluator:
             opt_entry_bid=q_item.get("opt_entry_bid"),
             opt_entry_ask=q_item.get("opt_entry_ask"),
             opt_exit_bid=q_item.get("opt_exit_bid"),
-            opt_exit_ask=q_item.get("opt_exit_ask")
+            opt_exit_ask=q_item.get("opt_exit_ask"),
+            is_reconciliation=True
         )
 
         if reconciled_res.get("status") != "QUARANTINED":
@@ -464,8 +494,14 @@ class ShadowCircuitBreakerEvaluator:
             with open(tmp_path, "w") as f:
                 json.dump(payload, f, indent=2)
             os.replace(tmp_path, self.log_path)
+            self.operational_health = "HEALTHY"
+            self.persistence_error = None
         except Exception as e:
-            logger.error(f"Failed to atomically persist shadow snapshot: {e}")
+            err_msg = f"Atomic persistence failure: {e}"
+            logger.error(err_msg)
+            self.operational_health = "DEGRADED_PERSISTENCE_FAILED"
+            self.persistence_error = err_msg
+            raise IOError(err_msg)
 
     def load_snapshot(self, path: str):
         """Recovers state seamlessly from a persisted JSON snapshot."""
