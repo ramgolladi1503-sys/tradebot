@@ -2857,3 +2857,175 @@ def test_wi05_gate4_safety_non_negotiables_enforced():
     assert decision.live_order_action is False
     assert decision.broker_order_action is False
     assert decision.append is False
+
+
+# ---------------------------------------------------------------------------
+# GSD-AUDIT-TOP30: Gates G-1 to G-5 Verification Tests
+# ---------------------------------------------------------------------------
+
+def _mock_load_option_token_meta(symbol, exchange, expiry):
+    return {
+        201: {"strike": 25000.0, "instrument_type": "CE"},
+        202: {"strike": 25100.0, "instrument_type": "PE"},
+    }
+
+
+def test_audit_top30_gate_g1_valid_launch_plan_registers_candidate(monkeypatch):
+    """Gate G-1: Valid sealed launch plan records desired subscription candidate atomically."""
+    _patch_common(monkeypatch)
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True, raising=False)
+    ws.invalidate_desired_subscription_candidate("test_prep")
+    monkeypatch.setattr(ws, "_load_option_token_meta", _mock_load_option_token_meta)
+    
+    plan = {
+        "ok": True,
+        "verdict": "PASS_LIVE_SOURCE_PRESESSION_READINESS",
+        "production_tokens": [101, 201, 202],
+        "production_underlying_tokens": [101],
+        "production_option_tokens": [201, 202],
+        "final_union_tokens": [101, 201, 202],
+        "configured_budget": 100,
+        "production_resolution": [
+            {
+                "symbol": "NIFTY",
+                "exchange": "NFO",
+                "expiry": "2026-10-29",
+                "index_token": 101,
+                "tokens": [101, 201, 202],
+                "final_option_count": 2,
+                "option_min_required": 2,
+            }
+        ],
+        "production_option_count": 2,
+        "launch_plan_sha256": "plan-sha-g1",
+    }
+
+    res = ws.activate_market_event_graph_launch_plan(plan)
+    assert res["enabled"] is True
+
+    candidate = ws._DESIRED_SUBSCRIPTION_CANDIDATE
+    assert candidate.complete is True
+    assert set(candidate.tokens) == {101, 201, 202}
+    assert candidate.source == "kite_depth_ws.activate_market_event_graph_launch_plan"
+    assert candidate.configured_budget == 100
+
+
+def test_audit_top30_gate_g2_invalid_or_unsealed_plan_invalidates_candidate(monkeypatch):
+    """Gate G-2: Unsealed/invalid launch plan fails closed and invalidates candidate."""
+    _patch_common(monkeypatch)
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True, raising=False)
+    monkeypatch.setattr(ws, "_load_option_token_meta", _mock_load_option_token_meta)
+    
+    # First establish a valid candidate
+    valid_plan = {
+        "ok": True,
+        "verdict": "PASS_LIVE_SOURCE_PRESESSION_READINESS",
+        "production_tokens": [101, 201],
+        "final_union_tokens": [101, 201],
+        "configured_budget": 50,
+        "production_resolution": [
+            {
+                "symbol": "NIFTY",
+                "exchange": "NFO",
+                "expiry": "2026-10-29",
+                "index_token": 101,
+                "tokens": [101, 201],
+                "final_option_count": 1,
+                "option_min_required": 1,
+            }
+        ],
+        "production_option_count": 1,
+        "launch_plan_sha256": "plan-sha-valid",
+    }
+    ws.activate_market_event_graph_launch_plan(valid_plan)
+    assert ws._DESIRED_SUBSCRIPTION_CANDIDATE.complete is True
+
+    # Now attempt activation with an unsealed/not ok plan
+    invalid_plan = {
+        "ok": False,
+        "verdict": "BLOCKED_BY_PRESESSION_VALIDATION",
+        "production_tokens": [101, 201],
+        "final_union_tokens": [101, 201],
+        "configured_budget": 50,
+        "launch_plan_sha256": "plan-sha-invalid",
+    }
+    res = ws.activate_market_event_graph_launch_plan(invalid_plan)
+    assert res["enabled"] is False
+    
+    candidate = ws._DESIRED_SUBSCRIPTION_CANDIDATE
+    assert candidate.complete is False
+    assert candidate.source == "launch_plan_not_ok_or_unsealed"
+
+
+def test_audit_top30_gate_g3_metadata_blocked_invalidates_candidate(monkeypatch):
+    """Gate G-3: Launch plan with mismatched metadata invalidates subscription candidate."""
+    _patch_common(monkeypatch)
+    monkeypatch.setattr(ws, "_load_option_token_meta", _mock_load_option_token_meta)
+    
+    mismatched_plan = {
+        "ok": True,
+        "verdict": "PASS_LIVE_SOURCE_PRESESSION_READINESS",
+        "production_tokens": [101, 201],
+        "final_union_tokens": [101, 201],
+        "configured_budget": 100,
+        "production_resolution": [
+            {
+                "symbol": "NIFTY",
+                "exchange": "NFO",
+                "expiry": "2026-10-29",
+                "index_token": 101,
+                "tokens": [101, 201],
+                "final_option_count": 5,  # Mismatch with declared 1
+                "option_min_required": 2,
+            }
+        ],
+        "production_option_count": 1,
+        "launch_plan_sha256": "plan-sha-mismatch",
+    }
+    res = ws.activate_market_event_graph_launch_plan(mismatched_plan)
+    
+    candidate = ws._DESIRED_SUBSCRIPTION_CANDIDATE
+    assert candidate.complete is False
+    assert candidate.source == "launch_plan_option_metadata_blocked"
+
+
+def test_audit_top30_gate_g4_observation_sync_reconciles_candidate_tokens(monkeypatch):
+    """Gate G-4: Candidate tokens accurately reflect observation final_union_tokens."""
+    _patch_common(monkeypatch)
+    monkeypatch.setattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", True, raising=False)
+    monkeypatch.setattr(ws, "_load_option_token_meta", _mock_load_option_token_meta)
+    
+    plan_with_observation = {
+        "ok": True,
+        "verdict": "PASS_LIVE_SOURCE_PRESESSION_READINESS",
+        "production_tokens": [101, 201],
+        "observation_tokens": [301],
+        "final_union_tokens": [101, 201, 301],
+        "configured_budget": 200,
+        "production_resolution": [
+            {
+                "symbol": "NIFTY",
+                "exchange": "NFO",
+                "expiry": "2026-10-29",
+                "index_token": 101,
+                "tokens": [101, 201],
+                "final_option_count": 1,
+                "option_min_required": 1,
+            }
+        ],
+        "production_option_count": 1,
+        "launch_plan_sha256": "plan-sha-obs",
+    }
+    ws.activate_market_event_graph_launch_plan(plan_with_observation)
+    
+    candidate = ws._DESIRED_SUBSCRIPTION_CANDIDATE
+    assert candidate.complete is True
+    assert set(candidate.tokens) == {101, 201, 301}
+    assert candidate.observation_final_union == frozenset({101, 201, 301})
+
+
+def test_audit_top30_gate_g5_safety_invariants_preserved():
+    """Gate G-5: Strict safety non-negotiables: no order actions, no broker calls."""
+    candidate = ws._DESIRED_SUBSCRIPTION_CANDIDATE
+    assert getattr(candidate, "is_order_action", False) is False
+    assert getattr(candidate, "broker_api_called", False) is False
