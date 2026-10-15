@@ -14,27 +14,31 @@
 
 ```text
 b2a2b6a47d4481c3d7aac926b4bdc165f96f3de9a4a67fdfef5db7ab85f189a3  core/shadow_circuit_breaker_evaluator.py
-02a396fc9180db797aa7e6cbf0b915bb0feeb7ce637c13f0c531d51ef2cd992f  scripts/run_prospective_shadow_observer.py
+7447c031e1051dce6a53afc748d747bdfeb8586bd019638efe89904c404b44e2  scripts/run_prospective_shadow_observer.py
 fbbb0d6913d97ba67ff55662539ef9c65de7e5a9d7cb10395c20285f21412ed3  research/sentinel_quant_audit_v2/tests/test_live_subprocess_mutation.py
 ae9fda5052e337392fefe9adc05922ca3692f2d2bc97a88b6c7fe4fdda7c80f0  research/sentinel_quant_audit_v2/tests/test_final_acceptance_gate.py
-8235c38397ebebac414d44d2cf6f834ec510a8b88fbf92699f3f36fb400d6249  research/sentinel_quant_audit_v2/tests/test_apm_wal_compatibility.py
+8dbe5c8b76d9157e9aff0e98b5fbeb15c44fecf981fd06c5faaa1b4def2ce935  research/sentinel_quant_audit_v2/tests/test_apm_wal_compatibility.py
 ```
 
 ---
 
 ## 2. Priority 1 — APM WAL Compatibility Resolution
 
-### Confirmed Root Cause:
-`ActivePositionManager` (APM) in PR #968 and PR #980 transitions across `STANDBY`, `ARMED`, `IN_FLIGHT`, `TRAIL_LOCK`, `EXIT_PENDING`, and `LIQUIDATED`. Previously, the observer checked only `ARMED` and `OPEN`. In production, APM stays in `ARMED` only momentarily during signal qualification, immediately advancing to `IN_FLIGHT` and `TRAIL_LOCK` (monotonic profit lock) during the hold period, and `EXIT_PENDING` during liquidation.
+### Confirmed Schema Audit:
+The Sentinel `ActivePositionManager` (APM) in PR #968 and PR #980 transitions across `STANDBY`, `ARMED`, `IN_FLIGHT`, `TRAIL_LOCK`, `EXIT_PENDING`, and `LIQUIDATED`.
+- In production, `ARMED` represents a candidate evaluation prior to position entry.
+- Once entered, APM enters `IN_FLIGHT`, then ratchets into `TRAIL_LOCK` (monotonic profit lock) during hold, and `EXIT_PENDING` during liquidation fill.
+- The observer strictly recognizes entered-position states: `IN_FLIGHT`, `TRAIL_LOCK`, and `EXIT_PENDING`.
+- Unentered states (`ARMED` and `OPEN`) are explicitly excluded to prevent unentered candidates from being counted as active positions.
 
 ### Fix Implemented in PR #985:
-- In `scripts/run_prospective_shadow_observer.py`, the active position detection was expanded to check:
+- In `scripts/run_prospective_shadow_observer.py`, the active position detection strictly filters:
   ```python
-  wal_state in ("IN_FLIGHT", "TRAIL_LOCK", "EXIT_PENDING", "ARMED", "OPEN")
+  wal_state in ("IN_FLIGHT", "TRAIL_LOCK", "EXIT_PENDING")
   ```
-- **False-Positive Guard:** An armed state with `payload=None` is explicitly ignored. Only payloads with valid `position_id`, `direction`, `contract`, and `entry_time` are registered.
 - Validated with `research/sentinel_quant_audit_v2/tests/test_apm_wal_compatibility.py`:
   - `STANDBY`: 0 in-flight.
+  - `ARMED` (with or without payload): 0 in-flight (rejected as unentered candidate).
   - `IN_FLIGHT`: Captured as `PROSPECTIVE_OBSERVED` in `IN_FLIGHT_OPEN`.
   - `TRAIL_LOCK`: Preserved as active in-flight without duplicate proposal increment.
   - `EXIT_PENDING`: Preserved as active in-flight awaiting exit record.
@@ -79,25 +83,37 @@ The three components run as independent, decoupled OS processes:
 ### Stage B: Market Session Parallel Launch (09:15 - 15:30 IST)
 Launch the three processes concurrently in separate terminal sessions:
 
-- **Terminal 1: NIFTY Sentinel Shadow Engine**
+- **Terminal 1: NIFTY Sentinel Shadow Engine (PR #968)**
+  *(Note: PR #968 does not take --ticker argument)*
   ```bash
   cd /private/tmp/tradebot-nifty-engine
-  python3 scripts/run_live_feed_advisor.py --ticker NIFTY
+  python3 scripts/run_live_feed_advisor.py
   ```
 
-- **Terminal 2: SENSEX Sentinel Shadow Engine**
+- **Terminal 2: SENSEX Sentinel Shadow Engine (PR #980)**
   ```bash
   cd /private/tmp/tradebot-sensex-engine
   python3 scripts/run_live_feed_advisor.py --ticker SENSEX
   ```
 
-- **Terminal 3: Sentinel Passive Observer Daemon (Challenger Evaluation)**
+- **Terminal 3: Sentinel Passive Observer Daemon (Challenger Evaluation - PR #985)**
+  *Initial Morning Bootstrap (Authorized clean setup only):*
   ```bash
   cd /private/tmp/tradebot-sentinel-quant-audit
   SHADOW_NIFTY_WAL_PATH="/private/tmp/tradebot-nifty-engine/runtime/sentinel_apm_wal.json" \
   SHADOW_SENSEX_WAL_PATH="/private/tmp/tradebot-sensex-engine/runtime/sentinel_apm_wal_sensex.json" \
   SHADOW_STATE_PATH="runtime/shadow_evaluator_live_state.json" \
   SHADOW_ALLOW_FRESH_INIT=true \
+  python3 scripts/run_prospective_shadow_observer.py
+  ```
+
+  *Mid-Session Restarts / Crash Recovery (Fails Closed if State Missing):*
+  ```bash
+  cd /private/tmp/tradebot-sentinel-quant-audit
+  SHADOW_NIFTY_WAL_PATH="/private/tmp/tradebot-nifty-engine/runtime/sentinel_apm_wal.json" \
+  SHADOW_SENSEX_WAL_PATH="/private/tmp/tradebot-sensex-engine/runtime/sentinel_apm_wal_sensex.json" \
+  SHADOW_STATE_PATH="runtime/shadow_evaluator_live_state.json" \
+  SHADOW_ALLOW_FRESH_INIT=false \
   python3 scripts/run_prospective_shadow_observer.py
   ```
 

@@ -30,7 +30,10 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger("sentinel.shadow_observer_daemon")
 
 LIVE_STATE_PATH = os.environ.get("SHADOW_STATE_PATH", "runtime/shadow_evaluator_live_state.json")
-NIFTY_WAL_PATH = os.environ.get("SHADOW_NIFTY_WAL_PATH", "/Users/madhuram/tradebot/runtime/sentinel_apm_wal.json")
+NIFTY_WAL_PATH = os.environ.get(
+    "SHADOW_NIFTY_WAL_PATH",
+    "/private/tmp/tradebot-nifty-engine/runtime/sentinel_apm_wal.json" if os.path.exists("/private/tmp/tradebot-nifty-engine/runtime/sentinel_apm_wal.json") else "/Users/madhuram/tradebot/runtime/sentinel_apm_wal.json"
+)
 SENSEX_WAL_PATH = os.environ.get("SHADOW_SENSEX_WAL_PATH", "/private/tmp/tradebot-sensex-engine/runtime/sentinel_apm_wal_sensex.json")
 
 RUNNING = True
@@ -132,9 +135,10 @@ def poll_wal_source(
 
     # 2. Ingest active in-flight position if currently open in WAL payload
     # This is the genuine source of prospective proposal observation!
-    # Compatible with ActivePositionManager states: IN_FLIGHT, TRAIL_LOCK, EXIT_PENDING (and ARMED/OPEN)
+    # Strictly recognizes ActivePositionManager entered-position states: IN_FLIGHT, TRAIL_LOCK, EXIT_PENDING.
+    # ARMED and OPEN are explicitly excluded as unentered / candidate-only states.
     wal_state = data.get("state")
-    if current_payload and wal_state in ("IN_FLIGHT", "TRAIL_LOCK", "EXIT_PENDING", "ARMED", "OPEN"):
+    if current_payload and wal_state in ("IN_FLIGHT", "TRAIL_LOCK", "EXIT_PENDING"):
         open_pid = current_payload.get("position_id")
         open_date = (current_payload.get("entry_time") or "")[:10]
         open_dir = current_payload.get("direction")

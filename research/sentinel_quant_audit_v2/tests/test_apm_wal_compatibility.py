@@ -155,3 +155,27 @@ def test_armed_without_payload_not_mistaken_for_active_position():
     assert res["in_flight"] == 0
     assert len(evaluator.in_flight_positions) == 0
     assert len(evaluator.proposal_registry) == 0
+
+def test_armed_state_with_candidate_payload_not_mistaken_for_entered_position():
+    """An ARMED state candidate must not be counted as an entered position before IN_FLIGHT."""
+    evaluator = ShadowCircuitBreakerEvaluator(max_consecutive_losses=2, log_path=TEST_STATE_PATH)
+    wal_armed_candidate = {
+        "state": "ARMED",
+        "payload": {
+            "position_id": "TRADE_CANDIDATE_01",
+            "direction": "CE",
+            "strike_contract": "NIFTY 23000 CE",
+            "entry_price": 23000.0,
+            "entry_time": "2026-10-16T09:15:00+05:30"
+        },
+        "last_completed_trade": None,
+        "trade_history": []
+    }
+    with open(TEST_WAL_PATH, "w") as f:
+        json.dump(wal_armed_candidate, f)
+
+    res = poll_wal_source(evaluator, TEST_WAL_PATH, "NIFTY", is_live_stream=True)
+    assert res["in_flight"] == 0
+    assert len(evaluator.in_flight_positions) == 0
+    assert len(evaluator.proposal_registry) == 0
+
