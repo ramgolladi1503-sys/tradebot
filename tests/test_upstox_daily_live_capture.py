@@ -59,6 +59,7 @@ def test_get_options_subscriptions_resolution():
     assert subs.get("NSE_INDEX|Nifty 50") == "NIFTY 50"
     assert subs.get("NSE_INDEX|Nifty Bank") == "NIFTY BANK"
     assert subs.get("BSE_INDEX|SENSEX") == "SENSEX"
+    assert subs.get("NSE_INDEX|India VIX") == "INDIA VIX"
     assert subs.get("NSE_FO|101") == "NIFTY 24000 CE"
     assert subs.get("NSE_FO|102") == "NIFTY 24000 PE"
     assert subs.get("NSE_FO|103") == "NIFTY 24050 CE"

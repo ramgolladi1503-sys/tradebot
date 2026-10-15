@@ -181,6 +181,7 @@ def get_options_subscriptions(df_inst: pd.DataFrame, underlying_prices: dict[str
     subs["NSE_INDEX|Nifty 50"] = "NIFTY 50"
     subs["NSE_INDEX|Nifty Bank"] = "NIFTY BANK"
     subs["BSE_INDEX|SENSEX"] = "SENSEX"
+    subs["NSE_INDEX|India VIX"] = "INDIA VIX"
     return subs
 
 def format_depth(market_level) -> str:
