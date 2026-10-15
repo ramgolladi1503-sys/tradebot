@@ -1,0 +1,26 @@
+{
+  "audit_session": "20261015_v2_30_issue_adversarial_mission",
+  "protected_baselines": {
+    "PR_968": {
+      "branch": "feat/sentinel-decoupled-sidecar-live-advisor",
+      "head_sha": "e6d0ae46643ba21767e13e0c40fa8389e51d1acb",
+      "role": "NIFTY Decoupled Sidecar Live Advisor",
+      "status": "FROZEN_READ_ONLY"
+    },
+    "PR_980": {
+      "branch": "feat/sentinel-sensex-asset-profile-engine",
+      "head_sha": "c87688055c3df2d77a4220eb1c0c4d763db9c5c2",
+      "role": "SENSEX Asset Profile Engine",
+      "status": "FROZEN_READ_ONLY"
+    }
+  },
+  "research_worktree": "/private/tmp/tradebot-sentinel-quant-audit",
+  "research_branch": "research/sentinel-quant-audit-20261015",
+  "invariants": {
+    "read_only": true,
+    "is_order_action": false,
+    "broker_api_called": false,
+    "allowed_for_live_execution": false,
+    "token_universe_cap": 123
+  }
+}

@@ -77,9 +77,14 @@ class PositionPayload:
 
 
 class ActivePositionManager:
-    def __init__(self, wal_path: str = "runtime/sentinel_apm_wal.json"):
+    def __init__(
+        self,
+        wal_path: str = "runtime/sentinel_apm_wal.json",
+        profile: Optional[Any] = None,
+    ):
         self.wal_path = Path(wal_path)
         self.wal_path.parent.mkdir(parents=True, exist_ok=True)
+        self.profile = profile
         self.state = STATE_STANDBY
         self.payload: Optional[PositionPayload] = None
         self.last_completed_trade: Optional[Dict[str, Any]] = None
@@ -237,6 +242,16 @@ class ActivePositionManager:
             hold_horizon = 360
         elif is_runner_mode:
             hold_horizon = 25
+        else:
+            # Layer 3 0-DTE Greek Shield: Dynamic Theta Decay Curve
+            # If entering past 12:30 PM on 0-DTE, scale hold horizon down linearly to prevent theta burn
+            try:
+                entry_t = datetime.fromisoformat(entry_time_str).time()
+                mins_to_close = (dtime(15, 30).hour * 60 + dtime(15, 30).minute) - (entry_t.hour * 60 + entry_t.minute)
+                if mins_to_close < 180:  # Past 12:30 PM
+                    hold_horizon = max(6, int(15.0 * (mins_to_close / 180.0)))
+            except Exception:
+                hold_horizon = 15
 
         self.payload = PositionPayload(
             position_id=position_id,
@@ -361,17 +376,22 @@ class ActivePositionManager:
                 _record_tick_exit("RUNNER_HWM_TRAILING_EXIT", current_spot)
                 return self.liquidate()
 
-        # 5. Dynamic Ratchet Locks
+        # 5. Dynamic Ratchet Locks (Scaled via AssetProfile if provided)
+        ratchet_trig = getattr(self.profile, "ratchet_trigger_pts", 8.0) if self.profile else 8.0
+        ratchet_lock = getattr(self.profile, "ratchet_lock_pts", 4.0) if self.profile else 4.0
+        be_trig = getattr(self.profile, "breakeven_trigger_pts", 12.0) if self.profile else 12.0
+        be_lock = getattr(self.profile, "breakeven_lock_pts", 1.0) if self.profile else 1.0
+
         gain = (current_spot - p.entry_price) if is_ce else (p.entry_price - current_spot)
-        if gain >= 12.0 and not p.trail_locked:
-            be_sl = (p.entry_price + 1.0) if is_ce else (p.entry_price - 1.0)
+        if gain >= be_trig and not p.trail_locked:
+            be_sl = (p.entry_price + be_lock) if is_ce else (p.entry_price - be_lock)
             if (is_ce and be_sl > p.current_sl) or (not is_ce and be_sl < p.current_sl):
                 p.current_sl = be_sl
                 p.trail_locked = True
                 if self.state == STATE_IN_FLIGHT:
                     self._transition_to(STATE_TRAIL_LOCK)
-        elif gain >= 8.0 and not p.trail_locked:
-            new_sl = (p.entry_price + 4.0) if is_ce else (p.entry_price - 4.0)
+        elif gain >= ratchet_trig and not p.trail_locked:
+            new_sl = (p.entry_price + ratchet_lock) if is_ce else (p.entry_price - ratchet_lock)
             if (is_ce and new_sl > p.current_sl) or (not is_ce and new_sl < p.current_sl):
                 p.current_sl = new_sl
                 p.trail_locked = True
@@ -512,21 +532,34 @@ class ActivePositionManager:
             _record_exit("TRAILING_STOP_HIT", p.current_sl)
             return self.liquidate()
 
-        # Invariant: Breakeven Lock at +12.0 Spot Points Gain (Snaps SL to entry + 1.0 pt)
-        if gain >= 12.0 and not p.trail_locked:
-            be_sl = (p.entry_price + 1.0) if is_ce else (p.entry_price - 1.0)
+        # Dynamic Ratchet and Breakeven Locks (Scaled via AssetProfile if provided)
+        ratchet_trig = getattr(self.profile, "ratchet_trigger_pts", 8.0) if self.profile else 8.0
+        ratchet_lock = getattr(self.profile, "ratchet_lock_pts", 4.0) if self.profile else 4.0
+        be_trig = getattr(self.profile, "breakeven_trigger_pts", 12.0) if self.profile else 12.0
+        be_lock = getattr(self.profile, "breakeven_lock_pts", 1.0) if self.profile else 1.0
+
+        # Invariant: Breakeven Lock at Breakeven Trigger Spot Points Gain
+        if gain >= be_trig and not p.trail_locked:
+            be_sl = (p.entry_price + be_lock) if is_ce else (p.entry_price - be_lock)
             if (is_ce and be_sl > p.current_sl) or (not is_ce and be_sl < p.current_sl):
                 p.current_sl = be_sl
                 p.trail_locked = True
                 if self.state == STATE_IN_FLIGHT:
                     self._transition_to(STATE_TRAIL_LOCK)
 
-        # 2. Monotonic Trailing Ratchet (+8 pts move locks +4 pts profit)
-        elif gain >= 8.0 and not p.trail_locked:
-            new_sl = (p.entry_price + 4.0) if is_ce else (p.entry_price - 4.0)
-            # Invariant 1.1: Compare-And-Swap monotonicity check
-            if (is_ce and new_sl > p.current_sl) or (not is_ce and new_sl < p.current_sl):
-                p.current_sl = new_sl
+        # 2. Continuous Parabolic Trailing Ratchet (Move locks profit & trails runner expansion)
+        elif gain >= ratchet_trig:
+            # Trailing cushion scales with ATR: keep a 1.2 * ATR trailing distance behind peak favorable spot
+            trailing_cushion = max(ratchet_lock, 1.2 * atr_1m)
+            peak_spot = (p.entry_price + p.max_spot_excursion) if is_ce else (p.entry_price - p.max_spot_excursion)
+            trail_sl = (peak_spot - trailing_cushion) if is_ce else (peak_spot + trailing_cushion)
+            # Invariant: Must at least guarantee minimum locked profit
+            min_guaranteed_sl = (p.entry_price + ratchet_lock) if is_ce else (p.entry_price - ratchet_lock)
+            effective_trail = max(trail_sl, min_guaranteed_sl) if is_ce else min(trail_sl, min_guaranteed_sl)
+
+            # Invariant 1.1: Compare-And-Swap monotonicity check (stop only ratchets forward, never backward)
+            if (is_ce and effective_trail > p.current_sl) or (not is_ce and effective_trail < p.current_sl):
+                p.current_sl = effective_trail
                 p.trail_locked = True
                 if self.state == STATE_IN_FLIGHT:
                     self._transition_to(STATE_TRAIL_LOCK)
