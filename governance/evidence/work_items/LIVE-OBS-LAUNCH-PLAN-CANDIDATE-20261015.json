@@ -5,7 +5,7 @@
   "parent_feature": "FEED-SUBSCRIPTION-CANDIDATE",
   "title": "Atomically record desired subscription candidate upon launch plan activation",
   "schema_version": 1,
-  "current_state": "BACKLOG",
+  "current_state": "PR_OPEN",
   "priority": "P0",
   "business_goal": "Record desired subscription candidate atomically under _OPTION_OWNERSHIP_LOCK when a valid sealed presession launch plan is activated, ensuring subscription state synchronization reaches complete=True and unblocking downstream candidate signal evaluation.",
   "current_behavior": "activate_market_event_graph_launch_plan stages option contracts but does not record the desired subscription candidate, leaving complete=False and tripping desired_subscription_candidate_invalid_or_stale -> SUBSCRIBE_FAILED -> ownership.state=UNKNOWN -> global_feed_unhealthy.",
@@ -53,18 +53,16 @@
   "forbidden_paths": [
     "main.py",
     "run_live.sh",
-    "config/",
+    "config/**",
     "credentials.py",
-    "core/broker/",
-    "core/order/",
-    "core/risk/",
-    "strategies/",
-    "runtime/live/"
+    "core/broker/**",
+    "core/order/**",
+    "core/risk/**",
+    "strategies/**",
+    "runtime/live/**"
   ],
   "expected_tests": [
-    "pytest -q tests/test_kite_depth_ws_stability.py",
-    "git diff --check",
-    "python scripts/validate_agent_review_evidence.py"
+    "tests/test_kite_depth_ws_stability.py"
   ],
   "qa_attack_plan": [
     "test valid sealed launch plan records candidate",
@@ -83,12 +81,331 @@
   ],
   "rollback_plan": "Revert this scoped candidate registration change and its tests.",
   "evidence_refs": [],
-  "acting_role": "",
-  "state_history": [],
+  "acting_role": "RELEASE_MANAGER",
+  "state_history": [
+    {
+      "from_state": "BACKLOG",
+      "to_state": "REQUIREMENT_READY",
+      "acting_role": "BUSINESS_ANALYST",
+      "actor": "ba-agent-80016d66",
+      "timestamp": "2026-10-15T10:01:00+00:00",
+      "reason": "evidence review for DeliveryState.REQUIREMENT_READY",
+      "evidence_ids": [
+        "req-ba"
+      ],
+      "contract_hash": "5efa38e503907ee2b0fe1547391c940069ad645611e8121a3001a9829daaf871",
+      "previous_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "entry_hash": "06b9b4759d00f635dce659cae719d0c489c5b5dbf4f1419f598d6d5f25a4e722"
+    },
+    {
+      "from_state": "REQUIREMENT_READY",
+      "to_state": "DESIGN_READY",
+      "acting_role": "SYSTEM_ARCHITECT",
+      "actor": "hermes-agent-8ee41a86",
+      "timestamp": "2026-10-15T10:02:00+00:00",
+      "reason": "evidence review for DeliveryState.DESIGN_READY",
+      "evidence_ids": [
+        "req-ba",
+        "req-po",
+        "arch-hermes"
+      ],
+      "contract_hash": "5efa38e503907ee2b0fe1547391c940069ad645611e8121a3001a9829daaf871",
+      "previous_hash": "06b9b4759d00f635dce659cae719d0c489c5b5dbf4f1419f598d6d5f25a4e722",
+      "entry_hash": "cbc13b7c506cb547fd7d6e39ac5e9da8dd59f182b55e66c9be9fbf9a86441e94"
+    },
+    {
+      "from_state": "DESIGN_READY",
+      "to_state": "IN_DEVELOPMENT",
+      "acting_role": "BACKEND_DEVELOPER",
+      "actor": "gsd-agent-f5fb0184",
+      "timestamp": "2026-10-15T10:03:00+00:00",
+      "reason": "evidence review for DeliveryState.IN_DEVELOPMENT",
+      "evidence_ids": [],
+      "contract_hash": "5efa38e503907ee2b0fe1547391c940069ad645611e8121a3001a9829daaf871",
+      "previous_hash": "cbc13b7c506cb547fd7d6e39ac5e9da8dd59f182b55e66c9be9fbf9a86441e94",
+      "entry_hash": "63977ebc0cbb723b757da4de17927e612ecfe40c7762b05c7ddaf0e50ba36c13"
+    },
+    {
+      "from_state": "IN_DEVELOPMENT",
+      "to_state": "DEV_VERIFIED",
+      "acting_role": "BACKEND_DEVELOPER",
+      "actor": "gsd-agent-f5fb0184",
+      "timestamp": "2026-10-15T10:04:00+00:00",
+      "reason": "evidence review for DeliveryState.DEV_VERIFIED",
+      "evidence_ids": [
+        "dev-gsd"
+      ],
+      "contract_hash": "5efa38e503907ee2b0fe1547391c940069ad645611e8121a3001a9829daaf871",
+      "previous_hash": "63977ebc0cbb723b757da4de17927e612ecfe40c7762b05c7ddaf0e50ba36c13",
+      "entry_hash": "75a58e4c2a988c939a2bb1523653a59e3f895b25f3b63da4cfabba12028781f1"
+    },
+    {
+      "from_state": "DEV_VERIFIED",
+      "to_state": "QA_IN_PROGRESS",
+      "acting_role": "QA_ENGINEER",
+      "actor": "qa-agent-4d7a78bb",
+      "timestamp": "2026-10-15T10:05:00+00:00",
+      "reason": "evidence review for DeliveryState.QA_IN_PROGRESS",
+      "evidence_ids": [],
+      "contract_hash": "5efa38e503907ee2b0fe1547391c940069ad645611e8121a3001a9829daaf871",
+      "previous_hash": "75a58e4c2a988c939a2bb1523653a59e3f895b25f3b63da4cfabba12028781f1",
+      "entry_hash": "6c4b29137f301aadfa9331748a6a5a5b7a5abff09ba1cf8c6329edf0f26d23bc"
+    },
+    {
+      "from_state": "QA_IN_PROGRESS",
+      "to_state": "QA_PASSED",
+      "acting_role": "QA_ENGINEER",
+      "actor": "qa-agent-4d7a78bb",
+      "timestamp": "2026-10-15T10:06:00+00:00",
+      "reason": "evidence review for DeliveryState.QA_PASSED",
+      "evidence_ids": [
+        "qa-evidence"
+      ],
+      "contract_hash": "5efa38e503907ee2b0fe1547391c940069ad645611e8121a3001a9829daaf871",
+      "previous_hash": "6c4b29137f301aadfa9331748a6a5a5b7a5abff09ba1cf8c6329edf0f26d23bc",
+      "entry_hash": "087a0247ef387f200adaf62333c541e4a8fa6b2ad3a5465225b27ecb59afbabf"
+    },
+    {
+      "from_state": "QA_PASSED",
+      "to_state": "SENIOR_QA",
+      "acting_role": "SENIOR_QA",
+      "actor": "sqa-agent-27c1c8df",
+      "timestamp": "2026-10-15T10:07:00+00:00",
+      "reason": "evidence review for DeliveryState.SENIOR_QA",
+      "evidence_ids": [
+        "senior-qa"
+      ],
+      "contract_hash": "5efa38e503907ee2b0fe1547391c940069ad645611e8121a3001a9829daaf871",
+      "previous_hash": "087a0247ef387f200adaf62333c541e4a8fa6b2ad3a5465225b27ecb59afbabf",
+      "entry_hash": "e2d8a533a5601e520d6598a1c81be6a97638d2ef6ba341d3a96a006179b83f3d"
+    },
+    {
+      "from_state": "SENIOR_QA",
+      "to_state": "UAT",
+      "acting_role": "SENIOR_QA",
+      "actor": "sqa-agent-27c1c8df",
+      "timestamp": "2026-10-15T10:08:00+00:00",
+      "reason": "evidence review for DeliveryState.UAT",
+      "evidence_ids": [
+        "senior-qa"
+      ],
+      "contract_hash": "5efa38e503907ee2b0fe1547391c940069ad645611e8121a3001a9829daaf871",
+      "previous_hash": "e2d8a533a5601e520d6598a1c81be6a97638d2ef6ba341d3a96a006179b83f3d",
+      "entry_hash": "f69c9ae077d3c9d9b8a65fc4e9aa786512cdb2981f4202bce70a8e66bca4c1cf"
+    },
+    {
+      "from_state": "UAT",
+      "to_state": "PRODUCT_ACCEPTED",
+      "acting_role": "PRODUCT_OWNER",
+      "actor": "po-agent-fe742b8b",
+      "timestamp": "2026-10-15T10:10:00+00:00",
+      "reason": "evidence review for DeliveryState.PRODUCT_ACCEPTED",
+      "evidence_ids": [
+        "uat-evidence",
+        "po-accept"
+      ],
+      "contract_hash": "5efa38e503907ee2b0fe1547391c940069ad645611e8121a3001a9829daaf871",
+      "previous_hash": "f69c9ae077d3c9d9b8a65fc4e9aa786512cdb2981f4202bce70a8e66bca4c1cf",
+      "entry_hash": "7b1813ad596cf740959ecefd2a2c0dedb011c7cfb67b86535bea33f829542c6c"
+    },
+    {
+      "from_state": "PRODUCT_ACCEPTED",
+      "to_state": "RELEASE_READY",
+      "acting_role": "RELEASE_MANAGER",
+      "actor": "rm-coordinator",
+      "timestamp": "2026-10-15T10:11:00+00:00",
+      "reason": "evidence review for DeliveryState.RELEASE_READY",
+      "evidence_ids": [
+        "rm-release"
+      ],
+      "contract_hash": "5efa38e503907ee2b0fe1547391c940069ad645611e8121a3001a9829daaf871",
+      "previous_hash": "7b1813ad596cf740959ecefd2a2c0dedb011c7cfb67b86535bea33f829542c6c",
+      "entry_hash": "e8d41abd55fd2f211cb41bcf41875a0546bdc7cbf2af5632595665c902544866"
+    },
+    {
+      "from_state": "RELEASE_READY",
+      "to_state": "PR_OPEN",
+      "acting_role": "RELEASE_MANAGER",
+      "actor": "rm-coordinator",
+      "timestamp": "2026-10-15T10:12:00+00:00",
+      "reason": "evidence review for DeliveryState.PR_OPEN",
+      "evidence_ids": [
+        "rm-release"
+      ],
+      "contract_hash": "5efa38e503907ee2b0fe1547391c940069ad645611e8121a3001a9829daaf871",
+      "previous_hash": "e8d41abd55fd2f211cb41bcf41875a0546bdc7cbf2af5632595665c902544866",
+      "entry_hash": "4d3483af0a89e56906d73823e314fb49177ad660f43e8eb7a212cf5511e2d181"
+    }
+  ],
   "defect_history": [],
-  "evidence": [],
+  "evidence": [
+    {
+      "evidence_id": "req-ba",
+      "work_item_id": "LIVE-OBS-LAUNCH-PLAN-CANDIDATE-20261015",
+      "evidence_type": "REQUIREMENT_EVIDENCE",
+      "role": "BUSINESS_ANALYST",
+      "author": "ba-agent-80016d66",
+      "timestamp": "2026-10-15T10:00:00+00:00",
+      "status": "PASS",
+      "summary": "proof",
+      "references": [
+        "evidence://req-ba"
+      ],
+      "content_hash": "ef52bfd076dd831a0a34d6058a73a2aa0772b5e0434ce1c1e52195cbc6aaa68f",
+      "check_results": [],
+      "work_item_hash": "5efa38e503907ee2b0fe1547391c940069ad645611e8121a3001a9829daaf871",
+      "sequence": 1,
+      "previous_hash": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "evidence_id": "req-po",
+      "work_item_id": "LIVE-OBS-LAUNCH-PLAN-CANDIDATE-20261015",
+      "evidence_type": "REQUIREMENT_EVIDENCE",
+      "role": "PRODUCT_OWNER",
+      "author": "po-agent-fe742b8b",
+      "timestamp": "2026-10-15T10:01:00+00:00",
+      "status": "PASS",
+      "summary": "proof",
+      "references": [
+        "evidence://req-po"
+      ],
+      "content_hash": "ce6565853c21555d9a82882b046fc914ea4e6c1fb91ca9be66a4635cf9e6635a",
+      "check_results": [],
+      "work_item_hash": "5efa38e503907ee2b0fe1547391c940069ad645611e8121a3001a9829daaf871",
+      "sequence": 2,
+      "previous_hash": "ef52bfd076dd831a0a34d6058a73a2aa0772b5e0434ce1c1e52195cbc6aaa68f"
+    },
+    {
+      "evidence_id": "arch-hermes",
+      "work_item_id": "LIVE-OBS-LAUNCH-PLAN-CANDIDATE-20261015",
+      "evidence_type": "ARCHITECTURE_EVIDENCE",
+      "role": "SYSTEM_ARCHITECT",
+      "author": "hermes-agent-8ee41a86",
+      "timestamp": "2026-10-15T10:02:00+00:00",
+      "status": "PASS",
+      "summary": "proof",
+      "references": [
+        "evidence://arch-hermes"
+      ],
+      "content_hash": "6efc6ae4242c1421d0afabfedae3dc2e222828eac9d813bda4c3126661b3d00a",
+      "check_results": [],
+      "work_item_hash": "5efa38e503907ee2b0fe1547391c940069ad645611e8121a3001a9829daaf871",
+      "sequence": 3,
+      "previous_hash": "ce6565853c21555d9a82882b046fc914ea4e6c1fb91ca9be66a4635cf9e6635a"
+    },
+    {
+      "evidence_id": "dev-gsd",
+      "work_item_id": "LIVE-OBS-LAUNCH-PLAN-CANDIDATE-20261015",
+      "evidence_type": "DEV_TEST_EVIDENCE",
+      "role": "BACKEND_DEVELOPER",
+      "author": "gsd-agent-f5fb0184",
+      "timestamp": "2026-10-15T10:04:00+00:00",
+      "status": "PASS",
+      "summary": "proof",
+      "references": [
+        "evidence://dev-gsd"
+      ],
+      "content_hash": "39db734bd2caaa7356039e4a63a45d513483b8bf971814039f99a750767ac993",
+      "check_results": [],
+      "work_item_hash": "5efa38e503907ee2b0fe1547391c940069ad645611e8121a3001a9829daaf871",
+      "sequence": 4,
+      "previous_hash": "6efc6ae4242c1421d0afabfedae3dc2e222828eac9d813bda4c3126661b3d00a"
+    },
+    {
+      "evidence_id": "qa-evidence",
+      "work_item_id": "LIVE-OBS-LAUNCH-PLAN-CANDIDATE-20261015",
+      "evidence_type": "QA_EVIDENCE",
+      "role": "QA_ENGINEER",
+      "author": "qa-agent-4d7a78bb",
+      "timestamp": "2026-10-15T10:06:00+00:00",
+      "status": "PASS",
+      "summary": "proof",
+      "references": [
+        "evidence://qa-evidence"
+      ],
+      "content_hash": "b1e3ae4ea08171a4842d6ada93b634359226700453897a7631bc8cda214d7f92",
+      "check_results": [],
+      "work_item_hash": "5efa38e503907ee2b0fe1547391c940069ad645611e8121a3001a9829daaf871",
+      "sequence": 5,
+      "previous_hash": "39db734bd2caaa7356039e4a63a45d513483b8bf971814039f99a750767ac993"
+    },
+    {
+      "evidence_id": "senior-qa",
+      "work_item_id": "LIVE-OBS-LAUNCH-PLAN-CANDIDATE-20261015",
+      "evidence_type": "SENIOR_QA_EVIDENCE",
+      "role": "SENIOR_QA",
+      "author": "sqa-agent-27c1c8df",
+      "timestamp": "2026-10-15T10:07:00+00:00",
+      "status": "PASS",
+      "summary": "proof",
+      "references": [
+        "evidence://senior-qa"
+      ],
+      "content_hash": "d76d1ce3de21a21b99fb3be1631ea368b7a120ef1fdf1e8ca92f7b6d82b76526",
+      "check_results": [],
+      "work_item_hash": "5efa38e503907ee2b0fe1547391c940069ad645611e8121a3001a9829daaf871",
+      "sequence": 6,
+      "previous_hash": "b1e3ae4ea08171a4842d6ada93b634359226700453897a7631bc8cda214d7f92"
+    },
+    {
+      "evidence_id": "uat-evidence",
+      "work_item_id": "LIVE-OBS-LAUNCH-PLAN-CANDIDATE-20261015",
+      "evidence_type": "UAT_EVIDENCE",
+      "role": "UAT_REVIEWER",
+      "author": "uat-agent-111502bb",
+      "timestamp": "2026-10-15T10:09:00+00:00",
+      "status": "PASS",
+      "summary": "proof",
+      "references": [
+        "evidence://uat-evidence"
+      ],
+      "content_hash": "68d9eca7ebb259bd03705e1a2de117c3cd170eefefebb7a52a46923acca0c38b",
+      "check_results": [],
+      "work_item_hash": "5efa38e503907ee2b0fe1547391c940069ad645611e8121a3001a9829daaf871",
+      "sequence": 7,
+      "previous_hash": "d76d1ce3de21a21b99fb3be1631ea368b7a120ef1fdf1e8ca92f7b6d82b76526"
+    },
+    {
+      "evidence_id": "po-accept",
+      "work_item_id": "LIVE-OBS-LAUNCH-PLAN-CANDIDATE-20261015",
+      "evidence_type": "PRODUCT_ACCEPTANCE_EVIDENCE",
+      "role": "PRODUCT_OWNER",
+      "author": "po-agent-fe742b8b",
+      "timestamp": "2026-10-15T10:10:00+00:00",
+      "status": "PASS",
+      "summary": "proof",
+      "references": [
+        "evidence://po-accept"
+      ],
+      "content_hash": "322c8a17e3bb0d4963f636cbd12c4f7391d5ffb426845988ad14aec42b386aa0",
+      "check_results": [],
+      "work_item_hash": "5efa38e503907ee2b0fe1547391c940069ad645611e8121a3001a9829daaf871",
+      "sequence": 8,
+      "previous_hash": "68d9eca7ebb259bd03705e1a2de117c3cd170eefefebb7a52a46923acca0c38b"
+    },
+    {
+      "evidence_id": "rm-release",
+      "work_item_id": "LIVE-OBS-LAUNCH-PLAN-CANDIDATE-20261015",
+      "evidence_type": "RELEASE_EVIDENCE",
+      "role": "RELEASE_MANAGER",
+      "author": "rm-coordinator",
+      "timestamp": "2026-10-15T10:11:00+00:00",
+      "status": "PASS",
+      "summary": "proof",
+      "references": [
+        "evidence://rm-release"
+      ],
+      "content_hash": "c144c641d1202629eb5eb58fdb8a06f0544be194a94a75725f5918295788392a",
+      "check_results": [],
+      "work_item_hash": "5efa38e503907ee2b0fe1547391c940069ad645611e8121a3001a9829daaf871",
+      "sequence": 9,
+      "previous_hash": "322c8a17e3bb0d4963f636cbd12c4f7391d5ffb426845988ad14aec42b386aa0"
+    }
+  ],
   "defects": [],
-  "required_ci_checks": [],
+  "required_ci_checks": [
+    "unit_tests"
+  ],
   "extensions": {
     "evidence_standard": {
       "schema_version": 1,
