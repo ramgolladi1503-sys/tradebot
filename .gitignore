@@ -101,3 +101,5 @@ runtime/upstox_candidate_replay/
 runtime/strategy_validation/*.json
 runtime/strategy_validation/*.md
 *.parquet
+runtime/shadow_evaluator_live_state.json*
+runtime/test_*.json*

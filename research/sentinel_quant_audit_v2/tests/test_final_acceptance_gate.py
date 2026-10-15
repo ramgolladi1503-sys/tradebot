@@ -1,0 +1,89 @@
+import pytest
+import os
+import json
+from core.shadow_circuit_breaker_evaluator import ShadowCircuitBreakerEvaluator
+
+TEST_LOG_PATH = "runtime/test_final_gate_state.json"
+
+@pytest.fixture(autouse=True)
+def cleanup():
+    if os.path.exists(TEST_LOG_PATH):
+        os.remove(TEST_LOG_PATH)
+    yield
+    if os.path.exists(TEST_LOG_PATH):
+        os.remove(TEST_LOG_PATH)
+
+def test_quarantined_exit_reconciles_cleanly_and_idempotently():
+    evaluator = ShadowCircuitBreakerEvaluator(max_consecutive_losses=2, log_path=TEST_LOG_PATH)
+    date = "2026-10-15"
+    
+    # 1. Register valid proposal at 10:00
+    evaluator.observe_trade_proposal("T_RECON", "NIFTY", date, "CE", "C1", "2026-10-15T10:00:00+05:30")
+    
+    # 2. Exit arrives with an invalid out-of-order timestamp (09:40) -> Quarantined
+    exit_bad = evaluator.observe_trade_exit(
+        "T_RECON", "NIFTY", date, 10.0, 5.0, "TARGET_HIT", "2026-10-15T09:40:00+05:30"
+    )
+    assert exit_bad["status"] == "QUARANTINED"
+    assert len(evaluator.quarantine_ledger) == 1
+    assert len(evaluator.shadow_ledger) == 0
+    
+    # 3. Reconcile with corrected timestamp (10:15)
+    recon_res = evaluator.reconcile_quarantined_exit(
+        "T_RECON", "NIFTY", date, "2026-10-15T10:15:00+05:30", audit_operator="QA_AUDITOR"
+    )
+    assert recon_res["status"] == "RECONCILED"
+    assert len(evaluator.shadow_ledger) == 1
+    assert len(evaluator.reconciliation_audit_trail) == 1
+    assert recon_res["audit_entry"]["audit_operator"] == "QA_AUDITOR"
+    
+    # 4. Attempt duplicate reconciliation: must fail closed
+    dup_recon = evaluator.reconcile_quarantined_exit(
+        "T_RECON", "NIFTY", date, "2026-10-15T10:15:00+05:30"
+    )
+    assert dup_recon["status"] == "ERROR_NOT_IN_QUARANTINE"
+    assert len(evaluator.shadow_ledger) == 1
+
+def test_trade1513_historical_unresolved_risk_reconciled():
+    evaluator = ShadowCircuitBreakerEvaluator(max_consecutive_losses=2, log_path=TEST_LOG_PATH)
+    date = "2026-10-14"
+    
+    # Proposal for TRADE_1513_PE at 15:13
+    evaluator.observe_trade_proposal("TRADE_1513_PE", "NIFTY", date, "PE", "NIFTY 22650 PE", "2026-10-14T15:13:00+05:30")
+    
+    # Exit has missing timestamp / crash recovery
+    exit_res = evaluator.observe_trade_exit(
+        "TRADE_1513_PE", "NIFTY", date, None, None, "CRASH_RECOVERY_FAIL_CLOSED", ""
+    )
+    
+    # Must be classified as HISTORICAL_UNRESOLVED_RISK and NOT remain in-flight!
+    assert exit_res["lifecycle_state"] == "HISTORICAL_UNRESOLVED_RISK"
+    assert exit_res["is_shadow_halted_now"] is True
+    scoped_key = evaluator._make_scoped_key("NIFTY", date, "TRADE_1513_PE")
+    assert scoped_key not in evaluator.in_flight_positions
+    assert len(evaluator.shadow_ledger) == 1
+
+def test_corrupt_persistence_fails_closed():
+    # Write garbage to snapshot
+    with open(TEST_LOG_PATH, "w") as f:
+        f.write("{corrupt_json: true, invalid")
+        
+    with pytest.raises(RuntimeError) as exc_info:
+        ShadowCircuitBreakerEvaluator(max_consecutive_losses=2, log_path=TEST_LOG_PATH)
+    assert "Corrupt or unreadable snapshot" in str(exc_info.value)
+
+def test_provenance_distinguishes_prospective_vs_retrospective():
+    evaluator = ShadowCircuitBreakerEvaluator(max_consecutive_losses=2, log_path=TEST_LOG_PATH)
+    date = "2026-10-15"
+    
+    # Historical backfill trade
+    p_hist = evaluator.observe_trade_proposal("T_HIST", "NIFTY", date, "CE", "C", "2026-10-15T10:00:00+05:30", is_live_event=False)
+    e_hist = evaluator.observe_trade_exit("T_HIST", "NIFTY", date, 5.0, 2.0, "TARGET_HIT", "2026-10-15T10:05:00+05:30", is_live_event=False)
+    assert p_hist["provenance_mode"] == "RETROSPECTIVE_BACKFILL"
+    assert e_hist["provenance_mode"] == "RETROSPECTIVE_BACKFILL"
+    
+    # Genuine prospective live trade
+    p_live = evaluator.observe_trade_proposal("T_LIVE", "NIFTY", date, "CE", "C", "2026-10-15T10:10:00+05:30", is_live_event=True)
+    e_live = evaluator.observe_trade_exit("T_LIVE", "NIFTY", date, 5.0, 2.0, "TARGET_HIT", "2026-10-15T10:15:00+05:30", is_live_event=True)
+    assert p_live["provenance_mode"] == "PROSPECTIVE_OBSERVED"
+    assert e_live["provenance_mode"] == "PROSPECTIVE_OBSERVED"

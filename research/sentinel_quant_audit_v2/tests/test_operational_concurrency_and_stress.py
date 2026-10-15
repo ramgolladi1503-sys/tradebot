@@ -59,15 +59,15 @@ def test_full_backfill_repeated_polling_and_restart_lifecycle():
     
     # 4. New Prospective Live Event Arrives (Trade 4)
     new_prop = restarted.observe_trade_proposal(
-        "N_4", "NIFTY", date, "CE", "C", "2026-10-15T10:15:00+05:30", ingest_mode="PROSPECTIVE_LIVE"
+        "N_4", "NIFTY", date, "CE", "C", "2026-10-15T10:16:00+05:30", is_live_event=True
     )
     assert new_prop["shadow_decision"] == "PERMITTED"
-    assert new_prop["ingest_mode"] == "PROSPECTIVE_LIVE"
+    assert new_prop["provenance_mode"] == "PROSPECTIVE_OBSERVED"
     
     new_exit = restarted.observe_trade_exit(
-        "N_4", "NIFTY", date, 10.0, 6.0, "TARGET_HIT", "2026-10-15T10:20:00+05:30", ingest_mode="PROSPECTIVE_LIVE"
+        "N_4", "NIFTY", date, 10.0, 6.0, "TARGET_HIT", "2026-10-15T10:20:00+05:30", is_live_event=True
     )
-    assert new_exit["ingest_mode"] == "PROSPECTIVE_LIVE"
+    assert new_exit["provenance_mode"] == "PROSPECTIVE_OBSERVED"
     assert len(restarted.shadow_ledger) == 7
     
     # 5. Verify Unmatched Exit is quarantined without corrupting count

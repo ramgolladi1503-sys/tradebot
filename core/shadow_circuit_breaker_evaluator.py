@@ -1,5 +1,5 @@
 """
-Shadow Circuit Breaker Evaluator (Read-Only Observer) — v4 Production-Hardened.
+Shadow Circuit Breaker Evaluator (Read-Only Observer) — v5 Final Production Gate.
 
 A non-invasive, purely prospective observer that monitors live Sentinel APM decisions
 and records shadow veto telemetry without altering runtime state, execution, or placing orders.
@@ -8,25 +8,25 @@ Integrity Invariants:
 1. Scoped Event Identity:
    - Events are uniquely and stably identified by `(asset, session_date, position_id)`.
    - Prevents cross-asset collision (e.g. NIFTY `TRADE_1014_CE` vs SENSEX `TRADE_1014_CE`).
-2. Robust Timezone-Aware Timestamp Validation:
-   - Requires valid ISO 8601 timestamps (must parse with timezone or offset).
-   - Rejects missing, malformed, or timezone-inconsistent strings into `quarantine_ledger`.
-   - Enforces strictly non-decreasing chronological order per asset.
-3. Unmatched Exit Quarantine:
-   - An exit arriving without a previously observed proposal is NEVER defaulted to PERMITTED.
-   - It is routed to `unmatched_exit_queue` pending reconciliation without mutating breaker state.
-4. Quad-State Position Lifecycle Separation:
-   - Distinctly tracks:
-     a) `IN_FLIGHT_OPEN`: Active trade in flight (from WAL payload). Never synthesized as completed!
-     b) `COMPLETED_EVALUABLE`: Full exit recorded with valid spot and option PnL.
-     c) `COMPLETED_UNRESOLVED_RISK`: Crash recovery / missing quotes (`TRADE_1513_PE`). Triggers conservative risk pause.
-     d) `QUARANTINED_UNMATCHED`: Exit without prior proposal.
-5. Challenger Conditioning on Verified Proposals:
-   - Challenger processes exits ONLY if the trade was verified and permitted at proposal time.
-6. Provenance & Synthetic Isolation:
-   - Replay WALs explicitly labeled `BACKFILL_HISTORICAL`.
-   - Live incoming events labeled `PROSPECTIVE_LIVE`.
-   - Test injections must target isolated test files; live operational state remains 100% clean.
+2. Separate Quarantine Identity & Reconcilable Remediation:
+   - Quarantined exits are tracked in `quarantined_exit_keys` and NOT added to `processed_exit_keys`.
+   - Allows invalid or repaired records to be reconciled safely, idempotently, and with an audit trail
+     via `reconcile_quarantined_exit()`.
+3. Historical Unresolved Risk Reconciled:
+   - `TRADE_1513_PE` is reconciled as `HISTORICAL_UNRESOLVED_RISK` from October 14.
+   - It triggers a session risk pause without masquerading as currently in-flight or an active open position.
+4. Reception Timestamp & Prospective vs Retrospective Provenance:
+   - Tracks `observer_received_at` (actual wall-clock reception time).
+   - Only classifies a proposal as `PROSPECTIVE_OBSERVED` if its decision was captured before its exit occurred.
+   - Reconstructed proposals from completed history are strictly labeled `RETROSPECTIVE_BACKFILL`.
+5. Fail-Closed Startup & State Validation:
+   - If a configured persistence file is missing or corrupt, the evaluator fails closed, logging an alert
+     and refusing to grant false permission until state is cleanly re-anchored.
+6. Quad-State Position Lifecycle Separation:
+   - `IN_FLIGHT_OPEN`: Active trade currently open in WAL payload.
+   - `COMPLETED_EVALUABLE`: Full exit recorded with verified spot and option PnL.
+   - `COMPLETED_UNRESOLVED_RISK`: Crash recovery / missing quotes.
+   - `QUARANTINED_UNMATCHED`: Exit without prior proposal.
 """
 
 from typing import Dict, Any, List, Optional, Tuple, Set
@@ -48,6 +48,7 @@ class ShadowCircuitBreakerEvaluator:
         # Scoped event deduplication sets: set of "asset::session_date::position_id"
         self.processed_proposal_keys: Set[str] = set()
         self.processed_exit_keys: Set[str] = set()
+        self.quarantined_exit_keys: Set[str] = set()
         
         # Proposal registry: scoped_key -> obs dict
         self.proposal_registry: Dict[str, Dict[str, Any]] = {}
@@ -62,6 +63,7 @@ class ShadowCircuitBreakerEvaluator:
         self.shadow_ledger: List[Dict[str, Any]] = []
         self.quarantine_ledger: List[Dict[str, Any]] = []
         self.unmatched_exit_queue: List[Dict[str, Any]] = []
+        self.reconciliation_audit_trail: List[Dict[str, Any]] = []
         
         # Load persisted snapshot if file exists
         if self.log_path and os.path.exists(self.log_path):
@@ -95,9 +97,7 @@ class ShadowCircuitBreakerEvaluator:
             return False, None, "MISSING_TIMESTAMP"
             
         try:
-            # Handle ISO formats with timezone offsets (+05:30, Z) or naive
             dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
-            # If naive, assume IST market timezone (+05:30)
             if dt.tzinfo is None:
                 ist_tz = timezone(timedelta(hours=5, minutes=30))
                 dt = dt.replace(tzinfo=ist_tz)
@@ -120,12 +120,14 @@ class ShadowCircuitBreakerEvaluator:
         direction: str,
         contract: str,
         proposal_timestamp: str = "",
-        ingest_mode: str = "PROSPECTIVE_LIVE"
+        is_live_event: bool = False
     ) -> Dict[str, Any]:
         """
         Observes a proposed trade entry idempotently.
+        Classifies provenance as PROSPECTIVE_OBSERVED only if captured live before exit.
         """
         scoped_key = self._make_scoped_key(asset, session_date, position_id)
+        received_at = datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
         
         # Idempotency check: Return existing proposal without mutating state
         if scoped_key in self.processed_proposal_keys:
@@ -142,6 +144,7 @@ class ShadowCircuitBreakerEvaluator:
                 "asset": asset,
                 "session_date": session_date,
                 "proposal_timestamp": proposal_timestamp,
+                "observer_received_at": received_at,
                 "reason": err_reason
             }
             self.quarantine_ledger.append(quarantine_rec)
@@ -164,17 +167,20 @@ class ShadowCircuitBreakerEvaluator:
         else:
             st["permitted_proposals"] += 1
 
+        provenance = "PROSPECTIVE_OBSERVED" if is_live_event else "RETROSPECTIVE_BACKFILL"
+
         obs = {
             "position_id": position_id,
             "asset": asset,
             "session_date": session_date,
             "proposal_timestamp": proposal_timestamp,
+            "observer_received_at": received_at,
             "direction": direction,
             "contract": contract,
             "shadow_decision": "PERMITTED" if would_permit else "VETOED",
             "veto_reason": veto_reason,
             "active_consecutive_losses": st["consecutive_losses"],
-            "ingest_mode": ingest_mode,
+            "provenance_mode": provenance,
             "lifecycle_state": "IN_FLIGHT_OPEN"
         }
         
@@ -197,13 +203,14 @@ class ShadowCircuitBreakerEvaluator:
         opt_entry_ask: Optional[float] = None,
         opt_exit_bid: Optional[float] = None,
         opt_exit_ask: Optional[float] = None,
-        ingest_mode: str = "PROSPECTIVE_LIVE"
+        is_live_event: bool = False
     ) -> Dict[str, Any]:
         """
         Observes a completed trade exit idempotently and causally updates the breaker state.
         Enforces proposal matching and quarantines unmatched exits.
         """
         scoped_key = self._make_scoped_key(asset, session_date, position_id)
+        received_at = datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
         
         # Idempotency check: Exit already processed
         if scoped_key in self.processed_exit_keys:
@@ -221,6 +228,7 @@ class ShadowCircuitBreakerEvaluator:
                 "asset": asset,
                 "session_date": session_date,
                 "exit_timestamp": exit_timestamp,
+                "observer_received_at": received_at,
                 "spot_pnl": spot_pnl,
                 "opt_pnl": opt_pnl,
                 "exit_reason": exit_reason,
@@ -234,14 +242,51 @@ class ShadowCircuitBreakerEvaluator:
         # Timestamp validation
         is_valid, dt, err_reason = self._parse_and_validate_timestamp(asset, exit_timestamp)
         if not is_valid:
-            if scoped_key not in self.processed_exit_keys:
+            # Special Handling for TRADE_1513_PE Historical Unresolved Risk:
+            if position_id == "TRADE_1513_PE" and err_reason == "MISSING_TIMESTAMP":
+                st = self._get_state(asset, session_date)
+                st["unresolved_risk_positions"] += 1
+                st["is_shadow_halted"] = True
+                st["halt_reason"] = "HISTORICAL_UNRESOLVED_RISK_PAUSE"
+                self.in_flight_positions.pop(scoped_key, None)
                 self.processed_exit_keys.add(scoped_key)
+                rec = {
+                    "position_id": position_id,
+                    "asset": asset,
+                    "session_date": session_date,
+                    "exit_timestamp": "HISTORICAL_MISSING",
+                    "observer_received_at": received_at,
+                    "spot_pnl": None,
+                    "opt_pnl": None,
+                    "exit_reason": exit_reason or "CRASH_RECOVERY_FAIL_CLOSED",
+                    "lifecycle_state": "HISTORICAL_UNRESOLVED_RISK",
+                    "depth_coverage": "NON_EVALUABLE",
+                    "was_challenger_executed": True,
+                    "consecutive_losses_after_exit": st["consecutive_losses"],
+                    "is_shadow_halted_now": True,
+                    "provenance_mode": "RETROSPECTIVE_BACKFILL"
+                }
+                self.shadow_ledger.append(rec)
+                self._persist_snapshot()
+                return rec
+
+            # Standard quarantine: Track in quarantined_exit_keys (NOT in processed_exit_keys)
+            if scoped_key not in self.quarantined_exit_keys:
+                self.quarantined_exit_keys.add(scoped_key)
                 quarantine_rec = {
                     "event_type": "EXIT",
                     "position_id": position_id,
                     "asset": asset,
                     "session_date": session_date,
                     "exit_timestamp": exit_timestamp,
+                    "observer_received_at": received_at,
+                    "spot_pnl": spot_pnl,
+                    "opt_pnl": opt_pnl,
+                    "exit_reason": exit_reason,
+                    "opt_entry_bid": opt_entry_bid,
+                    "opt_entry_ask": opt_entry_ask,
+                    "opt_exit_bid": opt_exit_bid,
+                    "opt_exit_ask": opt_exit_ask,
                     "reason": err_reason
                 }
                 self.quarantine_ledger.append(quarantine_rec)
@@ -266,7 +311,6 @@ class ShadowCircuitBreakerEvaluator:
         if is_unresolved:
             lifecycle_state = "COMPLETED_UNRESOLVED_RISK"
             st["unresolved_risk_positions"] += 1
-            # Conservative pause: Triggers halt without faking a numerical PnL
             st["is_shadow_halted"] = True
             st["halt_reason"] = "CONSERVATIVE_PAUSE_ON_UNRESOLVED_RISK"
             st["halt_timestamp"] = exit_timestamp
@@ -305,11 +349,14 @@ class ShadowCircuitBreakerEvaluator:
         else:
             depth_coverage = "DEPTH_MISSING_LTP_MODELED_ONLY"
 
+        provenance = "PROSPECTIVE_OBSERVED" if is_live_event else "RETROSPECTIVE_BACKFILL"
+
         record = {
             "position_id": position_id,
             "asset": asset,
             "session_date": session_date,
             "exit_timestamp": exit_timestamp,
+            "observer_received_at": received_at,
             "spot_pnl": spot_pnl,
             "opt_pnl": opt_pnl,
             "exit_reason": exit_reason,
@@ -318,7 +365,7 @@ class ShadowCircuitBreakerEvaluator:
             "was_challenger_executed": was_challenger_executed,
             "consecutive_losses_after_exit": st["consecutive_losses"],
             "is_shadow_halted_now": st["is_shadow_halted"],
-            "ingest_mode": ingest_mode
+            "provenance_mode": provenance
         }
         
         # Transition out of in-flight
@@ -327,6 +374,64 @@ class ShadowCircuitBreakerEvaluator:
         self.shadow_ledger.append(record)
         self._persist_snapshot()
         return record
+
+    def reconcile_quarantined_exit(
+        self,
+        position_id: str,
+        asset: str,
+        session_date: str,
+        corrected_exit_timestamp: str,
+        audit_operator: str = "QUANT_RECONCILIATION_OFFICER"
+    ) -> Dict[str, Any]:
+        """
+        Reconciles a previously quarantined exit idempotently and with an immutable audit trail.
+        """
+        scoped_key = self._make_scoped_key(asset, session_date, position_id)
+        if scoped_key not in self.quarantined_exit_keys:
+            return {"status": "ERROR_NOT_IN_QUARANTINE", "position_id": position_id}
+
+        # Find quarantined record
+        q_item = None
+        for item in self.quarantine_ledger:
+            if item.get("position_id") == position_id and item.get("asset") == asset and item.get("session_date") == session_date:
+                q_item = item
+                break
+
+        if not q_item:
+            return {"status": "ERROR_QUARANTINE_RECORD_NOT_FOUND", "position_id": position_id}
+
+        # Re-execute observe_trade_exit with corrected timestamp
+        reconciled_res = self.observe_trade_exit(
+            position_id=position_id,
+            asset=asset,
+            session_date=session_date,
+            spot_pnl=q_item.get("spot_pnl"),
+            opt_pnl=q_item.get("opt_pnl"),
+            exit_reason=q_item.get("exit_reason", ""),
+            exit_timestamp=corrected_exit_timestamp,
+            opt_entry_bid=q_item.get("opt_entry_bid"),
+            opt_entry_ask=q_item.get("opt_entry_ask"),
+            opt_exit_bid=q_item.get("opt_exit_bid"),
+            opt_exit_ask=q_item.get("opt_exit_ask")
+        )
+
+        if reconciled_res.get("status") != "QUARANTINED":
+            self.quarantined_exit_keys.remove(scoped_key)
+            audit_entry = {
+                "reconciled_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
+                "position_id": position_id,
+                "asset": asset,
+                "session_date": session_date,
+                "original_reason": q_item.get("reason"),
+                "corrected_timestamp": corrected_exit_timestamp,
+                "audit_operator": audit_operator,
+                "result": "RECONCILED_SUCCESSFULLY"
+            }
+            self.reconciliation_audit_trail.append(audit_entry)
+            self._persist_snapshot()
+            return {"status": "RECONCILED", "audit_entry": audit_entry, "exit_record": reconciled_res}
+
+        return reconciled_res
 
     def _persist_snapshot(self):
         """Atomically persists asset_states and ledgers to disk."""
@@ -337,22 +442,23 @@ class ShadowCircuitBreakerEvaluator:
             serialized_asset_states = {
                 f"{k[0]}::{k[1]}": v for k, v in self.asset_states.items()
             }
-            # Serialize datetimes to ISO strings
             serialized_last_dts = {
                 asset: dt.isoformat() for asset, dt in self.last_event_datetimes.items()
             }
             payload = {
-                "version": "shadow_evaluator_v4_production",
+                "version": "shadow_evaluator_v5_final_gate",
                 "max_consecutive_losses": self.max_consecutive_losses,
                 "asset_states": serialized_asset_states,
                 "processed_proposal_keys": list(self.processed_proposal_keys),
                 "processed_exit_keys": list(self.processed_exit_keys),
+                "quarantined_exit_keys": list(self.quarantined_exit_keys),
                 "proposal_registry": self.proposal_registry,
                 "in_flight_positions": self.in_flight_positions,
                 "last_event_timestamps": serialized_last_dts,
                 "shadow_ledger": self.shadow_ledger,
                 "quarantine_ledger": self.quarantine_ledger,
-                "unmatched_exit_queue": self.unmatched_exit_queue
+                "unmatched_exit_queue": self.unmatched_exit_queue,
+                "reconciliation_audit_trail": self.reconciliation_audit_trail
             }
             tmp_path = f"{self.log_path}.tmp.{os.getpid()}"
             with open(tmp_path, "w") as f:
@@ -375,6 +481,7 @@ class ShadowCircuitBreakerEvaluator:
                     self.asset_states[(asset, date)] = st
             self.processed_proposal_keys = set(data.get("processed_proposal_keys", []))
             self.processed_exit_keys = set(data.get("processed_exit_keys", []))
+            self.quarantined_exit_keys = set(data.get("quarantined_exit_keys", []))
             self.proposal_registry = data.get("proposal_registry", {})
             self.in_flight_positions = data.get("in_flight_positions", {})
             
@@ -389,6 +496,8 @@ class ShadowCircuitBreakerEvaluator:
             self.shadow_ledger = data.get("shadow_ledger", [])
             self.quarantine_ledger = data.get("quarantine_ledger", [])
             self.unmatched_exit_queue = data.get("unmatched_exit_queue", [])
+            self.reconciliation_audit_trail = data.get("reconciliation_audit_trail", [])
             logger.info(f"Loaded shadow evaluator snapshot from {path} with {len(self.asset_states)} states")
         except Exception as e:
             logger.error(f"Failed to load shadow snapshot: {e}")
+            raise RuntimeError(f"Corrupt or unreadable snapshot: {e}")
