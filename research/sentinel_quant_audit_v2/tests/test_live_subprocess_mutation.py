@@ -18,47 +18,32 @@ import subprocess
 import pytest
 from datetime import datetime
 
-FIXTURE_DIR = "/private/tmp/tradebot-sentinel-quant-audit/research/sentinel_quant_audit_v2/fixtures"
-TEST_NIFTY_WAL = os.path.join(FIXTURE_DIR, "test_dynamic_nifty_wal.json")
-TEST_SENSEX_WAL = os.path.join(FIXTURE_DIR, "test_dynamic_sensex_wal.json")
-TEST_STATE_PATH = os.path.join(FIXTURE_DIR, "test_dynamic_observer_state.json")
-RUNNER_SCRIPT = "/private/tmp/tradebot-sentinel-quant-audit/scripts/run_prospective_shadow_observer.py"
+# Repository-relative path resolution
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
+RUNNER_SCRIPT = os.path.join(REPO_ROOT, "scripts", "run_prospective_shadow_observer.py")
 
-@pytest.fixture(autouse=True)
-def setup_teardown_fixtures():
-    os.makedirs(FIXTURE_DIR, exist_ok=True)
-    # Clean prior test files
-    for p in [TEST_NIFTY_WAL, TEST_SENSEX_WAL, TEST_STATE_PATH]:
-        if os.path.exists(p):
-            os.remove(p)
-            
-    # Initialize base empty WAL fixtures
+def test_live_os_subprocess_wal_mutation_and_restart_recovery(tmp_path):
+    test_nifty_wal = str(tmp_path / "test_dynamic_nifty_wal.json")
+    test_sensex_wal = str(tmp_path / "test_dynamic_sensex_wal.json")
+    test_state_path = str(tmp_path / "test_dynamic_observer_state.json")
+    
+    # Initialize base empty WAL fixtures in isolated tmp_path
     initial_wal = {
         "state": "IDLE",
         "payload": None,
         "last_completed_trade": None,
         "trade_history": []
     }
-    with open(TEST_NIFTY_WAL, "w") as f:
+    with open(test_nifty_wal, "w") as f:
         json.dump(initial_wal, f)
-    with open(TEST_SENSEX_WAL, "w") as f:
+    with open(test_sensex_wal, "w") as f:
         json.dump(initial_wal, f)
-        
-    yield
-    
-    # Cleanup
-    for p in [TEST_NIFTY_WAL, TEST_SENSEX_WAL, TEST_STATE_PATH]:
-        if os.path.exists(p):
-            try:
-                os.remove(p)
-            except Exception:
-                pass
 
-def test_live_os_subprocess_wal_mutation_and_restart_recovery():
     env = os.environ.copy()
-    env["SHADOW_NIFTY_WAL_PATH"] = TEST_NIFTY_WAL
-    env["SHADOW_SENSEX_WAL_PATH"] = TEST_SENSEX_WAL
-    env["SHADOW_STATE_PATH"] = TEST_STATE_PATH
+    env["SHADOW_NIFTY_WAL_PATH"] = test_nifty_wal
+    env["SHADOW_SENSEX_WAL_PATH"] = test_sensex_wal
+    env["SHADOW_STATE_PATH"] = test_state_path
+    env["SHADOW_ALLOW_FRESH_INIT"] = "true"
     env["SHADOW_POLL_INTERVAL_SEC"] = "0.2"
     # Unset iteration cap to ensure true continuous daemon mode
     env.pop("SHADOW_MAX_POLL_ITERATIONS", None)
@@ -79,11 +64,13 @@ def test_live_os_subprocess_wal_mutation_and_restart_recovery():
         assert proc.poll() is None, "Observer process exited prematurely!"
         
         # 2. Mutate WAL while process is running: Append active open position in payload
+        # Ensure timestamp is within clock skew window (now)
+        now_iso = datetime.now().isoformat()
         open_trade = {
             "position_id": "TRADE_LIVE_100",
             "direction": "CE",
             "strike_contract": "NIFTY 23000 CE",
-            "entry_time": "2026-10-16T10:00:00+05:30",
+            "entry_time": now_iso,
             "entry_price": 23050.0
         }
         wal_with_open = {
@@ -92,17 +79,18 @@ def test_live_os_subprocess_wal_mutation_and_restart_recovery():
             "last_completed_trade": None,
             "trade_history": []
         }
-        with open(TEST_NIFTY_WAL, "w") as f:
+        with open(test_nifty_wal, "w") as f:
             json.dump(wal_with_open, f)
             
         # Give observer time to poll and ingest open trade
         time.sleep(0.8)
-        assert os.path.exists(TEST_STATE_PATH), "Observer failed to persist state snapshot!"
+        assert os.path.exists(test_state_path), "Observer failed to persist state snapshot!"
         
-        with open(TEST_STATE_PATH, "r") as f:
+        with open(test_state_path, "r") as f:
             st1 = json.load(f)
             
-        scoped_key = "NIFTY::2026-10-16::TRADE_LIVE_100"
+        session_date = now_iso[:10]
+        scoped_key = f"NIFTY::{session_date}::TRADE_LIVE_100"
         assert scoped_key in st1.get("in_flight_positions", {}), "Open trade not captured in in_flight_positions!"
         prop_rec = st1["proposal_registry"][scoped_key]
         assert prop_rec["provenance_mode"] == "PROSPECTIVE_OBSERVED", "Open trade must be PROSPECTIVE_OBSERVED!"
@@ -114,8 +102,8 @@ def test_live_os_subprocess_wal_mutation_and_restart_recovery():
             "position_id": "TRADE_LIVE_100",
             "direction": "CE",
             "strike_contract": "NIFTY 23000 CE",
-            "entry_time": "2026-10-16T10:00:00+05:30",
-            "exit_time": "2026-10-16T10:15:00+05:30",
+            "entry_time": now_iso,
+            "exit_time": datetime.now().isoformat(),
             "exit_reason": "TARGET_HIT",
             "pnl_pts": 15.0,
             "opt_pnl_pts": 8.5,
@@ -128,13 +116,13 @@ def test_live_os_subprocess_wal_mutation_and_restart_recovery():
             "last_completed_trade": completed_trade,
             "trade_history": [completed_trade]
         }
-        with open(TEST_NIFTY_WAL, "w") as f:
+        with open(test_nifty_wal, "w") as f:
             json.dump(wal_completed, f)
             
         # Allow observer to poll and ingest exit
         time.sleep(0.8)
         
-        with open(TEST_STATE_PATH, "r") as f:
+        with open(test_state_path, "r") as f:
             st2 = json.load(f)
             
         assert scoped_key not in st2.get("in_flight_positions", {}), "Completed trade must be removed from in_flight!"
@@ -162,7 +150,7 @@ def test_live_os_subprocess_wal_mutation_and_restart_recovery():
         proc2.wait(timeout=3)
         assert proc2.returncode == 0
         
-        with open(TEST_STATE_PATH, "r") as f:
+        with open(test_state_path, "r") as f:
             st3 = json.load(f)
             
         assert len(st3.get("shadow_ledger", [])) == 1, "Ledger count must remain exactly 1 across restart!"

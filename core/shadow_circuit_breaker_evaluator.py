@@ -38,9 +38,19 @@ from datetime import datetime, timezone, timedelta
 logger = logging.getLogger("sentinel.shadow_evaluator")
 
 class ShadowCircuitBreakerEvaluator:
-    def __init__(self, max_consecutive_losses: int = 2, log_path: Optional[str] = None):
+    def __init__(
+        self,
+        max_consecutive_losses: int = 2,
+        log_path: Optional[str] = None,
+        allow_fresh_init: bool = True,
+        require_existing_state: bool = False,
+        max_clock_skew_sec: Optional[float] = None
+    ):
         self.max_consecutive_losses = max_consecutive_losses
         self.log_path = log_path
+        self.allow_fresh_init = allow_fresh_init
+        self.require_existing_state = require_existing_state
+        self.max_clock_skew_sec = max_clock_skew_sec
         
         # State tracked per (asset, session_date) -> dict
         self.asset_states: Dict[Tuple[str, str], Dict[str, Any]] = {}
@@ -69,9 +79,19 @@ class ShadowCircuitBreakerEvaluator:
         self.operational_health: str = "HEALTHY"
         self.persistence_error: Optional[str] = None
         
-        # Load persisted snapshot if file exists
-        if self.log_path and os.path.exists(self.log_path):
-            self.load_snapshot(self.log_path)
+        # Explicit, Audited State Anchoring Invariant:
+        # If log_path is specified but missing, fail closed if require_existing_state=True or not allow_fresh_init
+        if self.log_path:
+            if os.path.exists(self.log_path):
+                self.load_snapshot(self.log_path)
+            else:
+                if self.require_existing_state or not self.allow_fresh_init:
+                    raise RuntimeError(
+                        f"CRITICAL_STATE_LOSS_PREVENTION: Expected persisted observer state at '{self.log_path}' is missing. "
+                        f"Accidental state loss must not silently reset circuit-breaker decisions. "
+                        f"Pass allow_fresh_init=True or provide verified state re-anchor to initialize cleanly."
+                    )
+                logger.info(f"Initialized fresh shadow evaluator state at {self.log_path}")
 
     def _make_scoped_key(self, asset: str, session_date: str, position_id: str) -> str:
         return f"{asset}::{session_date}::{position_id}"
@@ -171,6 +191,42 @@ class ShadowCircuitBreakerEvaluator:
                 "shadow_decision": "QUARANTINED",
                 "quarantine_reason": err_reason
             }
+
+        # Clock Skew & Stale Open Payload Protection for Prospective Events:
+        # A stale open WAL payload must not be promoted to genuine prospective evidence.
+        if is_live_event and dt is not None and self.max_clock_skew_sec is not None:
+            recv_dt = datetime.fromisoformat(received_at)
+            # Ensure both dt and recv_dt have tzinfo
+            ist_tz = timezone(timedelta(hours=5, minutes=30))
+            if dt.tzinfo is None:
+                dt_cmp = dt.replace(tzinfo=ist_tz)
+            else:
+                dt_cmp = dt
+            if recv_dt.tzinfo is None:
+                recv_cmp = recv_dt.replace(tzinfo=ist_tz)
+            else:
+                recv_cmp = recv_dt
+                
+            skew_sec = (recv_cmp - dt_cmp).total_seconds()
+            if skew_sec > self.max_clock_skew_sec:
+                quarantine_rec = {
+                    "event_type": "PROPOSAL",
+                    "position_id": position_id,
+                    "asset": asset,
+                    "session_date": session_date,
+                    "proposal_timestamp": proposal_timestamp,
+                    "observer_received_at": received_at,
+                    "skew_sec": skew_sec,
+                    "reason": f"PROSPECTIVE_CLOCK_SKEW_EXCEEDED: payload age {skew_sec:.1f}s > limit {self.max_clock_skew_sec:.1f}s"
+                }
+                self.quarantine_ledger.append(quarantine_rec)
+                self._persist_snapshot()
+                return {
+                    "position_id": position_id,
+                    "asset": asset,
+                    "shadow_decision": "QUARANTINED",
+                    "quarantine_reason": quarantine_rec["reason"]
+                }
 
         st = self._get_state(asset, session_date)
         st["total_proposals"] += 1
@@ -410,10 +466,13 @@ class ShadowCircuitBreakerEvaluator:
         asset: str,
         session_date: str,
         corrected_exit_timestamp: str,
-        audit_operator: str = "QUANT_RECONCILIATION_OFFICER"
+        audit_operator: str = "QUANT_RECONCILIATION_OFFICER",
+        reconcile_mode: str = "OFFLINE_AUDIT_REPLAY"
     ) -> Dict[str, Any]:
         """
         Reconciles a previously quarantined exit idempotently and with an immutable audit trail.
+        Late quarantine corrections are reconciled in a separate deterministic replay (OFFLINE_AUDIT_REPLAY)
+        to prevent retroactively rewriting active prospective experiment state.
         """
         scoped_key = self._make_scoped_key(asset, session_date, position_id)
         if scoped_key not in self.quarantined_exit_keys:
@@ -455,6 +514,7 @@ class ShadowCircuitBreakerEvaluator:
                 "original_reason": q_item.get("reason"),
                 "corrected_timestamp": corrected_exit_timestamp,
                 "audit_operator": audit_operator,
+                "reconcile_mode": reconcile_mode,
                 "result": "RECONCILED_SUCCESSFULLY"
             }
             self.reconciliation_audit_trail.append(audit_entry)

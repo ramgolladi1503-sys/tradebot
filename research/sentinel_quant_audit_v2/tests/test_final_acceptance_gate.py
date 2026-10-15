@@ -137,3 +137,36 @@ def test_late_quarantine_reconciliation_after_subsequent_events():
     assert len(evaluator_reloaded.shadow_ledger) == 2
     assert len(evaluator_reloaded.reconciliation_audit_trail) == 1
 
+def test_missing_state_file_fails_closed_when_required():
+    """Accidental state loss must not silently reset circuit-breaker decisions."""
+    missing_path = "runtime/non_existent_state_file.json"
+    if os.path.exists(missing_path):
+        os.remove(missing_path)
+        
+    with pytest.raises(RuntimeError) as exc_info:
+        ShadowCircuitBreakerEvaluator(
+            max_consecutive_losses=2,
+            log_path=missing_path,
+            require_existing_state=True
+        )
+    assert "CRITICAL_STATE_LOSS_PREVENTION" in str(exc_info.value)
+
+def test_stale_open_payload_clock_skew_quarantined():
+    """A stale open WAL payload must not be promoted to genuine prospective evidence."""
+    evaluator = ShadowCircuitBreakerEvaluator(
+        max_consecutive_losses=2,
+        log_path=TEST_LOG_PATH,
+        max_clock_skew_sec=60.0
+    )
+    date = "2026-10-15"
+    # Old timestamp (e.g., 2 hours in the past) marked as live event
+    stale_ts = "2026-10-15T08:00:00+05:30"
+    prop = evaluator.observe_trade_proposal(
+        "T_STALE", "NIFTY", date, "CE", "C", stale_ts, is_live_event=True
+    )
+    assert prop["shadow_decision"] == "QUARANTINED"
+    assert "PROSPECTIVE_CLOCK_SKEW_EXCEEDED" in prop["quarantine_reason"]
+    assert len(evaluator.quarantine_ledger) == 1
+    assert len(evaluator.in_flight_positions) == 0
+
+

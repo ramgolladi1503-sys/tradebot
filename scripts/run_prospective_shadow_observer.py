@@ -176,8 +176,15 @@ def main():
     logger.info(f"Targeting WALs:\n  NIFTY:  {NIFTY_WAL_PATH}\n  SENSEX: {SENSEX_WAL_PATH}")
     logger.info(f"Runtime State Storage: {LIVE_STATE_PATH}")
     
-    # Fail-closed state initialization
-    evaluator = ShadowCircuitBreakerEvaluator(max_consecutive_losses=2, log_path=LIVE_STATE_PATH)
+    # Fail-closed state initialization: require explicit SHADOW_ALLOW_FRESH_INIT if state file is missing
+    allow_fresh = os.environ.get("SHADOW_ALLOW_FRESH_INIT", "false").lower() in ("true", "1", "yes")
+    skew_limit = float(os.environ.get("SHADOW_MAX_CLOCK_SKEW_SEC", "300.0"))
+    evaluator = ShadowCircuitBreakerEvaluator(
+        max_consecutive_losses=2,
+        log_path=LIVE_STATE_PATH,
+        allow_fresh_init=allow_fresh,
+        max_clock_skew_sec=skew_limit
+    )
     
     # 1. Backfill phase (initial synchronous pass)
     logger.info("Executing Phase 1: Pure Historical Backfill (RETROSPECTIVE_BACKFILL)...")
