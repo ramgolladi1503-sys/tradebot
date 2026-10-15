@@ -187,3 +187,99 @@ def test_refresh_late_day_option_subscriptions():
     # Existing morning subscriptions must remain intact
     assert "NSE_FO|101" in subscriptions
     assert "NSE_FO|102" in subscriptions
+
+
+def test_refresh_late_day_option_subscriptions_multi_underlying_sensex():
+    from core.upstox_capture.late_day_option_refresh import refresh_late_day_option_subscriptions
+
+    class MockStreamer:
+        def __init__(self):
+            self.subscribed_keys = []
+
+        def subscribe(self, keys, mode="full"):
+            self.subscribed_keys.extend(keys)
+
+    today_ms = int(datetime.now().timestamp() * 1000)
+    mock_data = [
+        # Morning SENSEX strikes around 73000
+        {"name": "SENSEX", "instrument_type": "CE", "strike_price": 73000.0, "expiry": today_ms, "instrument_key": "BSE_FO|73000CE", "trading_symbol": "SENSEX 73000 CE"},
+        {"name": "SENSEX", "instrument_type": "PE", "strike_price": 73000.0, "expiry": today_ms, "instrument_key": "BSE_FO|73000PE", "trading_symbol": "SENSEX 73000 PE"},
+        # Afternoon SENSEX strikes around 74100 (after 1100 pt rally)
+        {"name": "SENSEX", "instrument_type": "CE", "strike_price": 74100.0, "expiry": today_ms, "instrument_key": "BSE_FO|1115540", "trading_symbol": "SENSEX 74100 CE"},
+        {"name": "SENSEX", "instrument_type": "PE", "strike_price": 74100.0, "expiry": today_ms, "instrument_key": "BSE_FO|1101701", "trading_symbol": "SENSEX 74100 PE"},
+    ]
+    df_inst = pd.DataFrame(mock_data)
+    streamer = MockStreamer()
+    subscriptions = {
+        "BSE_FO|73000CE": "SENSEX 73000 CE",
+        "BSE_FO|73000PE": "SENSEX 73000 PE",
+    }
+
+    # SENSEX spot rallies to 74,150.0 (ATM 74100 or 74200)
+    new_count = refresh_late_day_option_subscriptions(
+        streamer=streamer,
+        subscriptions=subscriptions,
+        df_inst=df_inst,
+        current_spot_prices={"SENSEX": 74150.0}
+    )
+
+    # Must subscribe 74100 CE and PE which were missing
+    assert new_count == 2
+    assert "BSE_FO|1115540" in subscriptions
+    assert "BSE_FO|1101701" in subscriptions
+    assert "BSE_FO|1115540" in streamer.subscribed_keys
+    assert subscriptions["BSE_FO|1115540"] == "SENSEX 74100 CE"
+    assert subscriptions["BSE_FO|1101701"] == "SENSEX 74100 PE"
+
+
+def test_stitching_merges_existing_master_without_deleting_it(tmp_path, monkeypatch):
+    monkeypatch.setenv("UPSTOX_ACCESS_TOKEN", "mock_token")
+
+    data_dir = tmp_path / "2026-09-28"
+    chunks_dir = data_dir / "chunks"
+    chunks_dir.mkdir(parents=True)
+
+    # 1. Existing master file
+    existing_master_data = {
+        "ts": [1790566100.0],
+        "token": ["NSE_INDEX|Nifty 50"],
+        "symbol": ["NIFTY 50"],
+        "ltp": [23100.0],
+        "bid": [23099.0],
+        "ask": [23101.0],
+        "vol": [10.0],
+        "oi": [100.0],
+        "depth": ["{}"],
+    }
+    master_file = data_dir / "upstox_full_ticks_20260928_stitched.parquet"
+    pq.write_table(pa.Table.from_pandas(pd.DataFrame(existing_master_data)), master_file)
+    assert master_file.exists()
+
+    # 2. New chunk
+    new_chunk_data = {
+        "ts": [1790566200.0],
+        "token": ["BSE_INDEX|SENSEX"],
+        "symbol": ["SENSEX"],
+        "ltp": [73500.0],
+        "bid": [73490.0],
+        "ask": [73510.0],
+        "vol": [20.0],
+        "oi": [200.0],
+        "depth": ["{}"],
+    }
+    pq.write_table(pa.Table.from_pandas(pd.DataFrame(new_chunk_data)), chunks_dir / "chunk_afternoon.parquet")
+
+    # 3. Execute stitching
+    execute_post_market_stitching("2026-09-28", "20260928", data_dir)
+
+    # 4. Verify master file STILL exists (was NOT deleted during chunk pruning!)
+    assert master_file.exists(), "Master stitched parquet was erroneously unlinked during chunk pruning!"
+    assert master_file.stat().st_size > 0
+
+    df_stitched = pq.read_table(master_file).to_pandas()
+    assert len(df_stitched) == 2
+    assert set(df_stitched["symbol"]) == {"NIFTY 50", "SENSEX"}
+
+    # Chunks dir should be pruned
+    assert not chunks_dir.exists()
+
