@@ -72,14 +72,15 @@ def test_out_of_order_event_quarantine():
     assert p1["shadow_decision"] == "PERMITTED"
     
     # Out of order proposal at 09:45
-    p2 = evaluator.observe_trade_proposal("T2", "NIFTY", "2026-10-15", "CE", "C2", "2026-10-15T09:45:00")
+    p2 = evaluator.observe_trade_proposal("T2", "NIFTY", "2026-10-15", "CE", "C2", "2026-10-15T09:45:00+05:30")
     assert p2["shadow_decision"] == "QUARANTINED"
-    assert p2["quarantine_reason"] == "OUT_OF_ORDER_TIMESTAMP"
+    assert "OUT_OF_ORDER" in p2["quarantine_reason"]
     assert len(evaluator.quarantine_ledger) == 1
     
-    # Out of order exit at 09:50
-    e2 = evaluator.observe_trade_exit("T2", "NIFTY", "2026-10-15", 5.0, 2.0, "TARGET_HIT", "2026-10-15T09:50:00")
-    assert e2["status"] == "QUARANTINED"
+    # Proposal for T1 was registered at 10:00. Out-of-order exit at 09:50 for T1
+    e1 = evaluator.observe_trade_exit("T1", "NIFTY", "2026-10-15", 5.0, 2.0, "TARGET_HIT", "2026-10-15T09:50:00+05:30")
+    assert e1["status"] == "QUARANTINED"
+    assert "OUT_OF_ORDER" in e1["quarantine_reason"]
     assert len(evaluator.quarantine_ledger) == 2
 
 def test_tri_state_lifecycle_and_unresolved_risk_pause():

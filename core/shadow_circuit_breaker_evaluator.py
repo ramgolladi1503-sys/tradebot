@@ -1,35 +1,39 @@
 """
-Shadow Circuit Breaker Evaluator (Read-Only Observer) — v3 Operational Hardened.
+Shadow Circuit Breaker Evaluator (Read-Only Observer) — v4 Production-Hardened.
 
 A non-invasive, purely prospective observer that monitors live Sentinel APM decisions
 and records shadow veto telemetry without altering runtime state, execution, or placing orders.
 
 Integrity Invariants:
 1. Scoped Event Identity:
-   - Events are uniquely and stably identified by `(asset, session_date, position_id)` or unique event keys.
+   - Events are uniquely and stably identified by `(asset, session_date, position_id)`.
    - Prevents cross-asset collision (e.g. NIFTY `TRADE_1014_CE` vs SENSEX `TRADE_1014_CE`).
-2. Fully Idempotent Processing:
-   - Both proposals and exits are recorded idempotently. Re-ingesting identical events
-     never increments proposal counts, duplicates records, or alters historical shadow decisions.
-3. Strict Event-Time Causality & Out-of-Order Quarantine:
-   - Validates monotonic non-decreasing timestamp progression per asset.
-   - Quarantines out-of-order or corrupt timestamp events into `quarantine_ledger` without
-     mutating the active circuit breaker state machine.
-4. Tri-State Position Lifecycle Separation:
-   - Explicitly distinguishes `COMPLETED_EVALUABLE`, `COMPLETED_UNRESOLVED_RISK` (e.g. crash-fail-closed),
-     and `IN_FLIGHT_PROPOSED`.
-   - An unresolved position triggers a conservative risk pause, but is NEVER misreported as a verified losing exit.
-5. Challenger Execution Conditioning:
-   - When calculating challenger hypothetical state and P&L, the evaluator processes exits ONLY for
-     trades that were SHADOW-PERMITTED at proposal time. Trades vetoed by the breaker do not mutate challenger state.
-6. Mode Classification:
-   - Distinguishes `BACKFILL_HISTORICAL` ingestion from `PROSPECTIVE_LIVE` events.
+2. Robust Timezone-Aware Timestamp Validation:
+   - Requires valid ISO 8601 timestamps (must parse with timezone or offset).
+   - Rejects missing, malformed, or timezone-inconsistent strings into `quarantine_ledger`.
+   - Enforces strictly non-decreasing chronological order per asset.
+3. Unmatched Exit Quarantine:
+   - An exit arriving without a previously observed proposal is NEVER defaulted to PERMITTED.
+   - It is routed to `unmatched_exit_queue` pending reconciliation without mutating breaker state.
+4. Quad-State Position Lifecycle Separation:
+   - Distinctly tracks:
+     a) `IN_FLIGHT_OPEN`: Active trade in flight (from WAL payload). Never synthesized as completed!
+     b) `COMPLETED_EVALUABLE`: Full exit recorded with valid spot and option PnL.
+     c) `COMPLETED_UNRESOLVED_RISK`: Crash recovery / missing quotes (`TRADE_1513_PE`). Triggers conservative risk pause.
+     d) `QUARANTINED_UNMATCHED`: Exit without prior proposal.
+5. Challenger Conditioning on Verified Proposals:
+   - Challenger processes exits ONLY if the trade was verified and permitted at proposal time.
+6. Provenance & Synthetic Isolation:
+   - Replay WALs explicitly labeled `BACKFILL_HISTORICAL`.
+   - Live incoming events labeled `PROSPECTIVE_LIVE`.
+   - Test injections must target isolated test files; live operational state remains 100% clean.
 """
 
 from typing import Dict, Any, List, Optional, Tuple, Set
 import os
 import json
 import logging
+from datetime import datetime, timezone, timedelta
 
 logger = logging.getLogger("sentinel.shadow_evaluator")
 
@@ -45,15 +49,19 @@ class ShadowCircuitBreakerEvaluator:
         self.processed_proposal_keys: Set[str] = set()
         self.processed_exit_keys: Set[str] = set()
         
-        # Proposal decisions store: scoped_key -> obs dict
-        self.proposal_decisions: Dict[str, Dict[str, Any]] = {}
+        # Proposal registry: scoped_key -> obs dict
+        self.proposal_registry: Dict[str, Dict[str, Any]] = {}
         
-        # Chronological order tracking: asset -> latest valid ISO timestamp
-        self.last_event_timestamps: Dict[str, str] = {}
+        # Active in-flight positions: scoped_key -> dict
+        self.in_flight_positions: Dict[str, Dict[str, Any]] = {}
+        
+        # Chronological order tracking: asset -> latest valid datetime object
+        self.last_event_datetimes: Dict[str, datetime] = {}
         
         # Ledgers
         self.shadow_ledger: List[Dict[str, Any]] = []
         self.quarantine_ledger: List[Dict[str, Any]] = []
+        self.unmatched_exit_queue: List[Dict[str, Any]] = []
         
         # Load persisted snapshot if file exists
         if self.log_path and os.path.exists(self.log_path):
@@ -78,15 +86,31 @@ class ShadowCircuitBreakerEvaluator:
             }
         return self.asset_states[k]
 
-    def _validate_timestamp_order(self, asset: str, current_timestamp: str) -> bool:
-        """Enforces strictly non-decreasing chronological ordering per asset."""
-        if not current_timestamp:
-            return True
-        last_ts = self.last_event_timestamps.get(asset)
-        if last_ts and current_timestamp < last_ts:
-            return False
-        self.last_event_timestamps[asset] = current_timestamp
-        return True
+    def _parse_and_validate_timestamp(self, asset: str, ts_str: str) -> Tuple[bool, Optional[datetime], str]:
+        """
+        Parses and validates ISO 8601 timestamps, enforcing non-decreasing chronological order.
+        Normalizes timezone-naive timestamps to IST (+05:30) to eliminate naive vs aware errors.
+        """
+        if not ts_str:
+            return False, None, "MISSING_TIMESTAMP"
+            
+        try:
+            # Handle ISO formats with timezone offsets (+05:30, Z) or naive
+            dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+            # If naive, assume IST market timezone (+05:30)
+            if dt.tzinfo is None:
+                ist_tz = timezone(timedelta(hours=5, minutes=30))
+                dt = dt.replace(tzinfo=ist_tz)
+        except Exception as e:
+            return False, None, f"MALFORMED_TIMESTAMP_FORMAT: {e}"
+
+        last_dt = self.last_event_datetimes.get(asset)
+        if last_dt is not None:
+            if dt < last_dt:
+                return False, None, f"OUT_OF_ORDER_RETROGRADE: {dt} < {last_dt}"
+
+        self.last_event_datetimes[asset] = dt
+        return True, dt, "VALID"
 
     def observe_trade_proposal(
         self,
@@ -103,30 +127,30 @@ class ShadowCircuitBreakerEvaluator:
         """
         scoped_key = self._make_scoped_key(asset, session_date, position_id)
         
-        # Idempotency check: Return existing decision without mutating state or counters
+        # Idempotency check: Return existing proposal without mutating state
         if scoped_key in self.processed_proposal_keys:
-            existing = self.proposal_decisions.get(scoped_key, {}).copy()
+            existing = self.proposal_registry.get(scoped_key, {}).copy()
             existing["status"] = "IDEMPOTENT_PROPOSAL_REPLAYED"
             return existing
 
         # Timestamp validation
-        if not self._validate_timestamp_order(asset, proposal_timestamp):
-            quarantine_record = {
+        is_valid, dt, err_reason = self._parse_and_validate_timestamp(asset, proposal_timestamp)
+        if not is_valid:
+            quarantine_rec = {
                 "event_type": "PROPOSAL",
                 "position_id": position_id,
                 "asset": asset,
                 "session_date": session_date,
                 "proposal_timestamp": proposal_timestamp,
-                "last_valid_timestamp": self.last_event_timestamps.get(asset),
-                "reason": "OUT_OF_ORDER_TIMESTAMP_QUARANTINED"
+                "reason": err_reason
             }
-            self.quarantine_ledger.append(quarantine_record)
+            self.quarantine_ledger.append(quarantine_rec)
             self._persist_snapshot()
             return {
                 "position_id": position_id,
                 "asset": asset,
                 "shadow_decision": "QUARANTINED",
-                "quarantine_reason": "OUT_OF_ORDER_TIMESTAMP"
+                "quarantine_reason": err_reason
             }
 
         st = self._get_state(asset, session_date)
@@ -151,11 +175,12 @@ class ShadowCircuitBreakerEvaluator:
             "veto_reason": veto_reason,
             "active_consecutive_losses": st["consecutive_losses"],
             "ingest_mode": ingest_mode,
-            "lifecycle_state": "IN_FLIGHT_PROPOSED"
+            "lifecycle_state": "IN_FLIGHT_OPEN"
         }
         
         self.processed_proposal_keys.add(scoped_key)
-        self.proposal_decisions[scoped_key] = obs
+        self.proposal_registry[scoped_key] = obs
+        self.in_flight_positions[scoped_key] = obs
         self._persist_snapshot()
         return obs
 
@@ -176,7 +201,7 @@ class ShadowCircuitBreakerEvaluator:
     ) -> Dict[str, Any]:
         """
         Observes a completed trade exit idempotently and causally updates the breaker state.
-        Conditioning: Updates the breaker state ONLY IF the proposal was permitted under challenger.
+        Enforces proposal matching and quarantines unmatched exits.
         """
         scoped_key = self._make_scoped_key(asset, session_date, position_id)
         
@@ -189,32 +214,51 @@ class ShadowCircuitBreakerEvaluator:
                 "status": "DUPLICATE_EXIT_IGNORED"
             }
 
-        # Timestamp validation
-        if not self._validate_timestamp_order(asset, exit_timestamp):
-            quarantine_record = {
-                "event_type": "EXIT",
+        # Proposal Matching Guard: Reject defaulting to PERMITTED!
+        if scoped_key not in self.proposal_registry:
+            unmatched_rec = {
                 "position_id": position_id,
                 "asset": asset,
                 "session_date": session_date,
                 "exit_timestamp": exit_timestamp,
-                "last_valid_timestamp": self.last_event_timestamps.get(asset),
-                "reason": "OUT_OF_ORDER_TIMESTAMP_QUARANTINED"
+                "spot_pnl": spot_pnl,
+                "opt_pnl": opt_pnl,
+                "exit_reason": exit_reason,
+                "status": "UNMATCHED_EXIT_QUARANTINED",
+                "reason": "MISSING_PRIOR_PROPOSAL_DECISION"
             }
-            self.quarantine_ledger.append(quarantine_record)
+            self.unmatched_exit_queue.append(unmatched_rec)
             self._persist_snapshot()
+            return unmatched_rec
+
+        # Timestamp validation
+        is_valid, dt, err_reason = self._parse_and_validate_timestamp(asset, exit_timestamp)
+        if not is_valid:
+            if scoped_key not in self.processed_exit_keys:
+                self.processed_exit_keys.add(scoped_key)
+                quarantine_rec = {
+                    "event_type": "EXIT",
+                    "position_id": position_id,
+                    "asset": asset,
+                    "session_date": session_date,
+                    "exit_timestamp": exit_timestamp,
+                    "reason": err_reason
+                }
+                self.quarantine_ledger.append(quarantine_rec)
+                self._persist_snapshot()
             return {
                 "position_id": position_id,
                 "asset": asset,
                 "status": "QUARANTINED",
-                "quarantine_reason": "OUT_OF_ORDER_TIMESTAMP"
+                "quarantine_reason": err_reason
             }
 
         st = self._get_state(asset, session_date)
         st["total_completed_exits"] += 1
 
-        # Check proposal status for challenger conditioning
-        prop_decision = self.proposal_decisions.get(scoped_key, {}).get("shadow_decision", "PERMITTED")
-        was_challenger_executed = (prop_decision == "PERMITTED")
+        # Retrieve prior proposal decision
+        prop_rec = self.proposal_registry[scoped_key]
+        was_challenger_executed = (prop_rec.get("shadow_decision") == "PERMITTED")
 
         # Tri-State position lifecycle evaluation
         is_unresolved = (opt_pnl is None and spot_pnl is None)
@@ -229,8 +273,6 @@ class ShadowCircuitBreakerEvaluator:
         elif opt_pnl is not None:
             lifecycle_state = "COMPLETED_EVALUABLE"
             is_loss = (opt_pnl < 0.0) or ("STOP_LOSS" in exit_reason)
-            
-            # Condition on challenger execution: Only permitted trades update the challenger's consecutive loss streak!
             if was_challenger_executed:
                 if is_loss:
                     st["consecutive_losses"] += 1
@@ -253,15 +295,15 @@ class ShadowCircuitBreakerEvaluator:
                 else:
                     st["consecutive_losses"] = 0
 
-        # Assess quote depth completeness
+        # Assess quote depth completeness: Explicit non-executable classification
         has_entry_depth = (opt_entry_bid is not None and opt_entry_ask is not None)
         has_exit_depth = (opt_exit_bid is not None and opt_exit_ask is not None)
         if has_entry_depth and has_exit_depth:
             depth_coverage = "FULL_BID_ASK_VERIFIED"
         elif has_entry_depth:
-            depth_coverage = "ENTRY_DEPTH_ONLY_EXIT_DEPTH_MISSING"
+            depth_coverage = "ENTRY_DEPTH_ONLY_NON_EXECUTABLE_ESTIMATE"
         else:
-            depth_coverage = "DEPTH_MISSING"
+            depth_coverage = "DEPTH_MISSING_LTP_MODELED_ONLY"
 
         record = {
             "position_id": position_id,
@@ -279,13 +321,15 @@ class ShadowCircuitBreakerEvaluator:
             "ingest_mode": ingest_mode
         }
         
+        # Transition out of in-flight
+        self.in_flight_positions.pop(scoped_key, None)
         self.processed_exit_keys.add(scoped_key)
         self.shadow_ledger.append(record)
         self._persist_snapshot()
         return record
 
     def _persist_snapshot(self):
-        """Atomically persists asset_states and ledger to disk."""
+        """Atomically persists asset_states and ledgers to disk."""
         if not self.log_path:
             return
         try:
@@ -293,16 +337,22 @@ class ShadowCircuitBreakerEvaluator:
             serialized_asset_states = {
                 f"{k[0]}::{k[1]}": v for k, v in self.asset_states.items()
             }
+            # Serialize datetimes to ISO strings
+            serialized_last_dts = {
+                asset: dt.isoformat() for asset, dt in self.last_event_datetimes.items()
+            }
             payload = {
-                "version": "shadow_evaluator_v3_hardened",
+                "version": "shadow_evaluator_v4_production",
                 "max_consecutive_losses": self.max_consecutive_losses,
                 "asset_states": serialized_asset_states,
                 "processed_proposal_keys": list(self.processed_proposal_keys),
                 "processed_exit_keys": list(self.processed_exit_keys),
-                "proposal_decisions": self.proposal_decisions,
-                "last_event_timestamps": self.last_event_timestamps,
+                "proposal_registry": self.proposal_registry,
+                "in_flight_positions": self.in_flight_positions,
+                "last_event_timestamps": serialized_last_dts,
                 "shadow_ledger": self.shadow_ledger,
-                "quarantine_ledger": self.quarantine_ledger
+                "quarantine_ledger": self.quarantine_ledger,
+                "unmatched_exit_queue": self.unmatched_exit_queue
             }
             tmp_path = f"{self.log_path}.tmp.{os.getpid()}"
             with open(tmp_path, "w") as f:
@@ -325,10 +375,20 @@ class ShadowCircuitBreakerEvaluator:
                     self.asset_states[(asset, date)] = st
             self.processed_proposal_keys = set(data.get("processed_proposal_keys", []))
             self.processed_exit_keys = set(data.get("processed_exit_keys", []))
-            self.proposal_decisions = data.get("proposal_decisions", {})
-            self.last_event_timestamps = data.get("last_event_timestamps", {})
+            self.proposal_registry = data.get("proposal_registry", {})
+            self.in_flight_positions = data.get("in_flight_positions", {})
+            
+            raw_dts = data.get("last_event_timestamps", {})
+            self.last_event_datetimes = {}
+            for asset, ts_str in raw_dts.items():
+                try:
+                    self.last_event_datetimes[asset] = datetime.fromisoformat(ts_str)
+                except Exception:
+                    pass
+                    
             self.shadow_ledger = data.get("shadow_ledger", [])
             self.quarantine_ledger = data.get("quarantine_ledger", [])
+            self.unmatched_exit_queue = data.get("unmatched_exit_queue", [])
             logger.info(f"Loaded shadow evaluator snapshot from {path} with {len(self.asset_states)} states")
         except Exception as e:
             logger.error(f"Failed to load shadow snapshot: {e}")

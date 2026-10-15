@@ -46,12 +46,15 @@ def test_shadow_evaluator_duplicate_exit_prevention():
     evaluator = ShadowCircuitBreakerEvaluator(max_consecutive_losses=2, log_path=TEST_LOG_PATH)
     date = "2026-10-14"
     
+    # Proposal first
+    evaluator.observe_trade_proposal("T1", "NIFTY", date, "PE", "P1", "2026-10-14T09:55:00+05:30")
+    
     # First exit
-    r1 = evaluator.observe_trade_exit("T1", "NIFTY", date, -5.0, -2.0, "STOP_LOSS_HIT", "2026-10-14T10:00:00")
+    r1 = evaluator.observe_trade_exit("T1", "NIFTY", date, -5.0, -2.0, "STOP_LOSS_HIT", "2026-10-14T10:00:00+05:30")
     assert r1["consecutive_losses_after_exit"] == 1
     
     # Duplicate exit with same position_id
-    r2 = evaluator.observe_trade_exit("T1", "NIFTY", date, -5.0, -2.0, "STOP_LOSS_HIT", "2026-10-14T10:00:00")
+    r2 = evaluator.observe_trade_exit("T1", "NIFTY", date, -5.0, -2.0, "STOP_LOSS_HIT", "2026-10-14T10:00:00+05:30")
     assert r2["status"] == "DUPLICATE_EXIT_IGNORED"
     
     # Counter must NOT have incremented again
@@ -62,26 +65,29 @@ def test_shadow_evaluator_out_of_order_causality_detection():
     evaluator = ShadowCircuitBreakerEvaluator(max_consecutive_losses=2, log_path=TEST_LOG_PATH)
     
     # T1 at 10:00
-    p1 = evaluator.observe_trade_proposal("T1", "NIFTY", "2026-10-15", "CE", "C1", "2026-10-15T10:00:00")
+    p1 = evaluator.observe_trade_proposal("T1", "NIFTY", "2026-10-15", "CE", "C1", "2026-10-15T10:00:00+05:30")
     assert p1["shadow_decision"] == "PERMITTED"
     
     # T2 with earlier timestamp (Out of order) -> Quarantined
-    p2 = evaluator.observe_trade_proposal("T2", "NIFTY", "2026-10-15", "CE", "C2", "2026-10-15T09:45:00")
+    p2 = evaluator.observe_trade_proposal("T2", "NIFTY", "2026-10-15", "CE", "C2", "2026-10-15T09:45:00+05:30")
     assert p2["shadow_decision"] == "QUARANTINED"
-    assert p2["quarantine_reason"] == "OUT_OF_ORDER_TIMESTAMP"
+    assert "OUT_OF_ORDER" in p2["quarantine_reason"]
 
 def test_shadow_evaluator_asset_isolation_under_stress():
     evaluator = ShadowCircuitBreakerEvaluator(max_consecutive_losses=2, log_path=TEST_LOG_PATH)
     date = "2026-10-15"
     
-    # Trip NIFTY
-    evaluator.observe_trade_exit("N1", "NIFTY", date, -10.0, -5.0, "STOP_LOSS_HIT", "2026-10-15T10:00:00")
-    evaluator.observe_trade_exit("N2", "NIFTY", date, -10.0, -5.0, "STOP_LOSS_HIT", "2026-10-15T10:05:00")
+    # Trip NIFTY with proposals and exits
+    evaluator.observe_trade_proposal("N1", "NIFTY", date, "CE", "C1", "2026-10-15T09:50:00+05:30")
+    evaluator.observe_trade_exit("N1", "NIFTY", date, -10.0, -5.0, "STOP_LOSS_HIT", "2026-10-15T10:00:00+05:30")
     
-    nifty_prop = evaluator.observe_trade_proposal("N3", "NIFTY", date, "CE", "C1", "2026-10-15T10:10:00")
+    evaluator.observe_trade_proposal("N2", "NIFTY", date, "CE", "C2", "2026-10-15T10:01:00+05:30")
+    evaluator.observe_trade_exit("N2", "NIFTY", date, -10.0, -5.0, "STOP_LOSS_HIT", "2026-10-15T10:05:00+05:30")
+    
+    nifty_prop = evaluator.observe_trade_proposal("N3", "NIFTY", date, "CE", "C3", "2026-10-15T10:10:00+05:30")
     assert nifty_prop["shadow_decision"] == "VETOED"
     
     # SENSEX on same date must be PERMITTED (zero bleed)
-    sensex_prop = evaluator.observe_trade_proposal("S1", "SENSEX", date, "CE", "S1", "2026-10-15T10:11:00")
+    sensex_prop = evaluator.observe_trade_proposal("S1", "SENSEX", date, "CE", "S1", "2026-10-15T10:11:00+05:30")
     assert sensex_prop["shadow_decision"] == "PERMITTED"
     assert sensex_prop["active_consecutive_losses"] == 0
