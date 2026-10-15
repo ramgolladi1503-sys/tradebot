@@ -34,6 +34,8 @@ def main() -> int:
     parser.add_argument("--no-supervise", action="store_true", help="Do not supervise observer process (spawn and exit)")
     parser.add_argument("--cutoff-time", default="15:45", help="Session cutoff time in HH:MM (default: 15:45)")
     parser.add_argument("--observer-engine", default=DEFAULT_PRODUCTION_MODE, choices=["dual", "tick_collector", "meg_live"], help=f"Observer engine to launch (default: {DEFAULT_PRODUCTION_MODE})")
+    parser.add_argument("--heritage-manifest", type=Path, help="Explicit T-1 heritage manifest path")
+    parser.add_argument("--heritage-manifest-sha256", help="Expected SHA256 digest of T-1 heritage manifest")
     args = parser.parse_args()
 
     orchestrator = GovernedMorningOrchestrator(
@@ -52,6 +54,8 @@ def main() -> int:
         market_close_time=args.cutoff_time,
         observer_engine=args.observer_engine,
         supervise=not args.no_supervise,
+        heritage_manifest=args.heritage_manifest,
+        heritage_manifest_sha256=args.heritage_manifest_sha256,
     )
 
     def handle_signal(sig, frame):

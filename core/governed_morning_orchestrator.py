@@ -262,11 +262,14 @@ class GovernedAuthCallbackServer:
                     self.end_headers()
                     self.wfile.write(body.encode("utf-8"))
                     return
-                except Exception as exc:
+                except BaseException as exc:
                     server_instance.error = f"callback_error:{exc}"
-                    self.send_response(500)
-                    self.end_headers()
-                    self.wfile.write(f"Internal Callback Error: {exc}".encode("utf-8"))
+                    try:
+                        self.send_response(500)
+                        self.end_headers()
+                        self.wfile.write(f"Internal Callback Error: {exc}".encode("utf-8"))
+                    except Exception:
+                        pass
 
             def log_message(self, _format, *args):
                 return
@@ -339,6 +342,8 @@ class GovernedMorningOrchestrator:
         supervise: bool = True,
         status_interval_seconds: float = 3600.0,
         telemetry_callback: Callable[[str, str, str], None] | None = None,
+        heritage_manifest: Path | None = None,
+        heritage_manifest_sha256: str | None = None,
     ) -> None:
         self.repo_root = Path(repo_root).resolve()
         self.state_root = Path(state_root).resolve()
@@ -359,6 +364,9 @@ class GovernedMorningOrchestrator:
         self.supervise = supervise
         self.status_interval_seconds = float(status_interval_seconds)
         self.telemetry_callback = telemetry_callback
+        self.heritage_manifest = Path(heritage_manifest).resolve() if heritage_manifest else None
+        self.heritage_manifest_sha256 = heritage_manifest_sha256
+        self.heritage_manifest_resolution: Any = None
 
         self.state = LauncherState.START
         self.state_history: list[dict[str, Any]] = []
@@ -865,7 +873,6 @@ class GovernedMorningOrchestrator:
             str(self.repo_root / "scripts" / "tick_data_collector.py"),
         ]
 
-        # 2. Governed MROS observer process
         master_file = self.state_root / "instruments" / f"kite_instruments_{self.session_date}.json"
         authority_file = self.state_root / "instruments" / f"instrument_authority_{self.session_date}.json"
         mros_cmd = [
@@ -879,6 +886,36 @@ class GovernedMorningOrchestrator:
             mros_cmd.extend(["--kite-instruments-file", str(master_file)])
         if authority_file.exists():
             mros_cmd.extend(["--authority-artifact", str(authority_file)])
+
+        # Auto-resolve T-1 heritage manifest if not explicitly provided
+        from core.heritage_manifest_resolver import HeritageManifestResolver, ResolutionStatus
+        manifest_to_wire: Path | None = self.heritage_manifest
+        manifest_sha_to_wire: str | None = self.heritage_manifest_sha256
+
+        if not manifest_to_wire:
+            search_roots = [
+                self.state_root,
+                self.repo_root,
+                Path("/Volumes/TradeBotFast"),
+                Path("/Volumes/TradeBot"),
+            ]
+            resolution = HeritageManifestResolver.resolve(
+                target_date=self.session_date,
+                search_roots=search_roots,
+            )
+            self.heritage_manifest_resolution = resolution
+            if resolution.status == ResolutionStatus.RESOLVED and resolution.manifest_path:
+                manifest_to_wire = resolution.manifest_path
+                manifest_sha_to_wire = resolution.manifest_sha256
+                self.emit("HERITAGE", "RESOLVED", f"Resolved predecessor manifest from {resolution.predecessor_date}")
+            else:
+                self.emit("HERITAGE", "NOTICE", f"Resolution status: {resolution.status.value}")
+
+        if manifest_to_wire and manifest_to_wire.exists() and manifest_sha_to_wire:
+            mros_cmd.extend([
+                "--heritage-manifest", str(manifest_to_wire),
+                "--heritage-manifest-sha256", str(manifest_sha_to_wire),
+            ])
 
         try:
             if spawn_collector:

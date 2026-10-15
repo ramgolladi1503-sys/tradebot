@@ -104,7 +104,9 @@ class LiveSourceRuntimeBridge:
         universe_contract: Mapping[str, Any] | None = None,
         subscription_evidence_provider: Callable[[LiveUniverseContract], Mapping[str, Any]] | None = None,
         coordinator: Any | None = None,
+        decoupled_options_mode: bool = False,
     ) -> None:
+        self.decoupled_options_mode = bool(decoupled_options_mode)
         self.exporter = exporter or LiveCapturedMetadataExporter(
             Path(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_PATH", default_live_capture_path()))
         )
@@ -428,7 +430,10 @@ class LiveSourceRuntimeBridge:
         contract: LiveUniverseContract,
         evidence: Mapping[str, Any],
     ) -> tuple[bool, str, tuple[str, ...]]:
-        required = tuple([contract.index_symbol, *contract.constituent_symbols])
+        if self.decoupled_options_mode:
+            required = tuple([contract.index_symbol])
+        else:
+            required = tuple([contract.index_symbol, *contract.constituent_symbols])
         required_set = set(required)
         rejected: list[str] = []
         if not str(evidence.get("subscription_evidence_id") or "").strip():
@@ -445,12 +450,18 @@ class LiveSourceRuntimeBridge:
             for symbol, token in (evidence.get("token_by_symbol") or {}).items()
             if token is not None
         }
-        expected_tokens = {
-            contract.index_symbol: contract.index_instrument_token,
-            **{str(row["symbol"]).upper(): int(row["instrument_token"]) for row in contract.constituents},
-        }
-        if observed_tokens != expected_tokens:
-            return False, BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION, tuple(required)
+        if self.decoupled_options_mode:
+            expected_tokens = {contract.index_symbol: contract.index_instrument_token}
+            # Only require index token in observed_tokens (options can also be present)
+            if contract.index_symbol not in observed_tokens or observed_tokens[contract.index_symbol] != contract.index_instrument_token:
+                return False, BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION, tuple(required)
+        else:
+            expected_tokens = {
+                contract.index_symbol: contract.index_instrument_token,
+                **{str(row["symbol"]).upper(): int(row["instrument_token"]) for row in contract.constituents},
+            }
+            if observed_tokens != expected_tokens:
+                return False, BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION, tuple(required)
         token_lifecycle = evidence.get("token_lifecycle") or {}
         if not isinstance(token_lifecycle, Mapping):
             return False, BLOCKED_BY_LIVE_CONSTITUENT_SUBSCRIPTION, tuple(required)
@@ -513,7 +524,7 @@ class LiveSourceRuntimeBridge:
             observed = tuple(str(symbol).upper() for symbol in evidence.get(field, []) or [])
             observed_set = set(observed)
             duplicate = sorted({symbol for symbol in observed if observed.count(symbol) > 1})
-            extra = sorted(observed_set - required_set)
+            extra = [] if self.decoupled_options_mode else sorted(observed_set - required_set)
             missing = [symbol for symbol in required if symbol not in observed_set]
             if duplicate or extra or missing:
                 rejected.extend(missing)
