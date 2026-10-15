@@ -249,7 +249,7 @@ ker_val = latest_row.get("ewma_ker", 0.5)
 last_bar_time = latest_row.get("timestamp", "Awaiting stream...")
 
 with col1:
-    st.metric("NIFTY Spot", f"₹{spot_px:,.2f}" if spot_px else "Loading...")
+    st.metric(f"{asset_ticker} Spot", f"₹{spot_px:,.2f}" if spot_px else "Loading...")
 with col2:
     st.metric("1m Realized ATR", f"{atr_val:.1f} pts" if atr_val else "Loading...")
 with col3:
