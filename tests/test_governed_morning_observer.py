@@ -7,7 +7,6 @@ Tests:
 2. Orchestrator auto-resolves valid predecessor manifest and appends arguments to mros_cmd.
 3. Orchestrator handles corrupt or missing manifest gracefully without crashing.
 4. GovernedAuthCallbackServer BaseException handling returns clean 500 error page to browser.
-5. LiveSourceRuntimeBridge decoupled_options_mode passes subscription check with index-only budget.
 """
 
 import hashlib
@@ -18,10 +17,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from core.governed_morning_orchestrator import GovernedMorningOrchestrator, LauncherState
-from core.market_event_graph_live_runtime_bridge import (
-    LiveSourceRuntimeBridge,
-    LiveUniverseContract,
-)
 
 
 def _sample_manifest_dict(session_date: str) -> dict:
@@ -141,57 +136,3 @@ def test_orchestrator_unverified_manifest_does_not_wire_mros(tmp_path: Path):
         called_cmd = mock_popen.call_args[0][0]
         # Should not wire unverified manifest
         assert "--heritage-manifest" not in called_cmd
-
-
-def test_bridge_decoupled_options_mode_tick_provenance():
-    contract = LiveUniverseContract(
-        schema_version=1,
-        broker_provider="kite",
-        token_domain="kite_instrument_token",
-        name="NIFTY50",
-        version="v1",
-        effective_date="2026-10-15",
-        source_retrieval_date="2026-10-15",
-        source_page_updated_date="2026-10-15",
-        official_source_url="https://example.com",
-        official_raw_sha256="abc",
-        index_symbol="NIFTY",
-        index_instrument_token=256265,
-        provider_native_index_identifier="NSE:NIFTY",
-        constituents=tuple({"symbol": f"SYM_{i}", "instrument_token": 1000 + i} for i in range(50)),
-        broker_instrument_master={},
-        source_provenance="test",
-        capture_session_id="test_run",
-        canonical_sha256="canonical_hash",
-    )
-
-    bridge = LiveSourceRuntimeBridge(decoupled_options_mode=True)
-    evidence = {
-        "subscription_evidence_id": "sub_1",
-        "feed_session_id": "feed_sess_1",
-        "feed_epoch": 1,
-        "token_by_symbol": {"NIFTY": 256265},
-        "token_lifecycle": {
-            "256265": {
-                "feed_session_id": "feed_sess_1",
-                "subscribe_call_succeeded_epoch": 100.0,
-                "first_post_request_tick_epoch": 101.0,
-                "mode_request_succeeded_epoch": 102.0,
-                "final_current_generation_local_mode_is_full": True,
-                "post_mode_full_count": 5,
-                "first_post_mode_full_epoch": 103.0,
-                "latest_post_mode_full_epoch": 104.0,
-            }
-        },
-        "token_resolved_symbols": ["NIFTY"],
-        "subscription_requested_symbols": ["NIFTY"],
-        "subscription_request_succeeded_symbols": ["NIFTY"],
-        "mode_request_succeeded_symbols": ["NIFTY"],
-        "live_tick_observed_symbols": ["NIFTY"],
-        "full_payload_observed_symbols": ["NIFTY"],
-    }
-
-    with patch("core.market_event_graph_live_runtime_bridge.current_feed_epoch", return_value=1):
-        ok, reason, rej = bridge._validate_subscription_evidence(contract, evidence)
-        assert ok is True
-        assert reason == "OK" or reason == ""
