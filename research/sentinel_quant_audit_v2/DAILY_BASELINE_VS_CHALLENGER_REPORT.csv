@@ -1,0 +1,5 @@
+asset,session_date,base_trades,base_evaluable,base_unresolved,quote_depth_status,base_spot_pts,base_gross_opt_pts,base_net_rs,shadow_vetoed_trades,chal_trades_executed,chal_spot_pts,chal_gross_opt_pts,chal_net_rs,drawdown_reduction_rs
+NIFTY,2026-10-13,6,6,0,0 FULL / 6 PARTIAL,+49.95,+36.85,+1979.27,0,6,+49.95,+36.85,+1979.27,+0.00
+NIFTY,2026-10-14,9,8,1,0 FULL / 9 PARTIAL,-102.35,-62.80,-4754.09,5,4,-45.90,-28.15,-2166.91,+2587.18
+NIFTY,2026-10-15,5,5,0,0 FULL / 5 PARTIAL,+81.60,+29.75,+1522.93,0,5,+81.60,+29.75,+1522.93,+0.00
+SENSEX,2026-10-15,6,6,0,0 FULL / 6 PARTIAL,+188.11,+70.95,+1041.71,0,6,+188.11,+70.95,+1041.71,+0.00
