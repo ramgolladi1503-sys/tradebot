@@ -21,13 +21,12 @@ def test_shadow_evaluator_unresolved_exit_treated_as_risk():
     assert r1["consecutive_losses_after_exit"] == 1
     assert r1["is_shadow_halted_now"] is False
     
-    # Unresolved exit (crashed/missing)
+    # Unresolved exit (crashed/missing) triggers conservative risk pause without incrementing loss streak
     exit_rec = evaluator.observe_trade_exit("T2_CRASH", "NIFTY", date, None, None, "CRASH_RECOVERY")
-    assert exit_rec["eval_status"] == "UNRESOLVED_EXIT_PRESERVED_AS_RISK"
-    assert exit_rec["consecutive_losses_after_exit"] == 2
+    assert exit_rec["lifecycle_state"] == "COMPLETED_UNRESOLVED_RISK"
     assert exit_rec["is_shadow_halted_now"] is True
     
-    # Next trade must be shadow-vetoed
+    # Next trade must be shadow-vetoed due to the conservative pause
     prop = evaluator.observe_trade_proposal("T3", "NIFTY", date, "PE", "NIFTY 22650 PE")
     assert prop["shadow_decision"] == "VETOED"
     assert prop["veto_reason"] == "SHADOW_CHOP_CIRCUIT_BREAKER_L2"

@@ -63,11 +63,12 @@ def test_shadow_evaluator_out_of_order_causality_detection():
     
     # T1 at 10:00
     p1 = evaluator.observe_trade_proposal("T1", "NIFTY", "2026-10-15", "CE", "C1", "2026-10-15T10:00:00")
-    assert p1["chronological_order_valid"] is True
+    assert p1["shadow_decision"] == "PERMITTED"
     
-    # T2 with earlier timestamp (Out of order)
+    # T2 with earlier timestamp (Out of order) -> Quarantined
     p2 = evaluator.observe_trade_proposal("T2", "NIFTY", "2026-10-15", "CE", "C2", "2026-10-15T09:45:00")
-    assert p2["chronological_order_valid"] is False
+    assert p2["shadow_decision"] == "QUARANTINED"
+    assert p2["quarantine_reason"] == "OUT_OF_ORDER_TIMESTAMP"
 
 def test_shadow_evaluator_asset_isolation_under_stress():
     evaluator = ShadowCircuitBreakerEvaluator(max_consecutive_losses=2, log_path=TEST_LOG_PATH)
