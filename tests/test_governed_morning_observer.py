@@ -70,6 +70,8 @@ def test_orchestrator_auto_resolves_and_wires_mros_cmd(tmp_path: Path):
         session_date="2026-10-15",
         observer_engine="meg_live",
         supervise=False,
+        market_open_time="00:00",
+        market_close_time="23:59",
     )
 
     mock_report = {
@@ -114,6 +116,8 @@ def test_orchestrator_unverified_manifest_does_not_wire_mros(tmp_path: Path):
         session_date="2026-10-15",
         observer_engine="meg_live",
         supervise=False,
+        market_open_time="00:00",
+        market_close_time="23:59",
     )
 
     mock_report = {

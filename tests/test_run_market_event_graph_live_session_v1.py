@@ -382,5 +382,3 @@ def test_session_orchestrator_rejects_heritage_manifest_sha256_mismatch(monkeypa
     )
     assert result.returncode == 1
     assert "BLOCKED_BY_HERITAGE_MANIFEST_SHA256_MISMATCH" in result.stderr
-
-

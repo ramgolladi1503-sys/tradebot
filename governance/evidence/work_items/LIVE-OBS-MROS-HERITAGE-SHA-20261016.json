@@ -1,0 +1,439 @@
+{
+  "work_item_id": "LIVE-OBS-MROS-HERITAGE-SHA-20261016",
+  "type": "BUG",
+  "parent_epic": "TRADEBOT-LIVE-OBSERVATION-RELIABILITY",
+  "parent_feature": "MROS-RUNNER-PARITY",
+  "title": "Accept and verify --heritage-manifest-sha256 in MROS live session runner",
+  "schema_version": 1,
+  "current_state": "PR_OPEN",
+  "priority": "P0",
+  "business_goal": "Align CLI arguments between morning orchestrator and MROS live session runner, enabling successful morning launcher startup with cryptographic heritage manifest verification.",
+  "current_behavior": "scripts/run_market_event_graph_live_session_v1.py rejects --heritage-manifest-sha256 as an unrecognized argument, crashing the MROS observer launch step in governed morning launcher.",
+  "expected_behavior": "scripts/run_market_event_graph_live_session_v1.py accepts --heritage-manifest-sha256, validates it against the computed SHA256 of --heritage-manifest, and exits fail-closed on mismatch.",
+  "in_scope": [
+    "scripts/run_market_event_graph_live_session_v1.py",
+    "tests/test_run_market_event_graph_live_session_v1.py",
+    "tests/test_governed_morning_observer.py",
+    "docs/agent_reviews/pr986_mros_heritage_manifest_sha256_arg.md",
+    "governance/evidence/CLAIM_REGISTRY.json",
+    "governance/evidence/VERIFICATION_MATRIX.json",
+    "governance/evidence/work_items/LIVE-OBS-MROS-HERITAGE-SHA-20261016.json"
+  ],
+  "out_of_scope": [
+    "broker order execution",
+    "live trading enablement",
+    "risk gate tampering",
+    "credentials"
+  ],
+  "dependencies": [
+    "governed morning orchestrator",
+    "heritage manifest"
+  ],
+  "acceptance_criteria": [
+    "Runner accepts --heritage-manifest-sha256",
+    "Runner validates manifest SHA256 against expected digest",
+    "Digest mismatch halts execution with BLOCKED_BY_HERITAGE_MANIFEST_SHA256_MISMATCH",
+    "Matching digest passes preflight cleanly",
+    "read_only=true, is_order_action=false, broker_api_called=false preserved"
+  ],
+  "safety_constraints": [
+    "read_only=true",
+    "is_order_action=false",
+    "broker_api_called=false",
+    "allowed_for_live_execution=false"
+  ],
+  "architecture_impact": "Ensures CLI argument parity and cryptographic verification of T-1 heritage manifest without modifying morning orchestrator dispatch.",
+  "allowed_paths": [
+    "scripts/run_market_event_graph_live_session_v1.py",
+    "tests/test_run_market_event_graph_live_session_v1.py",
+    "tests/test_governed_morning_observer.py",
+    "docs/agent_reviews/pr986_mros_heritage_manifest_sha256_arg.md",
+    "governance/evidence/CLAIM_REGISTRY.json",
+    "governance/evidence/VERIFICATION_MATRIX.json",
+    "governance/evidence/work_items/LIVE-OBS-MROS-HERITAGE-SHA-20261016.json"
+  ],
+  "forbidden_paths": [
+    "main.py",
+    "run_live.sh",
+    "config/**",
+    "credentials.py",
+    "core/broker/**",
+    "core/order/**",
+    "core/risk/**",
+    "strategies/**",
+    "runtime/live/**"
+  ],
+  "expected_tests": [
+    "tests/test_run_market_event_graph_live_session_v1.py",
+    "tests/test_governed_morning_observer.py"
+  ],
+  "qa_attack_plan": [
+    "test argument accepted and validated",
+    "test mismatch rejected fail-closed"
+  ],
+  "uat_criteria": [
+    "preflight tests pass offline cleanly"
+  ],
+  "release_gates": [
+    "unit tests passing",
+    "evidence validation clean"
+  ],
+  "rollback_plan": "Revert runner changes and test additions.",
+  "evidence_refs": [],
+  "acting_role": "RELEASE_MANAGER",
+  "state_history": [
+    {
+      "from_state": "BACKLOG",
+      "to_state": "REQUIREMENT_READY",
+      "acting_role": "BUSINESS_ANALYST",
+      "actor": "ba-agent",
+      "timestamp": "2026-10-16T12:01:30+00:00",
+      "reason": "requirement ready",
+      "evidence_ids": [
+        "req-ba"
+      ],
+      "contract_hash": "1c1cff5beb28511913a105a4f4536691ca7c9dab5b2f163add46c2388aca01f7",
+      "previous_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "entry_hash": "ff625fd00f8841f41044484a093cc9458b7b92f74cd3efe65bf1d791a7a1a5b3"
+    },
+    {
+      "from_state": "REQUIREMENT_READY",
+      "to_state": "DESIGN_READY",
+      "acting_role": "SYSTEM_ARCHITECT",
+      "actor": "hermes-agent",
+      "timestamp": "2026-10-16T12:03:30+00:00",
+      "reason": "design ready",
+      "evidence_ids": [
+        "req-ba",
+        "req-po",
+        "arch-hermes"
+      ],
+      "contract_hash": "1c1cff5beb28511913a105a4f4536691ca7c9dab5b2f163add46c2388aca01f7",
+      "previous_hash": "ff625fd00f8841f41044484a093cc9458b7b92f74cd3efe65bf1d791a7a1a5b3",
+      "entry_hash": "ea2fb47ac77db48ea3582b536ccf39629d785b2fef8b3c62498282e6c2e13785"
+    },
+    {
+      "from_state": "DESIGN_READY",
+      "to_state": "IN_DEVELOPMENT",
+      "acting_role": "BACKEND_DEVELOPER",
+      "actor": "gsd-agent",
+      "timestamp": "2026-10-16T12:04:00+00:00",
+      "reason": "in development",
+      "evidence_ids": [],
+      "contract_hash": "1c1cff5beb28511913a105a4f4536691ca7c9dab5b2f163add46c2388aca01f7",
+      "previous_hash": "ea2fb47ac77db48ea3582b536ccf39629d785b2fef8b3c62498282e6c2e13785",
+      "entry_hash": "15395a83677a8020340d2292e82d815d1d5acce178e9228fe0d60f19f7df31cd"
+    },
+    {
+      "from_state": "IN_DEVELOPMENT",
+      "to_state": "DEV_VERIFIED",
+      "acting_role": "BACKEND_DEVELOPER",
+      "actor": "gsd-agent",
+      "timestamp": "2026-10-16T12:05:30+00:00",
+      "reason": "dev verified",
+      "evidence_ids": [
+        "dev-gsd"
+      ],
+      "contract_hash": "1c1cff5beb28511913a105a4f4536691ca7c9dab5b2f163add46c2388aca01f7",
+      "previous_hash": "15395a83677a8020340d2292e82d815d1d5acce178e9228fe0d60f19f7df31cd",
+      "entry_hash": "4ff68e99e0584187a44ce2fd98488924b8557ee4744de8968738709ea60d089b"
+    },
+    {
+      "from_state": "DEV_VERIFIED",
+      "to_state": "QA_IN_PROGRESS",
+      "acting_role": "QA_ENGINEER",
+      "actor": "qa-agent",
+      "timestamp": "2026-10-16T12:06:00+00:00",
+      "reason": "qa in progress",
+      "evidence_ids": [],
+      "contract_hash": "1c1cff5beb28511913a105a4f4536691ca7c9dab5b2f163add46c2388aca01f7",
+      "previous_hash": "4ff68e99e0584187a44ce2fd98488924b8557ee4744de8968738709ea60d089b",
+      "entry_hash": "fbdcd7b9a7ab81903e9d741443fcd451bcbf42ad5e392ac108d00e6b6d88d682"
+    },
+    {
+      "from_state": "QA_IN_PROGRESS",
+      "to_state": "QA_PASSED",
+      "acting_role": "QA_ENGINEER",
+      "actor": "qa-agent",
+      "timestamp": "2026-10-16T12:06:30+00:00",
+      "reason": "qa passed",
+      "evidence_ids": [
+        "qa-test"
+      ],
+      "contract_hash": "1c1cff5beb28511913a105a4f4536691ca7c9dab5b2f163add46c2388aca01f7",
+      "previous_hash": "fbdcd7b9a7ab81903e9d741443fcd451bcbf42ad5e392ac108d00e6b6d88d682",
+      "entry_hash": "f4965cc6ac55da3fae4539b82184f916e5e73d951a04c959c205a3c894b26d00"
+    },
+    {
+      "from_state": "QA_PASSED",
+      "to_state": "SENIOR_QA",
+      "acting_role": "SENIOR_QA",
+      "actor": "sqa-agent",
+      "timestamp": "2026-10-16T12:07:30+00:00",
+      "reason": "senior qa review",
+      "evidence_ids": [
+        "sqa-signoff"
+      ],
+      "contract_hash": "1c1cff5beb28511913a105a4f4536691ca7c9dab5b2f163add46c2388aca01f7",
+      "previous_hash": "f4965cc6ac55da3fae4539b82184f916e5e73d951a04c959c205a3c894b26d00",
+      "entry_hash": "22bfab7851ce1ff1db92d15bec48e017253112d95164ed36c7d9563e0a98e3ce"
+    },
+    {
+      "from_state": "SENIOR_QA",
+      "to_state": "UAT",
+      "acting_role": "SENIOR_QA",
+      "actor": "sqa-agent",
+      "timestamp": "2026-10-16T12:08:00+00:00",
+      "reason": "uat testing",
+      "evidence_ids": [
+        "sqa-signoff"
+      ],
+      "contract_hash": "1c1cff5beb28511913a105a4f4536691ca7c9dab5b2f163add46c2388aca01f7",
+      "previous_hash": "22bfab7851ce1ff1db92d15bec48e017253112d95164ed36c7d9563e0a98e3ce",
+      "entry_hash": "4576635a8bb03e4e2c56111e92c5233609de4b2ba9f67333db7488dabb567e78"
+    },
+    {
+      "from_state": "UAT",
+      "to_state": "PRODUCT_ACCEPTED",
+      "acting_role": "PRODUCT_OWNER",
+      "actor": "po-agent",
+      "timestamp": "2026-10-16T12:09:30+00:00",
+      "reason": "product accepted",
+      "evidence_ids": [
+        "uat-evidence",
+        "po-accept"
+      ],
+      "contract_hash": "1c1cff5beb28511913a105a4f4536691ca7c9dab5b2f163add46c2388aca01f7",
+      "previous_hash": "4576635a8bb03e4e2c56111e92c5233609de4b2ba9f67333db7488dabb567e78",
+      "entry_hash": "0ec489018e55d895d82689274dc827d2c12644226c3d9958adf57ac1ae1c493a"
+    },
+    {
+      "from_state": "PRODUCT_ACCEPTED",
+      "to_state": "RELEASE_READY",
+      "acting_role": "RELEASE_MANAGER",
+      "actor": "rm-agent",
+      "timestamp": "2026-10-16T12:11:00+00:00",
+      "reason": "release ready",
+      "evidence_ids": [
+        "rm-release"
+      ],
+      "contract_hash": "1c1cff5beb28511913a105a4f4536691ca7c9dab5b2f163add46c2388aca01f7",
+      "previous_hash": "0ec489018e55d895d82689274dc827d2c12644226c3d9958adf57ac1ae1c493a",
+      "entry_hash": "ceebbc0011c4cf69d413b4378d26274d6d76aa1be64646f88737b4f458ae0bab"
+    },
+    {
+      "from_state": "RELEASE_READY",
+      "to_state": "PR_OPEN",
+      "acting_role": "RELEASE_MANAGER",
+      "actor": "rm-agent",
+      "timestamp": "2026-10-16T12:11:30+00:00",
+      "reason": "pr open",
+      "evidence_ids": [
+        "rm-release"
+      ],
+      "contract_hash": "1c1cff5beb28511913a105a4f4536691ca7c9dab5b2f163add46c2388aca01f7",
+      "previous_hash": "ceebbc0011c4cf69d413b4378d26274d6d76aa1be64646f88737b4f458ae0bab",
+      "entry_hash": "d9be455239b8e822009fe9006946b35d6a066865eb08a5d420aaa4aa8b994894"
+    }
+  ],
+  "defect_history": [],
+  "evidence": [
+    {
+      "evidence_id": "req-ba",
+      "work_item_id": "LIVE-OBS-MROS-HERITAGE-SHA-20261016",
+      "evidence_type": "REQUIREMENT_EVIDENCE",
+      "role": "BUSINESS_ANALYST",
+      "author": "ba-agent",
+      "timestamp": "2026-10-16T12:01:00+00:00",
+      "status": "PASS",
+      "summary": "proof",
+      "references": [
+        "evidence://req-ba"
+      ],
+      "content_hash": "2ab1e69a40ad3092bc6a52b74fd41b6c30893b76c929e0fd4b8d279dced5a411",
+      "check_results": [],
+      "work_item_hash": "1c1cff5beb28511913a105a4f4536691ca7c9dab5b2f163add46c2388aca01f7",
+      "sequence": 1,
+      "previous_hash": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "evidence_id": "req-po",
+      "work_item_id": "LIVE-OBS-MROS-HERITAGE-SHA-20261016",
+      "evidence_type": "REQUIREMENT_EVIDENCE",
+      "role": "PRODUCT_OWNER",
+      "author": "po-agent",
+      "timestamp": "2026-10-16T12:02:00+00:00",
+      "status": "PASS",
+      "summary": "proof",
+      "references": [
+        "evidence://req-po"
+      ],
+      "content_hash": "635daeceefb108ebeabf7781326b94118ae02da56691179e7425e09ddea76645",
+      "check_results": [],
+      "work_item_hash": "1c1cff5beb28511913a105a4f4536691ca7c9dab5b2f163add46c2388aca01f7",
+      "sequence": 2,
+      "previous_hash": "2ab1e69a40ad3092bc6a52b74fd41b6c30893b76c929e0fd4b8d279dced5a411"
+    },
+    {
+      "evidence_id": "arch-hermes",
+      "work_item_id": "LIVE-OBS-MROS-HERITAGE-SHA-20261016",
+      "evidence_type": "ARCHITECTURE_EVIDENCE",
+      "role": "SYSTEM_ARCHITECT",
+      "author": "hermes-agent",
+      "timestamp": "2026-10-16T12:03:00+00:00",
+      "status": "PASS",
+      "summary": "proof",
+      "references": [
+        "evidence://arch-hermes"
+      ],
+      "content_hash": "48fff3466e3f4a5f3738fe3cb490aa9233d84207fdc74a6566b38205a282b0e7",
+      "check_results": [],
+      "work_item_hash": "1c1cff5beb28511913a105a4f4536691ca7c9dab5b2f163add46c2388aca01f7",
+      "sequence": 3,
+      "previous_hash": "635daeceefb108ebeabf7781326b94118ae02da56691179e7425e09ddea76645"
+    },
+    {
+      "evidence_id": "dev-gsd",
+      "work_item_id": "LIVE-OBS-MROS-HERITAGE-SHA-20261016",
+      "evidence_type": "DEV_TEST_EVIDENCE",
+      "role": "BACKEND_DEVELOPER",
+      "author": "gsd-agent",
+      "timestamp": "2026-10-16T12:05:00+00:00",
+      "status": "PASS",
+      "summary": "proof",
+      "references": [
+        "evidence://dev-gsd"
+      ],
+      "content_hash": "3e6a82aa82bcea1a8b19cd532bf6e5aa34034c05cd2c2f8d2992de19f4ea0219",
+      "check_results": [],
+      "work_item_hash": "1c1cff5beb28511913a105a4f4536691ca7c9dab5b2f163add46c2388aca01f7",
+      "sequence": 4,
+      "previous_hash": "48fff3466e3f4a5f3738fe3cb490aa9233d84207fdc74a6566b38205a282b0e7"
+    },
+    {
+      "evidence_id": "qa-test",
+      "work_item_id": "LIVE-OBS-MROS-HERITAGE-SHA-20261016",
+      "evidence_type": "QA_EVIDENCE",
+      "role": "QA_ENGINEER",
+      "author": "qa-agent",
+      "timestamp": "2026-10-16T12:06:00+00:00",
+      "status": "PASS",
+      "summary": "proof",
+      "references": [
+        "evidence://qa-test"
+      ],
+      "content_hash": "ea2e022c00ffd2025c9e9650dfff1fe2d480c9dd131463bc9eaa3b4cf430e54a",
+      "check_results": [],
+      "work_item_hash": "1c1cff5beb28511913a105a4f4536691ca7c9dab5b2f163add46c2388aca01f7",
+      "sequence": 5,
+      "previous_hash": "3e6a82aa82bcea1a8b19cd532bf6e5aa34034c05cd2c2f8d2992de19f4ea0219"
+    },
+    {
+      "evidence_id": "sqa-signoff",
+      "work_item_id": "LIVE-OBS-MROS-HERITAGE-SHA-20261016",
+      "evidence_type": "SENIOR_QA_EVIDENCE",
+      "role": "SENIOR_QA",
+      "author": "sqa-agent",
+      "timestamp": "2026-10-16T12:07:00+00:00",
+      "status": "PASS",
+      "summary": "proof",
+      "references": [
+        "evidence://sqa-signoff"
+      ],
+      "content_hash": "e175d21b6a15170bca2718acf4e734be17639fa7edea3591e961e06fc5aab702",
+      "check_results": [],
+      "work_item_hash": "1c1cff5beb28511913a105a4f4536691ca7c9dab5b2f163add46c2388aca01f7",
+      "sequence": 6,
+      "previous_hash": "ea2e022c00ffd2025c9e9650dfff1fe2d480c9dd131463bc9eaa3b4cf430e54a"
+    },
+    {
+      "evidence_id": "uat-evidence",
+      "work_item_id": "LIVE-OBS-MROS-HERITAGE-SHA-20261016",
+      "evidence_type": "UAT_EVIDENCE",
+      "role": "UAT_REVIEWER",
+      "author": "uat-agent",
+      "timestamp": "2026-10-16T12:08:00+00:00",
+      "status": "PASS",
+      "summary": "proof",
+      "references": [
+        "evidence://uat-evidence"
+      ],
+      "content_hash": "22a88194953ed183339a4ede2504709eb914bd1156ec4557598c10a75e52916e",
+      "check_results": [],
+      "work_item_hash": "1c1cff5beb28511913a105a4f4536691ca7c9dab5b2f163add46c2388aca01f7",
+      "sequence": 7,
+      "previous_hash": "e175d21b6a15170bca2718acf4e734be17639fa7edea3591e961e06fc5aab702"
+    },
+    {
+      "evidence_id": "po-accept",
+      "work_item_id": "LIVE-OBS-MROS-HERITAGE-SHA-20261016",
+      "evidence_type": "PRODUCT_ACCEPTANCE_EVIDENCE",
+      "role": "PRODUCT_OWNER",
+      "author": "po-agent",
+      "timestamp": "2026-10-16T12:09:00+00:00",
+      "status": "PASS",
+      "summary": "proof",
+      "references": [
+        "evidence://po-accept"
+      ],
+      "content_hash": "2ed028c6bcff3b573e3265038e66bbb7979db7449aa042c7bd93b330a9982396",
+      "check_results": [],
+      "work_item_hash": "1c1cff5beb28511913a105a4f4536691ca7c9dab5b2f163add46c2388aca01f7",
+      "sequence": 8,
+      "previous_hash": "22a88194953ed183339a4ede2504709eb914bd1156ec4557598c10a75e52916e"
+    },
+    {
+      "evidence_id": "rm-release",
+      "work_item_id": "LIVE-OBS-MROS-HERITAGE-SHA-20261016",
+      "evidence_type": "RELEASE_EVIDENCE",
+      "role": "RELEASE_MANAGER",
+      "author": "rm-agent",
+      "timestamp": "2026-10-16T12:11:00+00:00",
+      "status": "PASS",
+      "summary": "proof",
+      "references": [
+        "evidence://rm-release"
+      ],
+      "content_hash": "1b8548e411d17230a20db1149a6b4d2c43a80d996cdc5bc57d949b8de9fb69ef",
+      "check_results": [],
+      "work_item_hash": "1c1cff5beb28511913a105a4f4536691ca7c9dab5b2f163add46c2388aca01f7",
+      "sequence": 9,
+      "previous_hash": "2ed028c6bcff3b573e3265038e66bbb7979db7449aa042c7bd93b330a9982396"
+    }
+  ],
+  "defects": [],
+  "required_ci_checks": [
+    "unit_tests"
+  ],
+  "extensions": {
+    "evidence_standard": {
+      "schema_version": 1,
+      "enforcement_mode": "REPORT_ONLY",
+      "applicability": "REQUIRED",
+      "applicability_reason": "Changes MROS live session runner CLI options and verification logic.",
+      "assessed_paths": [
+        "scripts/run_market_event_graph_live_session_v1.py",
+        "tests/test_run_market_event_graph_live_session_v1.py",
+        "tests/test_governed_morning_observer.py",
+        "docs/agent_reviews/pr986_mros_heritage_manifest_sha256_arg.md",
+        "governance/evidence/CLAIM_REGISTRY.json",
+        "governance/evidence/VERIFICATION_MATRIX.json",
+        "governance/evidence/work_items/LIVE-OBS-MROS-HERITAGE-SHA-20261016.json"
+      ],
+      "subject_commit_sha": null,
+      "claims": [
+        {
+          "claim_id": "LIVE_OBS_MROS_HERITAGE_SHA256_PARITY",
+          "statement": "scripts/run_market_event_graph_live_session_v1.py accepts --heritage-manifest-sha256 and validates it fail-closed against the computed SHA256 of --heritage-manifest.",
+          "claim_kind": "implementation",
+          "status": "UNVERIFIED",
+          "source_ids": [],
+          "evidence_refs": [],
+          "assumptions": [],
+          "gate_evidence": {},
+          "limitation": "Covers argument parity and cryptographic verification only; does not authorize live orders."
+        }
+      ]
+    }
+  }
+}

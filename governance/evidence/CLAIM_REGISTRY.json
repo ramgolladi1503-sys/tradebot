@@ -187,6 +187,24 @@
       "source_ids": [],
       "evidence_refs": [],
       "limitation": "This claim covers candidate registration logic only; it does not authorize live orders or guarantee strategy profitability."
+    },
+    {
+      "claim_id": "LIVE_OBS_MROS_HERITAGE_SHA256_PARITY",
+      "statement": "scripts/run_market_event_graph_live_session_v1.py accepts --heritage-manifest-sha256 and validates it fail-closed against the computed SHA256 of --heritage-manifest.",
+      "claim_kind": "implementation",
+      "scope_paths": [
+        "scripts/run_market_event_graph_live_session_v1.py",
+        "tests/test_run_market_event_graph_live_session_v1.py",
+        "docs/agent_reviews/pr986_mros_heritage_manifest_sha256_arg.md",
+        "governance/evidence/CLAIM_REGISTRY.json",
+        "governance/evidence/work_items/LIVE-OBS-MROS-HERITAGE-SHA-20261016.json",
+        "governance/evidence/VERIFICATION_MATRIX.json",
+        "tests/test_governed_morning_observer.py"
+      ],
+      "status": "UNVERIFIED",
+      "source_ids": [],
+      "evidence_refs": [],
+      "limitation": "Covers argument parity and cryptographic verification only; does not authorize live orders."
     }
   ]
 }
