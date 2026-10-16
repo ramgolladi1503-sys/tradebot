@@ -2836,6 +2836,7 @@ def activate_market_event_graph_launch_plan(plan: Mapping[str, Any]) -> dict[str
         plan_sha=str(plan.get("launch_plan_sha256") or ""),
     )
     if not ok:
+        invalidate_desired_subscription_candidate(source="launch_plan_not_ok_or_unsealed")
         return res
 
     _INTENDED_TOKENS = _normalize_positive_tokens(plan.get("final_union_tokens") or ())
@@ -2850,6 +2851,7 @@ def activate_market_event_graph_launch_plan(plan: Mapping[str, Any]) -> dict[str
             "FEED_LAUNCH_PLAN_OPTION_METADATA_BLOCKED",
             {"reason": "invalid_or_incomplete_production_resolution", "plan_sha": str(plan.get("launch_plan_sha256") or "")},
         )
+        invalidate_desired_subscription_candidate(source="launch_plan_option_metadata_blocked")
         return res
 
     requested_by_symbol, min_required_by_symbol, option_token_to_symbol = metadata
@@ -2861,10 +2863,22 @@ def activate_market_event_graph_launch_plan(plan: Mapping[str, Any]) -> dict[str
     }
     _TOKEN_TO_SYMBOL = dict(option_token_to_symbol)
     _TOKEN_TO_SYMBOL.update(_UNDERLYING_TOKEN_TO_SYMBOL)
-    _stage_option_contracts_from_resolution(
-        plan.get("production_resolution") or (),
-        source="launch_plan_instrument_master",
-    )
+
+    option_tokens = [tok for tok, sym in option_token_to_symbol.items() if sym != "STICKY"]
+    configured_budget = int(plan.get("configured_budget") or len(_INTENDED_TOKENS))
+
+    with _OPTION_OWNERSHIP_LOCK:
+        _stage_option_contracts_from_resolution(
+            plan.get("production_resolution") or (),
+            source="launch_plan_instrument_master",
+        )
+        record_desired_subscription_candidate(
+            tokens=_INTENDED_TOKENS,
+            option_tokens=option_tokens,
+            configured_budget=configured_budget,
+            source="kite_depth_ws.activate_market_event_graph_launch_plan",
+            observation_required=bool(getattr(cfg, "MARKET_EVENT_GRAPH_LIVE_SOURCE_ENABLE", False)),
+        )
     return res
 
 

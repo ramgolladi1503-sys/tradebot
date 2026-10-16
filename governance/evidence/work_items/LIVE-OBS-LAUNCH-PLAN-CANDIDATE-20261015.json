@@ -1,0 +1,439 @@
+{
+  "work_item_id": "LIVE-OBS-LAUNCH-PLAN-CANDIDATE-20261015",
+  "type": "BUG",
+  "parent_epic": "TRADEBOT-LIVE-OBSERVATION-RELIABILITY",
+  "parent_feature": "FEED-SUBSCRIPTION-CANDIDATE",
+  "title": "Atomically record desired subscription candidate upon launch plan activation",
+  "schema_version": 1,
+  "current_state": "PR_OPEN",
+  "priority": "P0",
+  "business_goal": "Record desired subscription candidate atomically under _OPTION_OWNERSHIP_LOCK when a valid sealed presession launch plan is activated, ensuring subscription state synchronization reaches complete=True and unblocking downstream candidate signal evaluation.",
+  "current_behavior": "activate_market_event_graph_launch_plan stages option contracts but does not record the desired subscription candidate, leaving complete=False and tripping desired_subscription_candidate_invalid_or_stale -> SUBSCRIBE_FAILED -> ownership.state=UNKNOWN -> global_feed_unhealthy.",
+  "expected_behavior": "activate_market_event_graph_launch_plan records the desired subscription candidate atomically upon validation, and invalidates fail-closed if the plan is unsealed, not OK, or option metadata resolution is blocked.",
+  "in_scope": [
+    "core/kite_depth_ws.py",
+    "tests/test_kite_depth_ws_stability.py",
+    "docs/tradebot_delivery/live_audit_top30_signals.md",
+    "docs/agent_reviews/pr984_launch_plan_candidate_registration.md",
+    "governance/evidence/CLAIM_REGISTRY.json",
+    "governance/evidence/work_items/LIVE-OBS-LAUNCH-PLAN-CANDIDATE-20261015.json"
+  ],
+  "out_of_scope": [
+    "broker order execution or modification",
+    "live risk limits weakening or threshold bypassing",
+    "credentials or environment files",
+    "unrelated strategy code"
+  ],
+  "dependencies": [
+    "presession launch plan verification contract",
+    "option token resolver metadata"
+  ],
+  "acceptance_criteria": [
+    "Valid sealed launch plan records desired subscription candidate atomically",
+    "Unsealed or invalid launch plan invalidates candidate fail-closed",
+    "Blocked option metadata resolution invalidates candidate fail-closed",
+    "Candidate tokens reconcile against observation final_union_tokens",
+    "Safety non-negotiables are preserved (read_only=true, is_order_action=false, broker_api_called=false)"
+  ],
+  "safety_constraints": [
+    "read_only=true",
+    "is_order_action=false",
+    "broker_api_called=false",
+    "allowed_for_live_execution=false"
+  ],
+  "architecture_impact": "Ensures deterministic atomic transition of WebSocket subscription candidate state from validated presession launch plans without race conditions or deadlocks.",
+  "allowed_paths": [
+    "core/kite_depth_ws.py",
+    "tests/test_kite_depth_ws_stability.py",
+    "docs/tradebot_delivery/live_audit_top30_signals.md",
+    "docs/agent_reviews/pr984_launch_plan_candidate_registration.md",
+    "governance/evidence/CLAIM_REGISTRY.json",
+    "governance/evidence/work_items/LIVE-OBS-LAUNCH-PLAN-CANDIDATE-20261015.json"
+  ],
+  "forbidden_paths": [
+    "main.py",
+    "run_live.sh",
+    "config/**",
+    "credentials.py",
+    "core/broker/**",
+    "core/order/**",
+    "core/risk/**",
+    "strategies/**",
+    "runtime/live/**"
+  ],
+  "expected_tests": [
+    "tests/test_kite_depth_ws_stability.py"
+  ],
+  "qa_attack_plan": [
+    "test valid sealed launch plan records candidate",
+    "test unsealed or not ok launch plan invalidates candidate",
+    "test metadata blocked plan invalidates candidate",
+    "test observation sync reconciles candidate tokens",
+    "test safety non-negotiables invariant verification"
+  ],
+  "uat_criteria": [
+    "offline stability tests verify candidate registration and fail-closed invalidations"
+  ],
+  "release_gates": [
+    "required delivery lifecycle evidence",
+    "focused unit stability tests",
+    "trusted material evidence check"
+  ],
+  "rollback_plan": "Revert this scoped candidate registration change and its tests.",
+  "evidence_refs": [],
+  "acting_role": "RELEASE_MANAGER",
+  "state_history": [
+    {
+      "from_state": "BACKLOG",
+      "to_state": "REQUIREMENT_READY",
+      "acting_role": "BUSINESS_ANALYST",
+      "actor": "ba-agent-80016d66",
+      "timestamp": "2026-10-15T10:01:00+00:00",
+      "reason": "evidence review for DeliveryState.REQUIREMENT_READY",
+      "evidence_ids": [
+        "req-ba"
+      ],
+      "contract_hash": "7e9c20ab0e2546d89f259bcc50d31f151509476f2cacaccfcf36d55d597389de",
+      "previous_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "entry_hash": "b235e9d72ff63a0aaddaeb265d76e0c965869fdb3d212a6585816b8a939d2b03"
+    },
+    {
+      "from_state": "REQUIREMENT_READY",
+      "to_state": "DESIGN_READY",
+      "acting_role": "SYSTEM_ARCHITECT",
+      "actor": "hermes-agent-8ee41a86",
+      "timestamp": "2026-10-15T10:02:00+00:00",
+      "reason": "evidence review for DeliveryState.DESIGN_READY",
+      "evidence_ids": [
+        "req-ba",
+        "req-po",
+        "arch-hermes"
+      ],
+      "contract_hash": "7e9c20ab0e2546d89f259bcc50d31f151509476f2cacaccfcf36d55d597389de",
+      "previous_hash": "b235e9d72ff63a0aaddaeb265d76e0c965869fdb3d212a6585816b8a939d2b03",
+      "entry_hash": "7c02fbddda67aa5f1670647c53c09b4564eb436ab6175f992aedce8e5a933727"
+    },
+    {
+      "from_state": "DESIGN_READY",
+      "to_state": "IN_DEVELOPMENT",
+      "acting_role": "BACKEND_DEVELOPER",
+      "actor": "gsd-agent-f5fb0184",
+      "timestamp": "2026-10-15T10:03:00+00:00",
+      "reason": "evidence review for DeliveryState.IN_DEVELOPMENT",
+      "evidence_ids": [],
+      "contract_hash": "7e9c20ab0e2546d89f259bcc50d31f151509476f2cacaccfcf36d55d597389de",
+      "previous_hash": "7c02fbddda67aa5f1670647c53c09b4564eb436ab6175f992aedce8e5a933727",
+      "entry_hash": "de8214594c6fd28e0f64b8def49b8cb64d8ca88a669e0575a0e3882c92441e96"
+    },
+    {
+      "from_state": "IN_DEVELOPMENT",
+      "to_state": "DEV_VERIFIED",
+      "acting_role": "BACKEND_DEVELOPER",
+      "actor": "gsd-agent-f5fb0184",
+      "timestamp": "2026-10-15T10:04:00+00:00",
+      "reason": "evidence review for DeliveryState.DEV_VERIFIED",
+      "evidence_ids": [
+        "dev-gsd"
+      ],
+      "contract_hash": "7e9c20ab0e2546d89f259bcc50d31f151509476f2cacaccfcf36d55d597389de",
+      "previous_hash": "de8214594c6fd28e0f64b8def49b8cb64d8ca88a669e0575a0e3882c92441e96",
+      "entry_hash": "16e779a314e3af978ec25bc32109d72176c74db3236dcb132feb9de9939c8aa8"
+    },
+    {
+      "from_state": "DEV_VERIFIED",
+      "to_state": "QA_IN_PROGRESS",
+      "acting_role": "QA_ENGINEER",
+      "actor": "qa-agent-4d7a78bb",
+      "timestamp": "2026-10-15T10:05:00+00:00",
+      "reason": "evidence review for DeliveryState.QA_IN_PROGRESS",
+      "evidence_ids": [],
+      "contract_hash": "7e9c20ab0e2546d89f259bcc50d31f151509476f2cacaccfcf36d55d597389de",
+      "previous_hash": "16e779a314e3af978ec25bc32109d72176c74db3236dcb132feb9de9939c8aa8",
+      "entry_hash": "d425de93bf765aaccb42bbca10e2185620c3832cdcbe09f18dd72e9d5f1bb897"
+    },
+    {
+      "from_state": "QA_IN_PROGRESS",
+      "to_state": "QA_PASSED",
+      "acting_role": "QA_ENGINEER",
+      "actor": "qa-agent-4d7a78bb",
+      "timestamp": "2026-10-15T10:06:00+00:00",
+      "reason": "evidence review for DeliveryState.QA_PASSED",
+      "evidence_ids": [
+        "qa-evidence"
+      ],
+      "contract_hash": "7e9c20ab0e2546d89f259bcc50d31f151509476f2cacaccfcf36d55d597389de",
+      "previous_hash": "d425de93bf765aaccb42bbca10e2185620c3832cdcbe09f18dd72e9d5f1bb897",
+      "entry_hash": "1e0c9b6ed1c4f72fd00fc9ca1c95a3ee5838fc0d31ccc2ebcea0e01d88171f17"
+    },
+    {
+      "from_state": "QA_PASSED",
+      "to_state": "SENIOR_QA",
+      "acting_role": "SENIOR_QA",
+      "actor": "sqa-agent-27c1c8df",
+      "timestamp": "2026-10-15T10:07:00+00:00",
+      "reason": "evidence review for DeliveryState.SENIOR_QA",
+      "evidence_ids": [
+        "senior-qa"
+      ],
+      "contract_hash": "7e9c20ab0e2546d89f259bcc50d31f151509476f2cacaccfcf36d55d597389de",
+      "previous_hash": "1e0c9b6ed1c4f72fd00fc9ca1c95a3ee5838fc0d31ccc2ebcea0e01d88171f17",
+      "entry_hash": "51f68d44f4ff36ca48ab5063478d602c9eb87f3bb13bcf5100acca1f58a7f5c6"
+    },
+    {
+      "from_state": "SENIOR_QA",
+      "to_state": "UAT",
+      "acting_role": "SENIOR_QA",
+      "actor": "sqa-agent-27c1c8df",
+      "timestamp": "2026-10-15T10:08:00+00:00",
+      "reason": "evidence review for DeliveryState.UAT",
+      "evidence_ids": [
+        "senior-qa"
+      ],
+      "contract_hash": "7e9c20ab0e2546d89f259bcc50d31f151509476f2cacaccfcf36d55d597389de",
+      "previous_hash": "51f68d44f4ff36ca48ab5063478d602c9eb87f3bb13bcf5100acca1f58a7f5c6",
+      "entry_hash": "2262e49505c53e4d18dac64cce78aaa8ccc747b1d7f761c89c2408afb55d1d16"
+    },
+    {
+      "from_state": "UAT",
+      "to_state": "PRODUCT_ACCEPTED",
+      "acting_role": "PRODUCT_OWNER",
+      "actor": "po-agent-fe742b8b",
+      "timestamp": "2026-10-15T10:10:00+00:00",
+      "reason": "evidence review for DeliveryState.PRODUCT_ACCEPTED",
+      "evidence_ids": [
+        "uat-evidence",
+        "po-accept"
+      ],
+      "contract_hash": "7e9c20ab0e2546d89f259bcc50d31f151509476f2cacaccfcf36d55d597389de",
+      "previous_hash": "2262e49505c53e4d18dac64cce78aaa8ccc747b1d7f761c89c2408afb55d1d16",
+      "entry_hash": "0b983477deca848c04927eee706e3b5344931bf829a57dd1b4a333306d0324c8"
+    },
+    {
+      "from_state": "PRODUCT_ACCEPTED",
+      "to_state": "RELEASE_READY",
+      "acting_role": "RELEASE_MANAGER",
+      "actor": "rm-coordinator",
+      "timestamp": "2026-10-15T10:11:00+00:00",
+      "reason": "evidence review for DeliveryState.RELEASE_READY",
+      "evidence_ids": [
+        "rm-release"
+      ],
+      "contract_hash": "7e9c20ab0e2546d89f259bcc50d31f151509476f2cacaccfcf36d55d597389de",
+      "previous_hash": "0b983477deca848c04927eee706e3b5344931bf829a57dd1b4a333306d0324c8",
+      "entry_hash": "8a360aa52c067208888be9ebe0a46be008c73f81e99372faa3f590be6ff3d8a2"
+    },
+    {
+      "from_state": "RELEASE_READY",
+      "to_state": "PR_OPEN",
+      "acting_role": "RELEASE_MANAGER",
+      "actor": "rm-coordinator",
+      "timestamp": "2026-10-15T10:12:00+00:00",
+      "reason": "evidence review for DeliveryState.PR_OPEN",
+      "evidence_ids": [
+        "rm-release"
+      ],
+      "contract_hash": "7e9c20ab0e2546d89f259bcc50d31f151509476f2cacaccfcf36d55d597389de",
+      "previous_hash": "8a360aa52c067208888be9ebe0a46be008c73f81e99372faa3f590be6ff3d8a2",
+      "entry_hash": "bf9da412d12c9bea117ad5ade860dacba7f765864fda9ab3414b3f4fd9fd31a9"
+    }
+  ],
+  "defect_history": [],
+  "evidence": [
+    {
+      "evidence_id": "req-ba",
+      "work_item_id": "LIVE-OBS-LAUNCH-PLAN-CANDIDATE-20261015",
+      "evidence_type": "REQUIREMENT_EVIDENCE",
+      "role": "BUSINESS_ANALYST",
+      "author": "ba-agent-80016d66",
+      "timestamp": "2026-10-15T10:00:00+00:00",
+      "status": "PASS",
+      "summary": "proof",
+      "references": [
+        "evidence://req-ba"
+      ],
+      "content_hash": "8c8b56541ae120ad9faaee276885cd1c6fe01e79251f6e27351e8aca80d6cd38",
+      "check_results": [],
+      "work_item_hash": "7e9c20ab0e2546d89f259bcc50d31f151509476f2cacaccfcf36d55d597389de",
+      "sequence": 1,
+      "previous_hash": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "evidence_id": "req-po",
+      "work_item_id": "LIVE-OBS-LAUNCH-PLAN-CANDIDATE-20261015",
+      "evidence_type": "REQUIREMENT_EVIDENCE",
+      "role": "PRODUCT_OWNER",
+      "author": "po-agent-fe742b8b",
+      "timestamp": "2026-10-15T10:01:00+00:00",
+      "status": "PASS",
+      "summary": "proof",
+      "references": [
+        "evidence://req-po"
+      ],
+      "content_hash": "d047184e6dfde92a8e57b065461bf81c43c49d00bc1f62cce4b2ee98bdd9c520",
+      "check_results": [],
+      "work_item_hash": "7e9c20ab0e2546d89f259bcc50d31f151509476f2cacaccfcf36d55d597389de",
+      "sequence": 2,
+      "previous_hash": "8c8b56541ae120ad9faaee276885cd1c6fe01e79251f6e27351e8aca80d6cd38"
+    },
+    {
+      "evidence_id": "arch-hermes",
+      "work_item_id": "LIVE-OBS-LAUNCH-PLAN-CANDIDATE-20261015",
+      "evidence_type": "ARCHITECTURE_EVIDENCE",
+      "role": "SYSTEM_ARCHITECT",
+      "author": "hermes-agent-8ee41a86",
+      "timestamp": "2026-10-15T10:02:00+00:00",
+      "status": "PASS",
+      "summary": "proof",
+      "references": [
+        "evidence://arch-hermes"
+      ],
+      "content_hash": "1e52abcef3c9f3f64bffde811570d563915349024ae8e40510541c6ff8c41061",
+      "check_results": [],
+      "work_item_hash": "7e9c20ab0e2546d89f259bcc50d31f151509476f2cacaccfcf36d55d597389de",
+      "sequence": 3,
+      "previous_hash": "d047184e6dfde92a8e57b065461bf81c43c49d00bc1f62cce4b2ee98bdd9c520"
+    },
+    {
+      "evidence_id": "dev-gsd",
+      "work_item_id": "LIVE-OBS-LAUNCH-PLAN-CANDIDATE-20261015",
+      "evidence_type": "DEV_TEST_EVIDENCE",
+      "role": "BACKEND_DEVELOPER",
+      "author": "gsd-agent-f5fb0184",
+      "timestamp": "2026-10-15T10:04:00+00:00",
+      "status": "PASS",
+      "summary": "proof",
+      "references": [
+        "evidence://dev-gsd"
+      ],
+      "content_hash": "735c2667bec95d9ecf8c98af2e29133bef30a84a9f8255a719b00a6ee1a8979d",
+      "check_results": [],
+      "work_item_hash": "7e9c20ab0e2546d89f259bcc50d31f151509476f2cacaccfcf36d55d597389de",
+      "sequence": 4,
+      "previous_hash": "1e52abcef3c9f3f64bffde811570d563915349024ae8e40510541c6ff8c41061"
+    },
+    {
+      "evidence_id": "qa-evidence",
+      "work_item_id": "LIVE-OBS-LAUNCH-PLAN-CANDIDATE-20261015",
+      "evidence_type": "QA_EVIDENCE",
+      "role": "QA_ENGINEER",
+      "author": "qa-agent-4d7a78bb",
+      "timestamp": "2026-10-15T10:06:00+00:00",
+      "status": "PASS",
+      "summary": "proof",
+      "references": [
+        "evidence://qa-evidence"
+      ],
+      "content_hash": "03f9b7385384141b243be80650a6b0f5dc8589805ca435f95173a88483869a5e",
+      "check_results": [],
+      "work_item_hash": "7e9c20ab0e2546d89f259bcc50d31f151509476f2cacaccfcf36d55d597389de",
+      "sequence": 5,
+      "previous_hash": "735c2667bec95d9ecf8c98af2e29133bef30a84a9f8255a719b00a6ee1a8979d"
+    },
+    {
+      "evidence_id": "senior-qa",
+      "work_item_id": "LIVE-OBS-LAUNCH-PLAN-CANDIDATE-20261015",
+      "evidence_type": "SENIOR_QA_EVIDENCE",
+      "role": "SENIOR_QA",
+      "author": "sqa-agent-27c1c8df",
+      "timestamp": "2026-10-15T10:07:00+00:00",
+      "status": "PASS",
+      "summary": "proof",
+      "references": [
+        "evidence://senior-qa"
+      ],
+      "content_hash": "a64adc52633781c06ab137eafe770f5c8b5b1d0bd6e784a7fb5bb3a2c34658c8",
+      "check_results": [],
+      "work_item_hash": "7e9c20ab0e2546d89f259bcc50d31f151509476f2cacaccfcf36d55d597389de",
+      "sequence": 6,
+      "previous_hash": "03f9b7385384141b243be80650a6b0f5dc8589805ca435f95173a88483869a5e"
+    },
+    {
+      "evidence_id": "uat-evidence",
+      "work_item_id": "LIVE-OBS-LAUNCH-PLAN-CANDIDATE-20261015",
+      "evidence_type": "UAT_EVIDENCE",
+      "role": "UAT_REVIEWER",
+      "author": "uat-agent-111502bb",
+      "timestamp": "2026-10-15T10:09:00+00:00",
+      "status": "PASS",
+      "summary": "proof",
+      "references": [
+        "evidence://uat-evidence"
+      ],
+      "content_hash": "c0b44692cd334f2853a5ca1c82e2e598b1dfb45d1bdbb0945746a6f88451f14f",
+      "check_results": [],
+      "work_item_hash": "7e9c20ab0e2546d89f259bcc50d31f151509476f2cacaccfcf36d55d597389de",
+      "sequence": 7,
+      "previous_hash": "a64adc52633781c06ab137eafe770f5c8b5b1d0bd6e784a7fb5bb3a2c34658c8"
+    },
+    {
+      "evidence_id": "po-accept",
+      "work_item_id": "LIVE-OBS-LAUNCH-PLAN-CANDIDATE-20261015",
+      "evidence_type": "PRODUCT_ACCEPTANCE_EVIDENCE",
+      "role": "PRODUCT_OWNER",
+      "author": "po-agent-fe742b8b",
+      "timestamp": "2026-10-15T10:10:00+00:00",
+      "status": "PASS",
+      "summary": "proof",
+      "references": [
+        "evidence://po-accept"
+      ],
+      "content_hash": "566fbbf9c210521d81ced9de9bb8b3cff0a82b63ed78c3ed3fa2127bdf6af4fd",
+      "check_results": [],
+      "work_item_hash": "7e9c20ab0e2546d89f259bcc50d31f151509476f2cacaccfcf36d55d597389de",
+      "sequence": 8,
+      "previous_hash": "c0b44692cd334f2853a5ca1c82e2e598b1dfb45d1bdbb0945746a6f88451f14f"
+    },
+    {
+      "evidence_id": "rm-release",
+      "work_item_id": "LIVE-OBS-LAUNCH-PLAN-CANDIDATE-20261015",
+      "evidence_type": "RELEASE_EVIDENCE",
+      "role": "RELEASE_MANAGER",
+      "author": "rm-coordinator",
+      "timestamp": "2026-10-15T10:11:00+00:00",
+      "status": "PASS",
+      "summary": "proof",
+      "references": [
+        "evidence://rm-release"
+      ],
+      "content_hash": "cd1e1b1db585a33ae33930eccbde5dcbd65bb6005ed2ef1292c2314d9a1a621f",
+      "check_results": [],
+      "work_item_hash": "7e9c20ab0e2546d89f259bcc50d31f151509476f2cacaccfcf36d55d597389de",
+      "sequence": 9,
+      "previous_hash": "566fbbf9c210521d81ced9de9bb8b3cff0a82b63ed78c3ed3fa2127bdf6af4fd"
+    }
+  ],
+  "defects": [],
+  "required_ci_checks": [
+    "unit_tests"
+  ],
+  "extensions": {
+    "evidence_standard": {
+      "schema_version": 1,
+      "enforcement_mode": "REPORT_ONLY",
+      "applicability": "REQUIRED",
+      "applicability_reason": "This work changes material feed subscription candidate tracking behavior and its focused regression coverage.",
+      "assessed_paths": [
+        "core/kite_depth_ws.py",
+        "tests/test_kite_depth_ws_stability.py",
+        "docs/tradebot_delivery/live_audit_top30_signals.md",
+        "docs/agent_reviews/pr984_launch_plan_candidate_registration.md",
+        "governance/evidence/CLAIM_REGISTRY.json",
+        "governance/evidence/work_items/LIVE-OBS-LAUNCH-PLAN-CANDIDATE-20261015.json"
+      ],
+      "subject_commit_sha": null,
+      "claims": [
+        {
+          "claim_id": "LIVE_OBSERVATION_LAUNCH_PLAN_SUBSCRIPTION_CANDIDATE",
+          "statement": "When activate_market_event_graph_launch_plan validates a sealed presession launch plan, it atomically records the desired subscription candidate under _OPTION_OWNERSHIP_LOCK, and invalidates fail-closed on unsealed or metadata-blocked plans.",
+          "claim_kind": "implementation",
+          "status": "UNVERIFIED",
+          "source_ids": [],
+          "evidence_refs": [],
+          "assumptions": [],
+          "gate_evidence": {},
+          "limitation": "This claim covers candidate registration logic only; it does not authorize live orders or guarantee strategy profitability."
+        }
+      ]
+    }
+  }
+}
