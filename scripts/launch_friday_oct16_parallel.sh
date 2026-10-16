@@ -48,7 +48,8 @@ print('Model Manifests Verified for both NIFTY and SENSEX.')
 echo "[2/6] Launching NIFTY Sentinel Paper-Shadow Engine..."
 (
     cd /private/tmp/tradebot-nifty-engine
-    "$PYTHON_BIN" scripts/run_live_feed_advisor.py > "$LOG_DIR/nifty_engine.log" 2>&1
+    export PYTHONPATH="."
+    "$PYTHON_BIN" -u scripts/run_live_feed_advisor.py > "$LOG_DIR/nifty_engine.log" 2>&1
 ) &
 NIFTY_PID=$!
 echo "NIFTY Sentinel Engine started with PID: $NIFTY_PID"
@@ -57,6 +58,7 @@ echo "NIFTY Sentinel Engine started with PID: $NIFTY_PID"
 echo "[3/6] Launching NIFTY Streamlit Dashboard (Port 8501)..."
 (
     cd /private/tmp/tradebot-nifty-engine
+    export PYTHONPATH="."
     "$STREAMLIT_BIN" run scripts/run_sentinel_dashboard.py --server.port 8501 --server.headless true > "$LOG_DIR/nifty_dashboard.log" 2>&1
 ) &
 NIFTY_DASH_PID=$!
@@ -66,7 +68,8 @@ echo "NIFTY Dashboard started with PID: $NIFTY_DASH_PID on port 8501"
 echo "[4/6] Launching SENSEX Sentinel Paper-Shadow Engine..."
 (
     cd /private/tmp/tradebot-sensex-engine
-    "$PYTHON_BIN" scripts/run_live_feed_advisor.py --ticker SENSEX > "$LOG_DIR/sensex_engine.log" 2>&1
+    export PYTHONPATH="."
+    "$PYTHON_BIN" -u scripts/run_live_feed_advisor.py --ticker SENSEX > "$LOG_DIR/sensex_engine.log" 2>&1
 ) &
 SENSEX_PID=$!
 echo "SENSEX Sentinel Engine started with PID: $SENSEX_PID"
@@ -75,6 +78,7 @@ echo "SENSEX Sentinel Engine started with PID: $SENSEX_PID"
 echo "[5/6] Launching SENSEX Streamlit Dashboard (Port 8502)..."
 (
     cd /private/tmp/tradebot-sensex-engine
+    export PYTHONPATH="."
     "$STREAMLIT_BIN" run scripts/run_sentinel_dashboard.py --server.port 8502 --server.headless true > "$LOG_DIR/sensex_dashboard.log" 2>&1
 ) &
 SENSEX_DASH_PID=$!
@@ -84,12 +88,13 @@ echo "SENSEX Dashboard started with PID: $SENSEX_DASH_PID on port 8502"
 echo "[6/6] Launching Sentinel Passive Challenger Observer Daemon..."
 (
     cd /private/tmp/tradebot-sentinel-quant-audit
+    export PYTHONPATH="."
     export SHADOW_NIFTY_WAL_PATH="/private/tmp/tradebot-nifty-engine/runtime/sentinel_apm_wal.json"
     export SHADOW_SENSEX_WAL_PATH="/private/tmp/tradebot-sensex-engine/runtime/sentinel_apm_wal_sensex.json"
     export SHADOW_STATE_PATH="runtime/shadow_evaluator_live_state.json"
     export SHADOW_ALLOW_FRESH_INIT=true
     export SHADOW_MAX_CLOCK_SKEW_SEC=300.0
-    "$PYTHON_BIN" scripts/run_prospective_shadow_observer.py > "$LOG_DIR/shadow_observer.log" 2>&1
+    "$PYTHON_BIN" -u scripts/run_prospective_shadow_observer.py > "$LOG_DIR/shadow_observer.log" 2>&1
 ) &
 OBSERVER_PID=$!
 echo "Passive Observer Daemon started with PID: $OBSERVER_PID"
