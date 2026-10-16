@@ -75,7 +75,10 @@
     ".github/workflows/repo-forensics-pr-gate.yml",
     ".github/workflows/pr818-apply-safe-test-contract-repairs.yml",
     ".github/workflows/rag-ci.yml",
-    "tests/core/"
+    "tests/core/",
+    "scripts/run_market_event_graph_live_session_v1.py",
+    "tests/test_run_market_event_graph_live_session_v1.py",
+    "tests/test_governed_morning_observer.py"
   ],
   "gates": {
     "G1_SOURCE": {
