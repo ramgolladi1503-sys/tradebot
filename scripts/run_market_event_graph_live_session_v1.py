@@ -369,6 +369,7 @@ def main() -> int:
     parser.add_argument("--launch-preflight-only", action="store_true")
     parser.add_argument("--authority-artifact", type=Path, default=None)
     parser.add_argument("--heritage-manifest", type=Path, default=None)
+    parser.add_argument("--heritage-manifest-sha256", default=None, help="Expected SHA256 digest of T-1 heritage manifest")
     args = parser.parse_args()
 
     session_date = _validate_session_date(args.session_date)
@@ -401,7 +402,10 @@ def main() -> int:
     target_expiry = None
     if args.heritage_manifest is not None and args.heritage_manifest.is_file():
         heritage_manifest_path = args.heritage_manifest.resolve()
-        heritage_manifest_sha256 = _sha256(heritage_manifest_path)
+        computed_sha = _sha256(heritage_manifest_path)
+        if args.heritage_manifest_sha256 and args.heritage_manifest_sha256.strip().lower() != computed_sha.lower():
+            raise SystemExit("BLOCKED_BY_HERITAGE_MANIFEST_SHA256_MISMATCH")
+        heritage_manifest_sha256 = computed_sha
         try:
             manifest_doc = json.loads(heritage_manifest_path.read_text(encoding="utf-8"))
             for node in manifest_doc.get("nodes", []):
