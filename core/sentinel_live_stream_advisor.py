@@ -80,8 +80,8 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         self.active_range_high = -math.inf
         self.active_range_low = math.inf
         self.trade_lock_active = True
-        self.latest_spot = 0.0
-        self.latest_spot_ts_ms = 0
+        self.spots: dict[str, float] = {"NIFTY": 0.0, "SENSEX": 0.0, "BANKNIFTY": 0.0}
+        self.spots_ts_ms: dict[str, int] = {"NIFTY": 0, "SENSEX": 0, "BANKNIFTY": 0}
 
         self.alerts_history: list[AdvisoryAlert] = []
         self._lock = threading.Lock()
@@ -93,35 +93,53 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         self.broker_api_called = False
         self.allowed_for_live_execution = False
 
+    @property
+    def latest_spot(self) -> float:
+        with self._lock:
+            return self.spots.get("NIFTY", 0.0)
+
     def on_tick(self, tick: UpstoxTickRecord) -> None:
-        """Handle incoming tick."""
-        if tick.token in ("NSE_INDEX|Nifty 50", "NSE_INDEX:Nifty 50"):
-            self._update_spot(tick.ltp, tick.exchange_timestamp_ms)
+        """Handle incoming tick for NIFTY, SENSEX, and BANKNIFTY."""
+        token = tick.token
+        if "Nifty 50" in token:
+            self._update_spot("NIFTY", tick.ltp, tick.exchange_timestamp_ms)
+        elif "SENSEX" in token:
+            self._update_spot("SENSEX", tick.ltp, tick.exchange_timestamp_ms)
+        elif "Nifty Bank" in token:
+            self._update_spot("BANKNIFTY", tick.ltp, tick.exchange_timestamp_ms)
 
     def on_depth(self, depth: UpstoxLevel5DepthRecord) -> None:
         """Handle incoming Level-5 depth snapshot."""
-        if depth.token in ("NSE_INDEX|Nifty 50", "NSE_INDEX:Nifty 50"):
-            self._update_spot(depth.ltp, depth.exchange_timestamp_ms)
+        token = depth.token
+        if "Nifty 50" in token:
+            self._update_spot("NIFTY", depth.ltp, depth.exchange_timestamp_ms)
+            return
+        elif "SENSEX" in token:
+            self._update_spot("SENSEX", depth.ltp, depth.exchange_timestamp_ms)
+            return
+        elif "Nifty Bank" in token:
+            self._update_spot("BANKNIFTY", depth.ltp, depth.exchange_timestamp_ms)
             return
 
-        # Trigger option assessment on option depth updates
+        # Trigger option assessment on option depth updates (NIFTY, SENSEX, or BANKNIFTY options)
         self._evaluate_option_depth(depth)
 
     def on_stream_status(self, status: Any) -> None:
         pass
 
-    def _update_spot(self, spot: float, ts_ms: int) -> None:
+    def _update_spot(self, index_name: str, spot: float, ts_ms: int) -> None:
         if spot <= 0:
             return
         with self._lock:
-            self.latest_spot = spot
-            self.latest_spot_ts_ms = ts_ms
+            self.spots[index_name] = spot
+            self.spots_ts_ms[index_name] = ts_ms
 
             now_t = datetime.now().time()
             if now_t < self.opening_shock_end_time:
                 self.trade_lock_active = True
-                self.active_range_high = max(self.active_range_high, spot)
-                self.active_range_low = min(self.active_range_low, spot)
+                if index_name == "NIFTY":
+                    self.active_range_high = max(self.active_range_high, spot)
+                    self.active_range_low = min(self.active_range_low, spot)
             else:
                 if self.trade_lock_active and self.active_range_high > -math.inf:
                     self.trade_lock_active = False
@@ -139,9 +157,21 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         if now_ts - self._last_alert_time < 1.0:
             return
 
+        # Determine which index this option belongs to
+        sym = depth.symbol.upper()
+        if "SENSEX" in sym:
+            index_name = "SENSEX"
+            strike_interval = 100.0
+        elif "BANKNIFTY" in sym:
+            index_name = "BANKNIFTY"
+            strike_interval = 100.0
+        else:
+            index_name = "NIFTY"
+            strike_interval = 50.0
+
         with self._lock:
-            spot = self.latest_spot
-            spot_ts = self.latest_spot_ts_ms
+            spot = self.spots.get(index_name, 0.0)
+            spot_ts = self.spots_ts_ms.get(index_name, 0)
             trade_lock = self.trade_lock_active
 
         if spot <= 0:
@@ -182,7 +212,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             timestamp_ms=depth.exchange_timestamp_ms,
             wall_time_str=now_time.strftime("%H:%M:%S"),
             spot_price=spot,
-            atm_strike=round(spot / 50.0) * 50.0,
+            atm_strike=round(spot / strike_interval) * strike_interval,
             option_symbol=depth.symbol,
             option_type="CE" if "CE" in depth.symbol else "PE",
             option_ltp=ltp,
@@ -201,7 +231,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
         if self.enable_stdout:
             print(
-                f"🛰️ [{alert.wall_time_str}] NIFTY: {spot:.1f} | {depth.symbol} LTP: {ltp:.2f} | "
+                f"🛰️ [{alert.wall_time_str}] {index_name}: {spot:.1f} | {depth.symbol} LTP: {ltp:.2f} | "
                 f"Spread: {spread:.2f} ({spread_ratio * 100:.1f}%) | "
                 f"Status: {status_flag} | Advisory: {advisory}"
             )
