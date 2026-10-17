@@ -1,6 +1,8 @@
 import json
+import threading
 from pathlib import Path
 from datetime import datetime
+import pytest
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -10,6 +12,11 @@ from scripts.upstox_daily_live_capture_and_stitch import (
     get_options_subscriptions,
     execute_post_market_stitching,
     get_access_token,
+    get_today_data_dir,
+    flush_buffer,
+    DEFAULT_TICK_SCHEMA,
+    PRIMARY_BASE_DIRS,
+    FALLBACK_BASE_DIR,
 )
 
 
@@ -59,6 +66,7 @@ def test_get_options_subscriptions_resolution():
     assert subs.get("NSE_INDEX|Nifty 50") == "NIFTY 50"
     assert subs.get("NSE_INDEX|Nifty Bank") == "NIFTY BANK"
     assert subs.get("BSE_INDEX|SENSEX") == "SENSEX"
+    assert subs.get("NSE_INDEX|India VIX") == "INDIA VIX"
     assert subs.get("NSE_FO|101") == "NIFTY 24000 CE"
     assert subs.get("NSE_FO|102") == "NIFTY 24000 PE"
     assert subs.get("NSE_FO|103") == "NIFTY 24050 CE"
@@ -187,3 +195,259 @@ def test_refresh_late_day_option_subscriptions():
     # Existing morning subscriptions must remain intact
     assert "NSE_FO|101" in subscriptions
     assert "NSE_FO|102" in subscriptions
+
+
+def test_refresh_late_day_option_subscriptions_multi_underlying_sensex():
+    from core.upstox_capture.late_day_option_refresh import refresh_late_day_option_subscriptions
+
+    class MockStreamer:
+        def __init__(self):
+            self.subscribed_keys = []
+
+        def subscribe(self, keys, mode="full"):
+            self.subscribed_keys.extend(keys)
+
+    today_ms = int(datetime.now().timestamp() * 1000)
+    mock_data = [
+        # Morning SENSEX strikes around 73000
+        {"name": "SENSEX", "instrument_type": "CE", "strike_price": 73000.0, "expiry": today_ms, "instrument_key": "BSE_FO|73000CE", "trading_symbol": "SENSEX 73000 CE"},
+        {"name": "SENSEX", "instrument_type": "PE", "strike_price": 73000.0, "expiry": today_ms, "instrument_key": "BSE_FO|73000PE", "trading_symbol": "SENSEX 73000 PE"},
+        # Afternoon SENSEX strikes around 74100 (after 1100 pt rally)
+        {"name": "SENSEX", "instrument_type": "CE", "strike_price": 74100.0, "expiry": today_ms, "instrument_key": "BSE_FO|1115540", "trading_symbol": "SENSEX 74100 CE"},
+        {"name": "SENSEX", "instrument_type": "PE", "strike_price": 74100.0, "expiry": today_ms, "instrument_key": "BSE_FO|1101701", "trading_symbol": "SENSEX 74100 PE"},
+    ]
+    df_inst = pd.DataFrame(mock_data)
+    streamer = MockStreamer()
+    subscriptions = {
+        "BSE_FO|73000CE": "SENSEX 73000 CE",
+        "BSE_FO|73000PE": "SENSEX 73000 PE",
+    }
+
+    # SENSEX spot rallies to 74,150.0 (ATM 74100 or 74200)
+    new_count = refresh_late_day_option_subscriptions(
+        streamer=streamer,
+        subscriptions=subscriptions,
+        df_inst=df_inst,
+        current_spot_prices={"SENSEX": 74150.0}
+    )
+
+    # Must subscribe 74100 CE and PE which were missing
+    assert new_count == 2
+    assert "BSE_FO|1115540" in subscriptions
+    assert "BSE_FO|1101701" in subscriptions
+    assert "BSE_FO|1115540" in streamer.subscribed_keys
+    assert subscriptions["BSE_FO|1115540"] == "SENSEX 74100 CE"
+    assert subscriptions["BSE_FO|1101701"] == "SENSEX 74100 PE"
+
+
+def test_stitching_merges_existing_master_without_deleting_it(tmp_path, monkeypatch):
+    monkeypatch.setenv("UPSTOX_ACCESS_TOKEN", "mock_token")
+
+    data_dir = tmp_path / "2026-09-28"
+    chunks_dir = data_dir / "chunks"
+    chunks_dir.mkdir(parents=True)
+
+    # 1. Existing master file
+    existing_master_data = {
+        "ts": [1790566100.0],
+        "token": ["NSE_INDEX|Nifty 50"],
+        "symbol": ["NIFTY 50"],
+        "ltp": [23100.0],
+        "bid": [23099.0],
+        "ask": [23101.0],
+        "vol": [10.0],
+        "oi": [100.0],
+        "depth": ["{}"],
+    }
+    master_file = data_dir / "upstox_full_ticks_20260928_stitched.parquet"
+    pq.write_table(pa.Table.from_pandas(pd.DataFrame(existing_master_data)), master_file)
+    assert master_file.exists()
+
+    # 2. New chunk
+    new_chunk_data = {
+        "ts": [1790566200.0],
+        "token": ["BSE_INDEX|SENSEX"],
+        "symbol": ["SENSEX"],
+        "ltp": [73500.0],
+        "bid": [73490.0],
+        "ask": [73510.0],
+        "vol": [20.0],
+        "oi": [200.0],
+        "depth": ["{}"],
+    }
+    pq.write_table(pa.Table.from_pandas(pd.DataFrame(new_chunk_data)), chunks_dir / "chunk_afternoon.parquet")
+
+    # 3. Execute stitching
+    execute_post_market_stitching("2026-09-28", "20260928", data_dir)
+
+    # 4. Verify master file STILL exists (was NOT deleted during chunk pruning!)
+    assert master_file.exists(), "Master stitched parquet was erroneously unlinked during chunk pruning!"
+    assert master_file.stat().st_size > 0
+
+    df_stitched = pq.read_table(master_file).to_pandas()
+    assert len(df_stitched) == 2
+    assert set(df_stitched["symbol"]) == {"NIFTY 50", "SENSEX"}
+
+    # Chunks dir should be pruned
+    assert not chunks_dir.exists()
+
+
+def test_get_today_data_dir_fail_closed_when_mounts_missing(monkeypatch, tmp_path):
+    # Simulate completely missing / disconnected external mounts
+    missing_mounts = [tmp_path / "mount_missing_1", tmp_path / "mount_missing_2"]
+    monkeypatch.setattr(
+        "scripts.upstox_daily_live_capture_and_stitch.PRIMARY_BASE_DIRS",
+        missing_mounts,
+    )
+
+    # 1. Default invocation must fail-closed raising RuntimeError
+    with pytest.raises(RuntimeError, match="Fail-closed: None of PRIMARY_BASE_DIRS exist"):
+        get_today_data_dir()
+
+    # 2. Explicit allow_local_fallback=False must also fail-closed
+    with pytest.raises(RuntimeError, match="Fail-closed: None of PRIMARY_BASE_DIRS exist"):
+        get_today_data_dir(allow_local_fallback=False)
+
+
+def test_get_today_data_dir_allows_local_fallback_when_explicit(monkeypatch, tmp_path):
+    missing_mounts = [tmp_path / "mount_missing"]
+    local_fallback = tmp_path / "custom_fallback"
+    monkeypatch.setattr(
+        "scripts.upstox_daily_live_capture_and_stitch.PRIMARY_BASE_DIRS",
+        missing_mounts,
+    )
+    monkeypatch.setattr(
+        "scripts.upstox_daily_live_capture_and_stitch.FALLBACK_BASE_DIR",
+        local_fallback,
+    )
+
+    data_dir = get_today_data_dir(allow_local_fallback=True)
+    today_str = datetime.now().strftime("%Y-%m-%d")
+
+    assert data_dir.exists()
+    assert data_dir == local_fallback / today_str
+
+
+def test_get_today_data_dir_mount_present(monkeypatch, tmp_path):
+    active_mount = tmp_path / "Volumes" / "TradeBotMount"
+    active_mount.mkdir(parents=True)
+    monkeypatch.setattr(
+        "scripts.upstox_daily_live_capture_and_stitch.PRIMARY_BASE_DIRS",
+        [tmp_path / "missing", active_mount],
+    )
+
+    data_dir = get_today_data_dir()
+    today_str = datetime.now().strftime("%Y-%m-%d")
+
+    assert data_dir.exists()
+    assert data_dir == active_mount / today_str
+
+
+def test_flush_buffer_preserves_tick_buffer_on_write_failure(monkeypatch, tmp_path):
+    ticks = [
+        {"ts": 100.0, "token": "NSE_FO|101", "symbol": "NIFTY 24000 CE", "ltp": 150.0, "bid": 149.0, "ask": 151.0, "vol": 100.0, "oi": 200.0, "depth": "{}"},
+        {"ts": 101.0, "token": "NSE_FO|102", "symbol": "NIFTY 24000 PE", "ltp": 80.0, "bid": 79.0, "ask": 81.0, "vol": 50.0, "oi": 150.0, "depth": "{}"},
+    ]
+    tick_buffer = list(ticks)
+    buffer_lock = threading.Lock()
+    chunks_dir = tmp_path / "chunks"
+    chunks_dir.mkdir(parents=True)
+
+    # Simulate disk failure / error in pq.write_table
+    def failing_write_table(*args, **kwargs):
+        raise OSError("Disk full / I/O error during parquet chunk write")
+
+    monkeypatch.setattr(pq, "write_table", failing_write_table)
+
+    # Calling flush_buffer must NOT drop ticks
+    flush_buffer(tick_buffer, buffer_lock, chunks_dir, "20261015")
+
+    # Both ticks must remain in tick_buffer for future retry
+    assert len(tick_buffer) == 2
+    assert tick_buffer[0]["token"] == "NSE_FO|101"
+    assert tick_buffer[1]["token"] == "NSE_FO|102"
+    # No parquet chunk should be created
+    assert list(chunks_dir.glob("*.parquet")) == []
+
+
+def test_flush_buffer_retry_successful_write(monkeypatch, tmp_path):
+    ticks = [
+        {"ts": 100.0, "token": "NSE_FO|101", "symbol": "NIFTY 24000 CE", "ltp": 150.0, "bid": 149.0, "ask": 151.0, "vol": 100.0, "oi": 200.0, "depth": "{}"},
+    ]
+    tick_buffer = list(ticks)
+    buffer_lock = threading.Lock()
+    chunks_dir = tmp_path / "chunks"
+    chunks_dir.mkdir(parents=True)
+
+    # 1. Attempt 1 fails
+    original_write = pq.write_table
+    fail_state = {"should_fail": True}
+
+    def intermittent_write_table(*args, **kwargs):
+        if fail_state["should_fail"]:
+            raise IOError("Transient write error")
+        return original_write(*args, **kwargs)
+
+    monkeypatch.setattr(pq, "write_table", intermittent_write_table)
+
+    flush_buffer(tick_buffer, buffer_lock, chunks_dir, "20261015")
+    assert len(tick_buffer) == 1
+
+    # 2. While waiting for retry, a new tick arrives in tick_buffer
+    with buffer_lock:
+        tick_buffer.append(
+            {"ts": 102.0, "token": "NSE_FO|102", "symbol": "NIFTY 24000 PE", "ltp": 85.0, "bid": 84.0, "ask": 86.0, "vol": 60.0, "oi": 160.0, "depth": "{}"}
+        )
+
+    assert len(tick_buffer) == 2
+
+    # 3. Attempt 2 succeeds
+    fail_state["should_fail"] = False
+    flush_buffer(tick_buffer, buffer_lock, chunks_dir, "20261015")
+
+    # Buffer should now be cleared
+    assert len(tick_buffer) == 0
+
+    # Parquet file should contain both ticks in order
+    written_files = list(chunks_dir.glob("*.parquet"))
+    assert len(written_files) == 1
+    df = pd.read_parquet(written_files[0])
+    assert len(df) == 2
+    assert list(df["token"]) == ["NSE_FO|101", "NSE_FO|102"]
+
+
+def test_refresh_late_day_option_subscriptions_with_lock():
+    from core.upstox_capture.late_day_option_refresh import refresh_late_day_option_subscriptions
+
+    class MockStreamer:
+        def __init__(self):
+            self.subscribed_keys = []
+
+        def subscribe(self, keys, mode="full"):
+            self.subscribed_keys.extend(keys)
+
+    today_ms = int(datetime.now().timestamp() * 1000)
+    mock_data = [
+        {"name": "NIFTY", "instrument_type": "CE", "strike_price": 24000.0, "expiry": today_ms, "instrument_key": "NSE_FO|24000CE", "trading_symbol": "NIFTY 24000 CE"},
+        {"name": "NIFTY", "instrument_type": "PE", "strike_price": 24000.0, "expiry": today_ms, "instrument_key": "NSE_FO|24000PE", "trading_symbol": "NIFTY 24000 PE"},
+    ]
+    df_inst = pd.DataFrame(mock_data)
+    streamer = MockStreamer()
+    subscriptions = {}
+    subscriptions_lock = threading.Lock()
+
+    # Call with subscriptions_lock
+    new_count = refresh_late_day_option_subscriptions(
+        streamer=streamer,
+        subscriptions=subscriptions,
+        df_inst=df_inst,
+        current_spot_prices={"NIFTY": 24000.0},
+        subscriptions_lock=subscriptions_lock,
+    )
+
+    assert new_count == 2
+    assert "NSE_FO|24000CE" in subscriptions
+    assert "NSE_FO|24000PE" in subscriptions
+    assert subscriptions["NSE_FO|24000CE"] == "NIFTY 24000 CE"
+
+
