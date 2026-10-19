@@ -44,6 +44,10 @@ from core.structural_alpha_gates import (
     PassiveMidpointQueueModel,
     VolatilityCompressionGate,
 )
+from core.option_confidence_scorer import (
+    OptionConfidenceScorer,
+    ConfidenceEvaluation,
+)
 from core.upstox_stream_broadcaster import (
     StreamSubscriber,
     UpstoxLevel5DepthRecord,
@@ -69,6 +73,10 @@ class AdvisoryAlert:
     total_drag_pts: float
     status_flag: str
     advisory: str
+    confidence_score: int = 0
+    confidence_grade: str = "GRADE_C_SUPPRESSED"
+    probable_win_rate_pct: float = 0.0
+    sizing_recommendation: str = "ZERO_SUPPRESS"
 
 
 class SentinelLiveStreamAdvisor(StreamSubscriber):
@@ -130,6 +138,9 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             "SENSEX": {"pdh": 74849.75, "pdl": 74169.23, "pdc": 74800.00},
             "BANKNIFTY": {"pdh": 55883.70, "pdl": 55331.10, "pdc": 55750.00},
         }
+
+        # Multi-Factor Option Confidence Scorer
+        self.confidence_scorer = OptionConfidenceScorer(min_actionable_score=60)
 
         self.alerts_history: list[AdvisoryAlert] = []
         self._lock = threading.Lock()
@@ -320,9 +331,27 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             required_option_type = "PE"
             setup_reason = f"Breakdown < {or_low:.1f}"
 
-        # Evaluate advisory output
+        # Compute Multi-Factor Confidence Score
+        conf_eval = None
         if trigger_active and ((required_option_type == "CE" and is_ce) or (required_option_type == "PE" and is_pe)):
-            # Gate 1: Cross-Index Macro Confirmation
+            depth_bids = depth.bid_q1 + depth.bid_q2 + depth.bid_q3 + depth.bid_q4 + depth.bid_q5
+            depth_asks = depth.ask_q1 + depth.ask_q2 + depth.ask_q3 + depth.ask_q4 + depth.ask_q5
+            displacement = (spot - or_high) if required_option_type == "CE" else (spot - or_low)
+            
+            # Strike matching check for ITM
+            itm_res = self.strike_resolver.resolve_target_strike(
+                spot=spot,
+                direction=required_option_type,
+                index_name=index_name,
+            )
+            is_target_strike = self.strike_resolver.is_contract_matching(
+                symbol=sym,
+                target_strike=itm_res.target_strike,
+                option_type=required_option_type,
+                tolerance_strikes=1,
+                strike_interval=strike_interval,
+            )
+
             macro_ok, macro_reason = self.macro_gate.evaluate_alignment(
                 target_index=index_name,
                 setup_direction=required_option_type,
@@ -330,9 +359,21 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 or_bounds=self.or_bounds,
             )
 
-            # Gate 2: Volatility Compression / Squeeze Pre-Condition
-            # Est. ATR15m / ATR60m compression: check if move is exhausted
-            displacement = (spot - or_high) if required_option_type == "CE" else (spot - or_low)
+            conf_eval = self.confidence_scorer.evaluate_confidence(
+                macro_aligned=macro_ok,
+                macro_reason=macro_reason,
+                writer_alignment="BEARS_IN_CONTROL" if required_option_type == "PE" else "BULLS_IN_CONTROL",
+                writer_conviction=0.75,
+                setup_direction=required_option_type,
+                depth_bid_q_sum=depth_bids,
+                depth_ask_q_sum=depth_asks,
+                displacement_pts=displacement,
+                eff_atr=12.0,
+                is_target_itm=is_target_strike,
+                spread_ratio=spread_ratio,
+                is_expiry_session=is_exp,
+            )
+
             vol_ok, vol_reason, _ = self.vol_compression_gate.evaluate_compression(
                 atr_15m=12.0,
                 atr_60m=16.0,
@@ -348,23 +389,15 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             elif not vol_ok:
                 status_flag = "VETO_VOLATILITY_EXHAUSTED"
                 advisory = f"🚨 [{vol_reason}] BUY {depth.symbol} @ {setup_reason} -> SUPPRESSED"
+            elif not conf_eval.is_actionable:
+                status_flag = "VETO_LOW_CONFIDENCE"
+                advisory = f"🚨 [LOW CONVICTION: {conf_eval.total_score}/100 {conf_eval.grade}] BUY {depth.symbol} @ {setup_reason} -> SUPPRESSED"
             else:
                 status_flag = "SIGNAL_TRIGGERED"
-                advisory = f"🎯 [BUY {depth.symbol}] @ {setup_reason} | Target: +{target_pts:.1f}pts | Vol-SL: -{sl_pts:.1f}pts"
-
-                # Gate 3: ITM Strike Resolution (Delta 0.65-0.75)
-                itm_res = self.strike_resolver.resolve_target_strike(
-                    spot=spot,
-                    direction=required_option_type,
-                    index_name=index_name,
-                )
-
-                is_target_strike = self.strike_resolver.is_contract_matching(
-                    symbol=sym,
-                    target_strike=itm_res.target_strike,
-                    option_type=required_option_type,
-                    tolerance_strikes=1,
-                    strike_interval=strike_interval,
+                advisory = (
+                    f"🎯 [BUY {depth.symbol}] @ {setup_reason} | "
+                    f"Conviction: {conf_eval.total_score}/100 ({conf_eval.grade}, WinRate ~{conf_eval.probable_win_rate_pct:.0f}%, {conf_eval.sizing_recommendation}) | "
+                    f"Target: +{target_pts:.1f}pts | Vol-SL: -{sl_pts:.1f}pts"
                 )
 
                 # Gate 4: Passive Midpoint Queue Execution Price
@@ -404,6 +437,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         if entered and self.enable_stdout:
                             print(
                                 f"\n🚀 [APM IN_FLIGHT ENTRY - {itm_res.moneyness}] {pos_id} | {depth.symbol} @ {spot:.1f} | "
+                                f"Conviction: {conf_eval.total_score}/100 ({conf_eval.grade}) | "
                                 f"Fill: ₹{fill_price:.2f} ({fill_mode}, Saved ₹{savings:.2f}) | "
                                 f"SL: {sl_pts:.1f}pts | TP: {target_pts:.1f}pts"
                             )
@@ -452,6 +486,10 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             total_drag_pts=total_drag,
             status_flag=status_flag,
             advisory=advisory,
+            confidence_score=conf_eval.total_score if conf_eval else 0,
+            confidence_grade=conf_eval.grade if conf_eval else "GRADE_C_SUPPRESSED",
+            probable_win_rate_pct=conf_eval.probable_win_rate_pct if conf_eval else 0.0,
+            sizing_recommendation=conf_eval.sizing_recommendation if conf_eval else "ZERO_SUPPRESS",
         )
 
         with self._lock:
@@ -461,6 +499,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         if self.enable_stdout:
             print(
                 f"🛰️ [{alert.wall_time_str}] {index_name}: {spot:.1f} | {depth.symbol} LTP: {ltp:.2f} | "
+                f"Conviction: {alert.confidence_score}/100 ({alert.confidence_grade}) | "
                 f"Spread: {spread:.2f} ({spread_ratio * 100:.1f}%) | "
                 f"Status: {status_flag} | Advisory: {advisory}"
             )
