@@ -2033,6 +2033,24 @@ def test_stale_socket_generation_cannot_confirm_option_ownership(monkeypatch):
     assert snapshot.socket_generation == generation
 
 
+def test_soft_resubscribe_bootstraps_unknown_applied_option_ownership(monkeypatch):
+    ws = importlib.import_module("core.kite_depth_ws")
+    _prepare_mutation_bootstrap(ws, monkeypatch, tokens=(101, 201))
+    # Simulate a post-bootstrap reset or restart where _OPTION_OWNERSHIP_BOOTSTRAP_GENERATION is 0
+    ws._OPTION_OWNERSHIP_BOOTSTRAP_GENERATION = 0
+    base_snapshot = ws.get_applied_option_ownership_snapshot()
+    assert base_snapshot.state == "UNKNOWN"
+
+    # Soft resubscribe should now successfully transition from UNKNOWN to KNOWN
+    ok = ws._soft_resubscribe_current("test_soft_bootstrap")
+    assert ok is True
+    post_snapshot = ws.get_applied_option_ownership_snapshot()
+    assert post_snapshot.state == "KNOWN"
+    assert 201 in post_snapshot.contracts
+    assert post_snapshot.contracts[201].symbol == "NIFTY"
+
+
+
 def test_wi04_gate1_monotonic_temporal_causality_blocks_future_ticks():
     """Invariant I-1: Option tick tau > tau_decision must never enter current decision cycle."""
     from core.market_event_graph_live_runtime_bridge import _source_tick_freshness_failure

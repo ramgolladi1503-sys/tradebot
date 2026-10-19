@@ -919,6 +919,12 @@ def _commit_applied_option_ownership(
                 if not desired.expected_tokens.issubset(confirmed):
                     return False
                 next_contracts = dict(desired.contracts)
+            elif base_snapshot.state == "UNKNOWN":
+                # Resubscribe replay or watchdog soft-reset establishing ownership
+                # from an unconfirmed initial or invalidated state.
+                if not desired.expected_tokens.issubset(confirmed) or not desired.expected_tokens.issubset(subscribe):
+                    return False
+                next_contracts = dict(desired.contracts)
             else:
                 if (
                     base_snapshot.state != "KNOWN"
