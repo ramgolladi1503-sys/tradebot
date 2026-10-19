@@ -134,6 +134,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         self.alerts_history: list[AdvisoryAlert] = []
         self._lock = threading.Lock()
         self._last_alert_time = 0.0
+        self.session_gear = "GEAR_1_RANGE"  # "GEAR_1_RANGE" or "GEAR_2_TREND"
 
         # Non-negotiable Trading Safety Invariants
         self.read_only = True
@@ -275,14 +276,18 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
         # -------------------------------------------------------------
         # Mode 1: Strategy A & Hypothesis 2 - Prior-Day Liquidity Sweep Reversal
-        # Evaluates 09:30 - 12:00. If price pierces PDH/PDL and rejects, trade the trap!
+        # Evaluates 09:30 - 12:00. Strictly gated to GEAR_1_RANGE (Chop/Expiry Pinning).
+        # Fading breakouts in Gear 2 Trend is strictly suppressed fail-closed.
         # -------------------------------------------------------------
         pd_bounds = self.prior_day_levels.get(index_name, {"pdh": 0.0, "pdl": 0.0})
         pdh = pd_bounds.get("pdh", 0.0)
         pdl = pd_bounds.get("pdl", 0.0)
         is_exp = (self.expiry_info.active_expiry_index == index_name)
 
-        sweep_sig = self.sweep_engine.evaluate_bar(
+        sweep_sig = None
+        # Regime Gate: Only allow sweep reversal when market is in Gear 1 Chop or Expiry Straddle Pinning
+        if self.session_gear == "GEAR_1_RANGE" or is_exp:
+            sweep_sig = self.sweep_engine.evaluate_bar(
             index_name=index_name,
             bar_open=spot,
             bar_high=spot,
