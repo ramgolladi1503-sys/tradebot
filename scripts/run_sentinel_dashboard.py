@@ -445,13 +445,14 @@ elif today_str == today_real:
     pipe_log = Path(f"logs/upstox_daily_pipeline_{today_real}.log")
     if pipe_log.exists():
         import re
-        pattern = re.compile(r'🛰️ \[(\d{2}:\d{2}:\d{2})\] (\w+): ([\d\.]+) \| (.+?) LTP: ([\d\.]+) \| Spread: ([\d\.]+) \(([\d\.]+)%\) \| Status: (\w+) \| Advisory: (.+)')
+        pattern_with_conv = re.compile(r'🛰️ \[(\d{2}:\d{2}:\d{2})\] (\w+): ([\d\.]+) \| (.+?) LTP: ([\d\.]+) \| Conviction: (\d+)/100 \((\w+)\) \| Spread: ([\d\.]+) \(([\d\.]+)%\) \| Status: (\w+) \| Advisory: (.+)')
+        pattern_legacy = re.compile(r'🛰️ \[(\d{2}:\d{2}:\d{2})\] (\w+): ([\d\.]+) \| (.+?) LTP: ([\d\.]+) \| Spread: ([\d\.]+) \(([\d\.]+)%\) \| Status: (\w+) \| Advisory: (.+)')
         try:
             with open(pipe_log, "r", encoding="utf-8") as pl:
                 for line in pl:
-                    m = pattern.search(line)
+                    m = pattern_with_conv.search(line)
                     if m:
-                        wall_t, idx, spot, sym, ltp, spread, sp_pct, status, adv = m.groups()
+                        wall_t, idx, spot, sym, ltp, c_score, c_grade, spread, sp_pct, status, adv = m.groups()
                         rows.append({
                             "timestamp": f"{today_dash} {wall_t}",
                             "index": idx,
@@ -461,6 +462,8 @@ elif today_str == today_real:
                             "spot_price": float(spot),
                             "symbol": sym,
                             "option_ltp": float(ltp),
+                            "confidence_score": int(c_score),
+                            "confidence_grade": c_grade,
                             "spread_pts": float(spread),
                             "spread_ratio": float(sp_pct) / 100.0,
                             "advisory": adv.strip(),
@@ -469,6 +472,29 @@ elif today_str == today_real:
                             "atr_1m": None,
                             "ewma_ker": 0.5,
                         })
+                    else:
+                        m_old = pattern_legacy.search(line)
+                        if m_old:
+                            wall_t, idx, spot, sym, ltp, spread, sp_pct, status, adv = m_old.groups()
+                            rows.append({
+                                "timestamp": f"{today_dash} {wall_t}",
+                                "index": idx,
+                                "spot_nifty": float(spot) if idx == "NIFTY" else None,
+                                "spot_sensex": float(spot) if idx == "SENSEX" else None,
+                                "spot_banknifty": float(spot) if idx == "BANKNIFTY" else None,
+                                "spot_price": float(spot),
+                                "symbol": sym,
+                                "option_ltp": float(ltp),
+                                "confidence_score": None,
+                                "confidence_grade": None,
+                                "spread_pts": float(spread),
+                                "spread_ratio": float(sp_pct) / 100.0,
+                                "advisory": adv.strip(),
+                                "risk_flag": status,
+                                "candidate_status": "STREAMING",
+                                "atr_1m": None,
+                                "ewma_ker": 0.5,
+                            })
         except Exception:
             pass
 
@@ -704,7 +730,7 @@ with tab_live:
             if selected_index != "All" and "index" in table_df.columns:
                 table_df = table_df[table_df["index"] == selected_index]
 
-            display_cols = ["timestamp", "index", "symbol", "spot_price", "option_ltp", "spread_pts", "spread_ratio", "advisory", "risk_flag", "candidate_status"]
+            display_cols = ["timestamp", "index", "symbol", "confidence_score", "confidence_grade", "spot_price", "option_ltp", "spread_pts", "spread_ratio", "advisory", "risk_flag", "candidate_status"]
             valid_cols = [c for c in display_cols if c in table_df.columns]
             reversed_df = table_df[valid_cols].iloc[::-1].reset_index(drop=True)
             st.dataframe(
@@ -712,6 +738,15 @@ with tab_live:
                 use_container_width=True,
                 height=320,
                 column_config={
+                    "confidence_score": st.column_config.ProgressColumn(
+                        "Conviction Score",
+                        help="Bayesian Multi-Factor Institutional Score (0-100)",
+                        format="%d/100",
+                        min_value=0,
+                        max_value=100,
+                        width="medium",
+                    ),
+                    "confidence_grade": st.column_config.TextColumn("Grade", width="small"),
                     "advisory": st.column_config.TextColumn("Advisory Signal", width="medium"),
                     "symbol": st.column_config.TextColumn("Contract Symbol", width="medium"),
                     "index": st.column_config.TextColumn("Index", width="small"),
