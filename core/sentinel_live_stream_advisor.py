@@ -35,6 +35,8 @@ from core.active_position_manager import (
     STATE_LIQUIDATED,
     STATE_EXIT_PENDING,
 )
+from core.expiry_calendar_resolver import ExpiryCalendarResolver
+from core.liquidity_sweep_engine import LiquiditySweepEngine
 from core.sentinel_inmem_adapter import InMemorySentinelAdapter
 from core.structural_alpha_gates import (
     CrossIndexMacroGate,
@@ -117,6 +119,17 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         self.vol_compression_gate = VolatilityCompressionGate()
         self.passive_midpoint_queue = PassiveMidpointQueueModel()
         self.strike_resolver = ITMStrikeResolver()
+
+        # Strategy A & Hypothesis 2: Expiry Calendar and Liquidity Sweep Reversal Engine
+        self.expiry_resolver = ExpiryCalendarResolver()
+        self.sweep_engine = LiquiditySweepEngine()
+        self.expiry_info = self.expiry_resolver.classify_session(datetime.now().date())
+        # Previous Day Reference Levels (PDH / PDL / PDC)
+        self.prior_day_levels: dict[str, dict[str, float]] = {
+            "NIFTY": {"pdh": 23149.80, "pdl": 22913.80, "pdc": 23146.20},
+            "SENSEX": {"pdh": 74849.75, "pdl": 74169.23, "pdc": 74800.00},
+            "BANKNIFTY": {"pdh": 55883.70, "pdl": 55331.10, "pdc": 55750.00},
+        }
 
         self.alerts_history: list[AdvisoryAlert] = []
         self._lock = threading.Lock()
@@ -251,7 +264,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         # Estimated transaction drag (slippage + statutory base drag)
         total_drag = round(spread * 0.5 + 0.40, 2)
 
-        # Setup Detection (PR #968 / PR #980 / FEAT-STRUCTURAL-ALPHA-003 Invariant Rules)
+        # Setup Detection (PR #968 / PR #980 / FEAT-STRUCTURAL-ALPHA-003 / FEAT-LIQUIDITY-SWEEP-EXPIRY-004)
         is_ce = "CE" in sym
         is_pe = "PE" in sym
         atm_strike = round(spot / strike_interval) * strike_interval
@@ -260,7 +273,40 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         setup_reason = ""
         required_option_type = None
 
-        if or_high > -math.inf and spot > or_high:
+        # -------------------------------------------------------------
+        # Mode 1: Strategy A & Hypothesis 2 - Prior-Day Liquidity Sweep Reversal
+        # Evaluates 09:30 - 12:00. If price pierces PDH/PDL and rejects, trade the trap!
+        # -------------------------------------------------------------
+        pd_bounds = self.prior_day_levels.get(index_name, {"pdh": 0.0, "pdl": 0.0})
+        pdh = pd_bounds.get("pdh", 0.0)
+        pdl = pd_bounds.get("pdl", 0.0)
+        is_exp = (self.expiry_info.active_expiry_index == index_name)
+
+        sweep_sig = self.sweep_engine.evaluate_bar(
+            index_name=index_name,
+            bar_open=spot,
+            bar_high=spot,
+            bar_low=spot,
+            bar_close=spot,
+            pdh=pdh,
+            pdl=pdl,
+            timestamp_ms=depth.exchange_timestamp_ms,
+            is_expiry_session=is_exp,
+            bar_time=now_time,
+        )
+
+        if sweep_sig is not None:
+            trigger_active = True
+            required_option_type = sweep_sig.direction
+            setup_reason = f"[{sweep_sig.sweep_type}] {sweep_sig.setup_reason}"
+            target_pts = sweep_sig.target_pts
+            sl_pts = sweep_sig.sl_pts
+
+        # -------------------------------------------------------------
+        # Mode 2: Existing Opening Range Breakout (ORB) Engine
+        # Evaluates clean trend expansion when no sweep trap is active
+        # -------------------------------------------------------------
+        elif or_high > -math.inf and spot > or_high:
             trigger_active = True
             required_option_type = "CE"
             setup_reason = f"Breakout > {or_high:.1f}"
