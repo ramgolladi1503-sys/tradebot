@@ -202,9 +202,12 @@ class ActivePositionManager:
         if self.state not in {STATE_STANDBY, STATE_LIQUIDATED}:
             return False
 
-        # Invariant: Strict Session Trade Cap (Max 3-4 trades per session)
-        if len(self.trade_history) >= max_session_trades:
-            logger.warning(f"SESSION_TRADE_CAP_REACHED: {len(self.trade_history)} trades already executed today. Suppressing entry.")
+        # Invariant: Regime-Aware Session Trade Cap
+        # In GEAR_1_RANGE: Strictly cap at 4 trades to block overtrading fee churn
+        # In GEAR_2_TREND: Allow up to 6 trades so clean afternoon expansion runners are not cut off
+        effective_cap = 6 if session_gear == "GEAR_2_TREND" else max_session_trades
+        if len(self.trade_history) >= effective_cap:
+            logger.warning(f"SESSION_TRADE_CAP_REACHED: {len(self.trade_history)} trades already executed today (cap={effective_cap}). Suppressing entry.")
             return False
 
         if not self._transition_to(STATE_ARMED):
