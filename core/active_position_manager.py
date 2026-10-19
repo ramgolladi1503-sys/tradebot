@@ -24,16 +24,18 @@ STATE_STANDBY = "STANDBY"
 STATE_ARMED = "ARMED"
 STATE_IN_FLIGHT = "IN_FLIGHT"
 STATE_TRAIL_LOCK = "TRAIL_LOCK"
+STATE_PULLBACK_WAIT = "PULLBACK_WAIT"
 STATE_EXIT_PENDING = "EXIT_PENDING"
 STATE_LIQUIDATED = "LIQUIDATED"
 
 VALID_TRANSITIONS = {
     STATE_STANDBY: {STATE_ARMED},
     STATE_ARMED: {STATE_IN_FLIGHT, STATE_STANDBY},
-    STATE_IN_FLIGHT: {STATE_TRAIL_LOCK, STATE_EXIT_PENDING},
-    STATE_TRAIL_LOCK: {STATE_EXIT_PENDING},
+    STATE_IN_FLIGHT: {STATE_TRAIL_LOCK, STATE_EXIT_PENDING, STATE_PULLBACK_WAIT},
+    STATE_TRAIL_LOCK: {STATE_EXIT_PENDING, STATE_PULLBACK_WAIT},
+    STATE_PULLBACK_WAIT: {STATE_ARMED, STATE_LIQUIDATED, STATE_STANDBY},
     STATE_EXIT_PENDING: {STATE_LIQUIDATED},
-    STATE_LIQUIDATED: {STATE_ARMED, STATE_STANDBY},
+    STATE_LIQUIDATED: {STATE_ARMED, STATE_STANDBY, STATE_PULLBACK_WAIT},
 }
 
 
@@ -76,6 +78,10 @@ class PositionPayload:
     target_2_hit: bool = False
     max_spot_excursion: float = 0.0
     max_opt_excursion: float = 0.0
+    # Peak Giveback Clamp & Pullback Re-entry Tracking
+    giveback_clamp_sl: Optional[float] = None
+    reentry_count: int = 0
+    pullback_reference_price: Optional[float] = None
 
 
 class ActivePositionManager:
@@ -349,7 +355,59 @@ class ActivePositionManager:
                 _record_tick_exit("TRAILING_STOP_HIT" if p.trail_locked else "STOP_LOSS_HIT", p.current_sl)
                 return self.liquidate()
 
-        # 3. Target 1 Hit -> Secure 50% lot and arm Chandelier Runner Trailing Mode
+        # 3. Peak Giveback Clamp (Tiers 1 & 2)
+        # Prevents trades that gained +12% to +30%+ from round-tripping into red stops
+        # (Only active before Target 1 half-booking; once half-booked, Chandelier takes over trailing)
+        if current_opt_ltp is not None and p.opt_entry_ltp is not None and p.opt_peak_hwm is not None and not p.half_booked:
+            opt_entry = p.opt_entry_ltp
+            peak_gain_pct = (p.opt_peak_hwm - opt_entry) / max(opt_entry, 1.0)
+            
+            # Tier 1: Friction & Breakeven Lock at >= +12% option gain
+            if peak_gain_pct >= 0.12 and not p.trail_locked:
+                friction_buffer = 1.5 if is_sensex else 0.8
+                p.giveback_clamp_sl = round(opt_entry + friction_buffer, 2)
+                be_sl = (p.entry_price + 1.0) if is_ce else (p.entry_price - 1.0)
+                if (is_ce and be_sl > p.current_sl) or (not is_ce and be_sl < p.current_sl):
+                    p.current_sl = be_sl
+                p.trail_locked = True
+                if self.state == STATE_IN_FLIGHT:
+                    self._transition_to(STATE_TRAIL_LOCK)
+
+            # Tier 2: Peak Profit Floor Clamp at >= +25% option gain
+            # Guarantees at least +10% profit floor and clamps max peak giveback to 35%
+            if peak_gain_pct >= 0.25:
+                # 35% allowable giveback from peak gain
+                protected_gain = (p.opt_peak_hwm - opt_entry) * 0.65
+                min_floor_gain = opt_entry * 0.10  # Guaranteed >= 10% profit floor
+                tier2_sl = round(opt_entry + max(protected_gain, min_floor_gain), 2)
+                if p.giveback_clamp_sl is None or tier2_sl > p.giveback_clamp_sl:
+                    p.giveback_clamp_sl = tier2_sl
+                if not p.trail_locked:
+                    p.trail_locked = True
+                    if self.state == STATE_IN_FLIGHT:
+                        self._transition_to(STATE_TRAIL_LOCK)
+
+            # Check if Live Option Price Breached the Giveback Clamp Stop
+            if p.giveback_clamp_sl is not None and current_opt_ltp <= p.giveback_clamp_sl:
+                # In GEAR_2_TREND with 0 prior re-entries, qualify for PULLBACK_WAIT
+                if p.session_gear == "GEAR_2_TREND" and p.reentry_count < 1:
+                    p.exit_price = current_spot
+                    p.exit_reason = "PEAK_GIVEBACK_CLAMP_EXIT"
+                    p.exit_time = tick_time_str or datetime.now().isoformat()
+                    p.pnl_pts = (p.exit_price - p.entry_price) if is_ce else (p.entry_price - p.exit_price)
+                    p.opt_exit_ltp = current_opt_ltp
+                    p.opt_pnl_pts = round(p.opt_exit_ltp - opt_entry, 2)
+                    p.pullback_reference_price = current_spot
+                    self.last_completed_trade = asdict(p)
+                    self.trade_history.append(self.last_completed_trade)
+                    self._transition_to(STATE_PULLBACK_WAIT)
+                    self._persist_wal_atomic()
+                    return self.state, asdict(p)
+                else:
+                    _record_tick_exit("PEAK_GIVEBACK_CLAMP_EXIT", current_spot)
+                    return self.liquidate()
+
+        # 4. Target 1 Hit -> Secure 50% lot and arm Chandelier Runner Trailing Mode
         hit_spot_tp = (current_spot >= p.target_price) if is_ce else (current_spot <= p.target_price)
         if hit_spot_tp:
             p.target_1_hit = True
@@ -367,7 +425,7 @@ class ActivePositionManager:
                 self._persist_wal_atomic()
                 return self.state, asdict(p)
 
-        # 4. Chandelier Option Volatility Trailing Exit
+        # 5. Chandelier Option Volatility Trailing Exit
         if p.is_runner_mode and p.half_booked and p.runner_trailing_sl is not None:
             opt_cushion = max(25.0 if is_sensex else 12.0, 0.20 * (p.opt_peak_hwm or p.opt_entry_ltp or 50.0))
             new_opt_sl = (p.opt_peak_hwm - opt_cushion) if p.opt_peak_hwm else p.runner_trailing_sl
@@ -377,7 +435,7 @@ class ActivePositionManager:
                 _record_tick_exit("RUNNER_HWM_TRAILING_EXIT", current_spot)
                 return self.liquidate()
 
-        # 5. Volatility-Scaled Breakeven Ratchet (Requires >= 1.2 ATR excursion to avoid noise stops)
+        # 6. Volatility-Scaled Breakeven Ratchet (Requires >= 1.2 ATR excursion to avoid noise stops)
         be_req_gain = 1.2 * eff_atr
         if gain >= be_req_gain and not p.trail_locked:
             be_sl = (p.entry_price + 1.0) if is_ce else (p.entry_price - 1.0)
@@ -560,3 +618,92 @@ class ActivePositionManager:
         self.payload = None
         self._persist_wal_atomic()
         return STATE_LIQUIDATED, summary
+
+    def evaluate_pullback_reentry(
+        self,
+        current_spot: float,
+        bounce_confirmed: bool,
+        current_opt_quote: Optional[Dict[str, Any]] = None,
+        atr_1m: float = 10.0,
+        current_time_str: Optional[str] = None
+    ) -> Tuple[str, Optional[Dict[str, Any]]]:
+        """Evaluates whether an active PULLBACK_WAIT state should re-enter on bounce.
+        
+        Enforces strict institutional gates:
+        1. APM must be in STATE_PULLBACK_WAIT
+        2. Session gear must remain GEAR_2_TREND
+        3. Prior setup reentry_count must be < 1 (hard limit of 1 re-entry)
+        4. Bar T confirmed structural bounce (e.g. rejection off EMA-9 or VWAP)
+        5. Execution occurs at Bar T+1 Open (zero future bar leakage)
+        """
+        if self.state != STATE_PULLBACK_WAIT or self.payload is None:
+            return self.state, None
+
+        p = self.payload
+        is_ce = (p.direction == "CE")
+
+        # Invariant 1: Hard cap of 1 re-entry per setup
+        if p.reentry_count >= 1:
+            self.state = STATE_LIQUIDATED
+            self.payload = None
+            self._persist_wal_atomic()
+            return STATE_LIQUIDATED, None
+
+        # Invariant 2: Gear 2 Trend must be maintained
+        if p.session_gear != "GEAR_2_TREND":
+            self.state = STATE_LIQUIDATED
+            self.payload = None
+            self._persist_wal_atomic()
+            return STATE_LIQUIDATED, None
+
+        # Invariant 3: Bounce Confirmation Required
+        if not bounce_confirmed:
+            # Check if spot broke too far against prior reference price (> 1.5 ATR against entry direction)
+            if p.pullback_reference_price is not None:
+                adverse_drift = (p.pullback_reference_price - current_spot) if is_ce else (current_spot - p.pullback_reference_price)
+                if adverse_drift > 1.5 * atr_1m:
+                    # Pullback failed into full reversal: abort re-entry
+                    self.state = STATE_LIQUIDATED
+                    self.payload = None
+                    self._persist_wal_atomic()
+                    return STATE_LIQUIDATED, None
+            return self.state, asdict(p)
+
+        # Re-entry Confirmed! Reset parameters for re-entered position
+        p.reentry_count += 1
+        p.entry_price = current_spot
+        p.entry_time = current_time_str or datetime.now().isoformat()
+        p.trail_locked = False
+        p.half_booked = False
+        p.target_1_hit = False
+        p.target_2_hit = False
+        p.exit_price = None
+        p.exit_reason = None
+        p.exit_time = None
+        p.pnl_pts = None
+
+        is_sensex = "SENSEX" in p.strike_contract or current_spot > 50000.0
+        index_scale = 3.5 if is_sensex else 1.0
+        eff_atr = max(atr_1m, 8.0) * index_scale
+
+        eff_tp = 1.5 * eff_atr
+        eff_sl = 1.0 * eff_atr
+
+        p.current_sl = (current_spot - eff_sl) if is_ce else (current_spot + eff_sl)
+        p.initial_sl = p.current_sl
+        p.target_price = (current_spot + eff_tp) if is_ce else (current_spot - eff_tp)
+
+        if current_opt_quote:
+            p.opt_entry_ltp = current_opt_quote.get("ltp")
+            p.opt_current_ltp = current_opt_quote.get("ltp")
+            p.opt_peak_hwm = current_opt_quote.get("ltp")
+            p.opt_bid = current_opt_quote.get("bid")
+            p.opt_ask = current_opt_quote.get("ask")
+            if p.opt_stop_loss_pct and p.opt_entry_ltp:
+                p.opt_initial_sl = round(p.opt_entry_ltp * (1.0 - p.opt_stop_loss_pct), 2)
+        p.giveback_clamp_sl = None
+
+        self.state = STATE_IN_FLIGHT
+        self._persist_wal_atomic()
+        return STATE_IN_FLIGHT, asdict(p)
+
