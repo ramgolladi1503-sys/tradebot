@@ -1,0 +1,22 @@
+{
+  "all_files_declare_pandas_datetimetz_utc": true,
+  "archive_sha256": "f5912a89547dbca1c2b1243f239445bca79d474f21d020d87eb7ab5b33a9310d",
+  "muhurat_2024_11_01_files": [
+    "kite_candidate_replay/2024-11-01/underlying/SENSEX_2024-11-01.parquet",
+    "kite_candidate_replay/2024-11-01/underlying/NIFTY_2024-11-01.parquet",
+    "kite_candidate_replay/2024-11-01/underlying/BANKNIFTY_2024-11-01.parquet"
+  ],
+  "muhurat_policy": "EXCLUDE_UNSUPPORTED_SPECIAL_SESSION_FROM_NORMAL_SESSION_CAMPAIGN",
+  "non_utc_or_unresolved_file_count": 0,
+  "non_utc_or_unresolved_files": [],
+  "regular_session_bar_count_5minute": 75,
+  "regular_session_first_bar_start": "09:15:00",
+  "regular_session_last_bar_start": "15:25:00",
+  "replay_timezone": "Asia/Kolkata",
+  "schema_version": "kite_parquet_timestamp_authority_v1",
+  "timestamp_semantics": "bar_start",
+  "timestamp_source_timezone": "UTC",
+  "underlying_parquet_file_count": 1479,
+  "utc_metadata_file_count": 1479,
+  "verdict": "PASS_TIMESTAMP_AUTHORITY"
+}

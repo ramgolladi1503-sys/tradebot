@@ -1,0 +1,55 @@
+name: All Strategy Option Universe
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/all-strategy-option-universe.yml"
+      - "strategies/**"
+      - "research/**"
+      - "scripts/run_all_strategy_option_universe.py"
+      - "scripts/run_all_strategy_option_analytics.py"
+
+permissions:
+  contents: read
+
+jobs:
+  exhaustive-universe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build exhaustive universe and master analytics skeleton
+        shell: bash
+        run: |
+          root=/tmp/all-strategy-option-universe
+          evidence="$root/evidence"
+          rm -rf "$root"
+          mkdir -p "$root"
+          set +e
+          PYTHONPATH=. python scripts/run_all_strategy_option_analytics.py \
+            --repo-root . \
+            --output-dir "$evidence" \
+            --require-complete-universe \
+            >"$root/run.log" 2>&1
+          status=$?
+          set -e
+          printf '%s\n' "$status" >"$root/exit_status.txt"
+          cat "$root/run.log"
+          exit "$status"
+
+      - name: Upload universe and analytics evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: all-strategy-option-universe
+          path: /tmp/all-strategy-option-universe
+          if-no-files-found: error
+          retention-days: 30
