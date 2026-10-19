@@ -74,25 +74,26 @@ class ExpiryCalendarResolver:
         is_nifty = False
         nifty_fallback = False
 
-        if not is_post_sept_2025:
-            # Old Era: Thursday
-            if dow == "Thursday":
-                is_nifty = True
-            elif dow == "Wednesday":
-                # Check if Thursday is holiday
-                thu = target_date + datetime.timedelta(days=1)
-                if self.is_holiday(thu):
+        if not self.is_holiday(target_date):
+            if not is_post_sept_2025:
+                # Old Era: Thursday
+                if dow == "Thursday":
                     is_nifty = True
-                    nifty_fallback = True
-        else:
-            # New Era: Tuesday (or Monday if Tuesday is holiday)
-            if dow == "Tuesday":
-                is_nifty = True
-            elif dow == "Monday":
-                tue = target_date + datetime.timedelta(days=1)
-                if self.is_holiday(tue):
+                elif dow == "Wednesday":
+                    # Check if Thursday is holiday
+                    thu = target_date + datetime.timedelta(days=1)
+                    if self.is_holiday(thu):
+                        is_nifty = True
+                        nifty_fallback = True
+            else:
+                # New Era: Tuesday (or Monday if Tuesday is holiday)
+                if dow == "Tuesday":
                     is_nifty = True
-                    nifty_fallback = True
+                elif dow == "Monday":
+                    tue = target_date + datetime.timedelta(days=1)
+                    if self.is_holiday(tue):
+                        is_nifty = True
+                        nifty_fallback = True
 
         # 2. SENSEX Expiry Check (Thursday or Wednesday if Thursday is holiday)
         is_sensex = False
