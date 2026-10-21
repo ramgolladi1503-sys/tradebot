@@ -39,26 +39,98 @@ import upstox_client
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 load_dotenv(ROOT / ".env")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("upstox_daily_pipeline")
 
-PRIMARY_BASE_DIR = Path("/Volumes/TradeBotData/live market capture")
+PRIMARY_BASE_DIRS = [
+    Path("/Volumes/TradeBot/live market capture"),
+    Path("/Volumes/TradeBotData/live market capture"),
+    Path("/Volumes/TradeBotFast/live market capture"),
+]
 FALLBACK_BASE_DIR = ROOT / ".runtime" / "market_data"
 
-def get_today_data_dir() -> Path:
+DEFAULT_TICK_SCHEMA = pa.schema([
+    ("ts", pa.float64()),
+    ("token", pa.string()),
+    ("symbol", pa.string()),
+    ("ltp", pa.float64()),
+    ("bid", pa.float64()),
+    ("ask", pa.float64()),
+    ("vol", pa.float64()),
+    ("oi", pa.float64()),
+    ("depth", pa.string()),
+])
+
+def get_today_data_dir(allow_local_fallback: bool = False) -> Path:
     today_str = datetime.now().strftime("%Y-%m-%d")
-    d = (PRIMARY_BASE_DIR if PRIMARY_BASE_DIR.exists() else FALLBACK_BASE_DIR) / today_str
+    primary_dir = next((p for p in PRIMARY_BASE_DIRS if p.exists()), None)
+    if primary_dir is None:
+        if not allow_local_fallback:
+            raise RuntimeError(
+                f"Fail-closed: None of PRIMARY_BASE_DIRS exist ({PRIMARY_BASE_DIRS}) "
+                "and allow_local_fallback is False."
+            )
+        base_dir = FALLBACK_BASE_DIR
+    else:
+        base_dir = primary_dir
+    d = base_dir / today_str
     d.mkdir(parents=True, exist_ok=True)
     return d
 
+def flush_buffer(
+    tick_buffer: list,
+    buffer_lock: threading.Lock,
+    chunks_dir: Path,
+    today_compact: str,
+    schema: pa.Schema | None = None,
+) -> list:
+    """
+    Flushes buffered ticks to an atomic Parquet chunk.
+    If writing fails, preserves and re-queues ticks back into tick_buffer.
+    """
+    if schema is None:
+        schema = DEFAULT_TICK_SCHEMA
+
+    with buffer_lock:
+        if not tick_buffer:
+            return tick_buffer
+        to_flush = list(tick_buffer)
+        tick_buffer.clear()
+
+    now_dt = datetime.now()
+    chunk_file = chunks_dir / f"chunk_{today_compact}_{int(now_dt.timestamp() * 1000)}.parquet"
+
+    try:
+        df = pd.DataFrame(to_flush)
+        df["ts"] = df["ts"].astype(float)
+        df["token"] = df["token"].astype(str)
+        df["symbol"] = df["symbol"].astype(str)
+        df["ltp"] = df["ltp"].astype(float)
+        df["bid"] = df["bid"].astype(float)
+        df["ask"] = df["ask"].astype(float)
+        df["vol"] = df["vol"].astype(float)
+        df["oi"] = df["oi"].astype(float)
+        df["depth"] = df["depth"].astype(str)
+
+        table = pa.Table.from_pandas(df, schema=schema)
+        pq.write_table(table, chunk_file, compression="snappy")
+        logger.info(f"Flushed {len(df)} ticks to {chunk_file.name}")
+    except Exception as e:
+        logger.error(f"Failed to write parquet chunk: {e}")
+        with buffer_lock:
+            tick_buffer[:0] = to_flush
+    return tick_buffer
+
 def ensure_single_instance():
     lock_file_path = "/tmp/upstox_daily_pipeline.lock"
-    lock_file = open(lock_file_path, "w")
+    lock_file = open(lock_file_path, "a+")
     try:
         fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
+    except (BlockingIOError, OSError, IOError):
         logger.error("Another instance of upstox_daily_pipeline is already running. Exiting.")
         sys.exit(0)
     return lock_file
@@ -176,6 +248,7 @@ def get_options_subscriptions(df_inst: pd.DataFrame, underlying_prices: dict[str
     subs["NSE_INDEX|Nifty 50"] = "NIFTY 50"
     subs["NSE_INDEX|Nifty Bank"] = "NIFTY BANK"
     subs["BSE_INDEX|SENSEX"] = "SENSEX"
+    subs["NSE_INDEX|India VIX"] = "INDIA VIX"
     return subs
 
 def format_depth(market_level) -> str:
@@ -189,19 +262,58 @@ def format_depth(market_level) -> str:
 # ----------------- POST MARKET STITCHING -----------------
 def execute_post_market_stitching(date_str: str, date_compact: str, data_dir: Path):
     logger.info("=== STARTING AUTOMATIC POST-MARKET STITCHING ===")
-    chunks_dir = data_dir / "chunks"
-    chunk_files = sorted(glob.glob(str(chunks_dir / "*.parquet")))
+
+    # Gather chunks from primary and fallback directories if present
+    possible_chunk_dirs = [
+        p / date_str / "chunks" for p in PRIMARY_BASE_DIRS
+    ] + [
+        FALLBACK_BASE_DIR / date_str / "chunks",
+        data_dir / "chunks"
+    ]
+
+    chunk_files = []
+    for cd in possible_chunk_dirs:
+        if cd.exists():
+            chunk_files.extend(glob.glob(str(cd / "*.parquet")))
+    chunk_files = sorted(list(set(chunk_files)))
+
+    out_file = data_dir / f"upstox_full_ticks_{date_compact}_stitched.parquet"
+    summary_file = data_dir / f"stitching_summary_{date_compact}.json"
+
+    # If master stitched file exists and there are new chunks, merge them seamlessly
+    if out_file.exists() and out_file.stat().st_size > 0:
+        if not chunk_files:
+            logger.info(f"[✓] Master stitched file already exists: {out_file.name} ({out_file.stat().st_size / (1024*1024):.2f} MB) and no new chunks to merge.")
+            return
+        logger.info(f"Existing master stitched file found ({out_file.name}). Merging with {len(chunk_files)} new chunks...")
+        chunk_files = [str(out_file)] + [cf for cf in chunk_files if cf != str(out_file)]
 
     if not chunk_files:
-        logger.warning(f"No chunk files found in {chunks_dir} to stitch.")
+        logger.warning(f"No chunk files found to stitch.")
         return
 
-    logger.info(f"Reading {len(chunk_files)} chunks...")
     dfs = []
+    valid_chunks = 0
+    skipped_chunks = 0
+
     for cf in chunk_files:
         try:
-            dfs.append(pd.read_parquet(cf))
+            df = pd.read_parquet(cf)
+            if df.empty:
+                continue
+            df["ts"] = df["ts"].astype(float)
+            df["token"] = df["token"].astype(str)
+            df["symbol"] = df["symbol"].astype(str)
+            df["ltp"] = df["ltp"].astype(float)
+            df["bid"] = df["bid"].astype(float)
+            df["ask"] = df["ask"].astype(float)
+            df["vol"] = df["vol"].astype(float)
+            df["oi"] = df["oi"].astype(float)
+            df["depth"] = df["depth"].astype(str)
+            dfs.append(df)
+            valid_chunks += 1
         except Exception as e:
+            skipped_chunks += 1
             logger.warning(f"Error reading chunk {cf}: {e}")
 
     if dfs:
@@ -210,22 +322,53 @@ def execute_post_market_stitching(date_str: str, date_compact: str, data_dir: Pa
         df_all = df_all.drop_duplicates(subset=["ts", "token"]).reset_index(drop=True)
         final_count = len(df_all)
 
-        out_file = data_dir / f"upstox_full_ticks_{date_compact}_stitched.parquet"
-        table = pa.Table.from_pandas(df_all)
+        schema = pa.schema([
+            ("ts", pa.float64()),
+            ("token", pa.string()),
+            ("symbol", pa.string()),
+            ("ltp", pa.float64()),
+            ("bid", pa.float64()),
+            ("ask", pa.float64()),
+            ("vol", pa.float64()),
+            ("oi", pa.float64()),
+            ("depth", pa.string())
+        ])
+
+        table = pa.Table.from_pandas(df_all, schema=schema)
         pq.write_table(table, out_file, compression="snappy")
         logger.info(f"[✓] Stitched master saved: {out_file.name} ({final_count:,} ticks, {out_file.stat().st_size / (1024*1024):.2f} MB)")
 
         summary = {
             "date": date_str,
             "total_chunks": len(chunk_files),
+            "valid_chunks": valid_chunks,
+            "skipped_chunks": skipped_chunks,
             "total_ticks": final_count,
             "duplicates_removed": initial_count - final_count,
             "unique_tokens": df_all["symbol"].nunique(),
             "file_path": str(out_file),
             "stitched_at_utc": datetime.now(timezone.utc).isoformat()
         }
-        with open(data_dir / f"stitching_summary_{date_compact}.json", "w") as f:
+        with open(summary_file, "w") as f:
             json.dump(summary, f, indent=2)
+
+        # Safe post-stitching cleanup: remove raw chunks if master file is verified
+        if out_file.exists() and out_file.stat().st_size > 0 and final_count > 0 and valid_chunks > 0:
+            logger.info(f"Master file verified ({final_count:,} ticks). Pruning raw chunks...")
+            for cf in chunk_files:
+                if Path(cf).resolve() == out_file.resolve():
+                    continue
+                try:
+                    Path(cf).unlink(missing_ok=True)
+                except Exception as e:
+                    logger.warning(f"Could not remove chunk file {cf}: {e}")
+            for cd in possible_chunk_dirs:
+                if cd.exists():
+                    try:
+                        cd.rmdir()
+                        logger.info(f"[✓] Successfully pruned chunks directory: {cd}")
+                    except Exception as e:
+                        logger.debug(f"Could not remove chunks directory {cd}: {e}")
 
     # Fetch 1m historical index candles
     try:
@@ -289,56 +432,28 @@ def main():
     df_inst = fetch_instruments()
     prices = get_underlying_prices(access_token)
     subscriptions = get_options_subscriptions(df_inst, prices)
+    subscriptions_lock = threading.Lock()
     logger.info(f"Subscribing to {len(subscriptions)} tokens (ATM +- 10 options + indices).")
 
     tick_buffer = []
     buffer_lock = threading.Lock()
-
-    schema = pa.schema([
-        ("ts", pa.float64()),
-        ("token", pa.string()),
-        ("symbol", pa.string()),
-        ("ltp", pa.float64()),
-        ("bid", pa.float64()),
-        ("ask", pa.float64()),
-        ("vol", pa.float64()),
-        ("oi", pa.float64()),
-        ("depth", pa.string())
-    ])
+    schema = DEFAULT_TICK_SCHEMA
 
     today_str = datetime.now().strftime("%Y-%m-%d")
     today_compact = datetime.now().strftime("%Y%m%d")
-    data_dir = get_today_data_dir()
+    allow_fallback = os.getenv("UPSTOX_ALLOW_LOCAL_FALLBACK", "").strip().lower() in ("1", "true", "yes")
+    data_dir = get_today_data_dir(allow_local_fallback=allow_fallback)
     chunks_dir = data_dir / "chunks"
     chunks_dir.mkdir(parents=True, exist_ok=True)
 
-    def flush_buffer():
-        nonlocal tick_buffer
-        with buffer_lock:
-            if not tick_buffer:
-                return
-            to_flush = tick_buffer
-            tick_buffer = []
-
-        now_dt = datetime.now()
-        chunk_file = chunks_dir / f"chunk_{today_compact}_{int(now_dt.timestamp() * 1000)}.parquet"
-        df = pd.DataFrame(to_flush)
-        df["ts"] = df["ts"].astype(float)
-        df["token"] = df["token"].astype(str)
-        df["symbol"] = df["symbol"].astype(str)
-        df["ltp"] = df["ltp"].astype(float)
-        df["bid"] = df["bid"].astype(float)
-        df["ask"] = df["ask"].astype(float)
-        df["vol"] = df["vol"].astype(float)
-        df["oi"] = df["oi"].astype(float)
-        df["depth"] = df["depth"].astype(str)
-
-        try:
-            table = pa.Table.from_pandas(df, schema=schema)
-            pq.write_table(table, chunk_file, compression="snappy")
-            logger.info(f"Flushed {len(df)} ticks to {chunk_file.name}")
-        except Exception as e:
-            logger.error(f"Failed to write parquet chunk: {e}")
+    def flush_current_buffer():
+        return flush_buffer(
+            tick_buffer=tick_buffer,
+            buffer_lock=buffer_lock,
+            chunks_dir=chunks_dir,
+            today_compact=today_compact,
+            schema=schema,
+        )
 
     last_msg_time = time.time()
     streamer = None
@@ -373,13 +488,23 @@ def main():
             elif index_ff:
                 ltpc = index_ff.get("ltpc", {})
                 ltp = float(ltpc.get("ltp", 0.0))
+                if ltp > 0:
+                    if key == "NSE_INDEX|Nifty 50":
+                        prices["NIFTY"] = ltp
+                    elif key == "NSE_INDEX|Nifty Bank":
+                        prices["BANKNIFTY"] = ltp
+                    elif key == "BSE_INDEX|SENSEX":
+                        prices["SENSEX"] = ltp
             else:
                 continue
+
+            with subscriptions_lock:
+                sym_name = subscriptions.get(key, key)
 
             record = {
                 "ts": time.time(),
                 "token": key,
-                "symbol": subscriptions.get(key, key),
+                "symbol": sym_name,
                 "ltp": ltp,
                 "bid": bid,
                 "ask": ask,
@@ -393,7 +518,9 @@ def main():
     def on_open():
         logger.info("Connected to Upstox WebSocket (Full Mode). Subscribing...")
         if streamer:
-            streamer.subscribe(list(subscriptions.keys()), mode="full")
+            with subscriptions_lock:
+                sub_keys = list(subscriptions.keys())
+            streamer.subscribe(sub_keys, mode="full")
 
     def on_close(code, reason):
         logger.warning(f"WebSocket closed: {code} - {reason}")
@@ -431,8 +558,8 @@ def main():
 
     start_streamer()
     last_flush_time = time.time()
+    last_dynamic_refresh_time = time.time()
     market_close_time = dt_time(15, 41)  # Collect CAS data through 15:40 PM, stop stream and stitch at 15:41 IST
-    late_day_refresh_done = False
 
     while running:
         now = datetime.now()
@@ -443,29 +570,28 @@ def main():
             logger.info("Market close & CAS complete (15:41 IST). Ending streaming session...")
             break
 
-        # Dynamic late-day option refresh at 15:23:00 - 15:24:00 IST
-        # Subscribes ATM and ATM +/- 100 strikes around current spot to ensure 15:26 depth availability
-        if not late_day_refresh_done and dt_time(15, 23) <= now.time() <= dt_time(15, 24):
-            latest_spot = 0.0
-            with buffer_lock:
-                for t in reversed(tick_buffer):
-                    if t.get("token") == "NSE_INDEX|Nifty 50":
-                        latest_spot = float(t.get("ltp", 0.0))
-                        break
-            if not latest_spot:
-                latest_spot = underlying_prices.get("NIFTY", 0.0)
-
-            if latest_spot > 0:
-                try:
-                    from core.upstox_capture.late_day_option_refresh import refresh_late_day_option_subscriptions
-                    added = refresh_late_day_option_subscriptions(streamer, subscriptions, df_inst, latest_spot)
-                    logger.info(f"[Late-Day Refresh Triggered] Added {added} strikes around spot {latest_spot:.1f}")
-                    late_day_refresh_done = True
-                except Exception as e:
-                    logger.error(f"[Late-Day Refresh Error] {e}")
+        # Periodic dynamic option refresh (every 180s) across NIFTY, BANKNIFTY, and SENSEX
+        # Subscribes ATM +/- 10 strikes around current spot to ensure trended strikes are actively captured
+        if now_ts - last_dynamic_refresh_time >= 180:
+            last_dynamic_refresh_time = now_ts
+            try:
+                from core.upstox_capture.late_day_option_refresh import refresh_late_day_option_subscriptions
+                added = refresh_late_day_option_subscriptions(
+                    streamer,
+                    subscriptions,
+                    df_inst,
+                    current_spot_prices=prices,
+                    subscriptions_lock=subscriptions_lock,
+                )
+                if added > 0:
+                    with subscriptions_lock:
+                        total_subs = len(subscriptions)
+                    logger.info(f"[Periodic Dynamic Refresh] Added {added} new strikes across {list(prices.keys())} (Total: {total_subs})")
+            except Exception as e:
+                logger.error(f"[Dynamic Strike Refresh Error] {e}")
 
         if now_ts - last_flush_time >= 60:
-            flush_buffer()
+            flush_current_buffer()
             last_flush_time = now_ts
 
         if now_ts - last_msg_time > 35:
@@ -476,7 +602,7 @@ def main():
         time.sleep(1)
 
     # 1. Final Flush
-    flush_buffer()
+    flush_current_buffer()
     if streamer:
         try:
             streamer.disconnect()
