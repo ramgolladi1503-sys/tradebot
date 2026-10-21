@@ -1,0 +1,11 @@
+{
+  "broker_order_firewall": "PASS",
+  "compilation": "PASS",
+  "contract_hash": "dd812ff5a9eae10da0ccfdf3c1ba5bc86bc1bd173ecc9433e20922c29a6b0e06",
+  "focused_tests": "10 passed in isolated offline bundle",
+  "merge_ready": false,
+  "offline_verdict": "PASS_OFFLINE_KELTNER_HM_SHADOW_V1_LOCAL",
+  "remaining_gate": "REPOSITORY_CI_AND_ONE_REAL_MARKET_SESSION_WITH_PASS_LIVE_SHADOW_RUN",
+  "schema_version": "1.0",
+  "system_verdict": "IMPLEMENTATION_COMPLETE_REPOSITORY_CI_AND_LIVE_EVIDENCE_PENDING"
+}
