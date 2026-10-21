@@ -1,0 +1,67 @@
+{
+  "schema_version": "nifty_45dte_vrp_translator_spec_v1",
+  "candidate_id": "NIFTY_45DTE_VRP_TRANSLATOR_BUYONLY_V1",
+  "status": "SPEC_FROZEN_DATA_GATED",
+  "supersedes": "translator subsection in candidate_spec.json where this file is more specific",
+  "research_authority_base_sha": "e8240c67e01f1abd7a59b1d1c2033f7e675cf81f",
+  "mechanism": "Use the medium-dated NIFTY implied-vs-realized volatility state as an ex-ante context gate for an already-frozen BUY-only directional signal.",
+  "data": {
+    "options": {
+      "real_quotes_required": true,
+      "minimum_fields": ["timestamp", "symbol", "expiry", "type", "delta", "iv"],
+      "synthetic_or_realish_rejected": true,
+      "dte_range_calendar_days": [35, 55],
+      "state_snapshot_ist": "15:00",
+      "state_snapshot_tolerance_minutes": 15
+    },
+    "underlying": {
+      "instrument": "NIFTY",
+      "minimum_fields": ["timestamp", "close"],
+      "rv20": "annualized standard deviation of the prior 20 completed close-to-close log returns; current session close is forbidden at the 15:00 state timestamp"
+    }
+  },
+  "features": {
+    "atm_iv_per_expiry": "mean of CE and PE IV from the contracts nearest |delta|=0.50",
+    "iv45": "linear interpolation between eligible expiries bracketing 45 DTE; if not bracketed, nearest eligible expiry only when within 5 calendar days of 45",
+    "vrp_proxy": "iv45^2 - rv20_prior^2",
+    "vrp_zscore": "current vrp_proxy minus expanding prior-state mean, divided by expanding prior-state sample standard deviation; both moments shifted one state; minimum 60 prior observations"
+  },
+  "information_availability": {
+    "state_timestamp": "actual option snapshot timestamp near 15:00 IST",
+    "join_rule": "for each baseline entry use only the latest state_timestamp <= entry_timestamp",
+    "morning_trade_rule": "a trade before 15:00 IST cannot consume the same session's 15:00 state; it therefore uses the most recent prior session state when available",
+    "missing_state_rule": "trades without a non-null prior z-score are excluded from the apples-to-apples primary baseline comparison, not counted as gate rejects"
+  },
+  "primary_gate": {
+    "baseline": "exact-SHA frozen BUY-only trade ledger",
+    "rule": "admit existing baseline trade iff latest available vrp_zscore <= 0",
+    "threshold_optimization": "FORBIDDEN",
+    "direction_change": "FORBIDDEN",
+    "new_trade_creation": "FORBIDDEN"
+  },
+  "primary_null": "Conditioning the frozen BUY-only baseline on vrp_zscore <= 0 does not improve net expectancy or downside-adjusted expectancy after controlling for coverage, costs, temporal stability, and regime dependence.",
+  "primary_endpoints": [
+    "incremental mean net outcome versus the identical state-available baseline",
+    "change in 5th percentile trade outcome",
+    "change in cumulative max drawdown",
+    "coverage retained",
+    "per-year and per-quarter stability"
+  ],
+  "certification_requirements": [
+    "exact baseline candidate SHA",
+    "historical OOS evidence",
+    "real execution cost evidence",
+    "robustness evidence",
+    "prospective evidence",
+    "independent verification"
+  ],
+  "governance": {
+    "broker_api_called": false,
+    "broker_write_authority": false,
+    "order_authority": false,
+    "paper_authorized": false,
+    "live_authorized": false,
+    "holdout_access": false,
+    "edge_certified": false
+  }
+}
