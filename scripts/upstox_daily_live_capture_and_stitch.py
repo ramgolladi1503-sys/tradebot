@@ -39,6 +39,8 @@ import upstox_client
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 load_dotenv(ROOT / ".env")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -53,12 +55,18 @@ from core.upstox_stream_broadcaster import (
 from core.sentinel_inmem_adapter import InMemorySentinelAdapter
 from core.sentinel_live_stream_advisor import SentinelLiveStreamAdvisor
 
-PRIMARY_BASE_DIR = Path("/Volumes/TradeBotData/live market capture")
+PRIMARY_BASE_DIRS = [
+    Path("/Volumes/TradeBot/live market capture"),
+    Path("/Volumes/TradeBotData/live market capture"),
+    Path("/Volumes/TradeBotFast/live market capture"),
+]
 FALLBACK_BASE_DIR = ROOT / ".runtime" / "market_data"
 
 def get_today_data_dir() -> Path:
     today_str = datetime.now().strftime("%Y-%m-%d")
-    d = (PRIMARY_BASE_DIR if PRIMARY_BASE_DIR.exists() else FALLBACK_BASE_DIR) / today_str
+    primary_dir = next((p for p in PRIMARY_BASE_DIRS if p.exists()), None)
+    base_dir = primary_dir if primary_dir is not None else FALLBACK_BASE_DIR
+    d = base_dir / today_str
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -214,9 +222,13 @@ def execute_post_market_stitching(date_str: str, date_compact: str, data_dir: Pa
             logger.warning(f"Error reading chunk {cf}: {e}")
 
     if dfs:
-        df_all = pd.concat(dfs, ignore_index=True).sort_values("ts").reset_index(drop=True)
+        df_all = pd.concat(dfs, ignore_index=True)
+        ts_col = "exchange_timestamp_ms" if "exchange_timestamp_ms" in df_all.columns else ("ts" if "ts" in df_all.columns else None)
+        if ts_col:
+            df_all = df_all.sort_values(ts_col).reset_index(drop=True)
+            subset_cols = [ts_col, "token"] if "token" in df_all.columns else [ts_col]
+            df_all = df_all.drop_duplicates(subset=subset_cols).reset_index(drop=True)
         initial_count = len(df_all)
-        df_all = df_all.drop_duplicates(subset=["ts", "token"]).reset_index(drop=True)
         final_count = len(df_all)
 
         out_file = data_dir / f"upstox_full_ticks_{date_compact}_stitched.parquet"

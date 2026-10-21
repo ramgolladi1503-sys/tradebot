@@ -101,21 +101,31 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         self.skew_threshold_ms = float(skew_threshold_ms)
         self.enable_stdout = enable_stdout
 
-        self.apm = ActivePositionManager(wal_path=wal_path)
-        # If APM was in EXIT_PENDING upon boot (from crash recovery fail-closed), complete liquidation
-        if self.apm.state == STATE_EXIT_PENDING:
-            self.apm.liquidate()
-        # If APM was in LIQUIDATED from a previous trade or day, reset to STANDBY for new setups
-        if self.apm.state == STATE_LIQUIDATED:
-            self.apm.state = STATE_STANDBY
-            self.apm._persist_wal_atomic()
+        # Decoupled Multi-Index APM Instances: Each index runs an isolated position manager & WAL
+        wal_base = Path(wal_path).parent
+        self.apms: dict[str, ActivePositionManager] = {
+            "NIFTY": ActivePositionManager(wal_path=str(wal_base / "sentinel_apm_wal.json")),
+            "SENSEX": ActivePositionManager(wal_path=str(wal_base / "sentinel_apm_wal_sensex.json")),
+            "BANKNIFTY": ActivePositionManager(wal_path=str(wal_base / "sentinel_apm_wal_banknifty.json")),
+        }
+        # Backward compatibility reference (default to NIFTY)
+        self.apm = self.apms["NIFTY"]
+
+        for idx_key, mgr in self.apms.items():
+            # If APM was in EXIT_PENDING upon boot (from crash recovery fail-closed), complete liquidation
+            if mgr.state == STATE_EXIT_PENDING:
+                mgr.liquidate()
+            # If APM was in LIQUIDATED from a previous trade or day, reset to STANDBY for new setups
+            if mgr.state == STATE_LIQUIDATED:
+                mgr.state = STATE_STANDBY
+                mgr._persist_wal_atomic()
 
         self.active_range_high = -math.inf
         self.active_range_low = math.inf
         self.or_bounds: dict[str, dict[str, float]] = {
-            "NIFTY": {"high": 23175.25, "low": 22970.50},
-            "SENSEX": {"high": 74849.75, "low": 74169.23},
-            "BANKNIFTY": {"high": 55883.70, "low": 55331.10},
+            "NIFTY": {"high": 23120.90, "low": 22976.15},
+            "SENSEX": {"high": 74682.19, "low": 74149.89},
+            "BANKNIFTY": {"high": 55867.45, "low": 55595.35},
         }
         # If current time is past opening shock (09:45), trade lock is cleared
         self.trade_lock_active = (datetime.now().time() < self.opening_shock_end_time)
@@ -224,18 +234,24 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         if "SENSEX" in sym:
             index_name = "SENSEX"
             strike_interval = 100.0
-            target_pts = 30.0
-            sl_pts = 20.0
+            target_pts = 60.0
+            sl_pts = 40.0
+            eff_atr_15m = 100.0
+            eff_atr_60m = 140.0
         elif "BANKNIFTY" in sym:
             index_name = "BANKNIFTY"
             strike_interval = 100.0
-            target_pts = 30.0
-            sl_pts = 20.0
+            target_pts = 50.0
+            sl_pts = 35.0
+            eff_atr_15m = 45.0
+            eff_atr_60m = 65.0
         else:
             index_name = "NIFTY"
             strike_interval = 50.0
             target_pts = 15.0
             sl_pts = 12.0
+            eff_atr_15m = 12.0
+            eff_atr_60m = 16.0
 
         with self._lock:
             spot = self.spots.get(index_name, 0.0)
@@ -368,15 +384,15 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 depth_bid_q_sum=depth_bids,
                 depth_ask_q_sum=depth_asks,
                 displacement_pts=displacement,
-                eff_atr=12.0,
+                eff_atr=eff_atr_15m,
                 is_target_itm=is_target_strike,
                 spread_ratio=spread_ratio,
                 is_expiry_session=is_exp,
             )
 
             vol_ok, vol_reason, _ = self.vol_compression_gate.evaluate_compression(
-                atr_15m=12.0,
-                atr_60m=16.0,
+                atr_15m=eff_atr_15m,
+                atr_60m=eff_atr_60m,
                 recent_displacement_pts=displacement,
             )
 
@@ -408,7 +424,9 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 )
 
                 with self._lock:
-                    if is_target_strike and self.apm.state in {STATE_STANDBY, STATE_LIQUIDATED}:
+                    idx_apm = self.apms.get(index_name, self.apm)
+                    # Allow entry if APM is in STANDBY, LIQUIDATED, or PULLBACK_WAIT
+                    if is_target_strike and idx_apm.state in {STATE_STANDBY, STATE_LIQUIDATED, STATE_PULLBACK_WAIT}:
                         opt_q = {
                             "symbol": depth.symbol,
                             "token": depth.token,
@@ -419,8 +437,8 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                             "spread_savings": savings,
                             "fill_mode": fill_mode,
                         }
-                        pos_id = f"TRADE_{now_time.strftime('%H%M%S')}_{required_option_type}"
-                        entered = self.apm.arm_and_enter(
+                        pos_id = f"TRADE_{index_name}_{now_time.strftime('%H%M%S')}_{required_option_type}"
+                        entered = idx_apm.arm_and_enter(
                             position_id=pos_id,
                             direction=required_option_type,
                             contract=depth.symbol,
@@ -436,7 +454,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         )
                         if entered and self.enable_stdout:
                             print(
-                                f"\n🚀 [APM IN_FLIGHT ENTRY - {itm_res.moneyness}] {pos_id} | {depth.symbol} @ {spot:.1f} | "
+                                f"\n🚀 [APM IN_FLIGHT ENTRY ({index_name}) - {itm_res.moneyness}] {pos_id} | {depth.symbol} @ {spot:.1f} | "
                                 f"Conviction: {conf_eval.total_score}/100 ({conf_eval.grade}) | "
                                 f"Fill: ₹{fill_price:.2f} ({fill_mode}, Saved ₹{savings:.2f}) | "
                                 f"SL: {sl_pts:.1f}pts | TP: {target_pts:.1f}pts"
@@ -451,16 +469,10 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
         # Update in-flight APM position if open and matching option contract
         with self._lock:
-            if self.apm.state in {STATE_IN_FLIGHT, "TRAIL_LOCK", "EXIT_PENDING"} and self.apm.payload:
-                if self.apm.payload.opt_symbol == depth.symbol:
-                    opt_q = {
-                        "symbol": depth.symbol,
-                        "token": depth.token,
-                        "ltp": ltp,
-                        "bid": bid,
-                        "ask": ask,
-                    }
-                    self.apm.evaluate_tick(
+            idx_apm = self.apms.get(index_name, self.apm)
+            if idx_apm.state in {STATE_IN_FLIGHT, "TRAIL_LOCK", "EXIT_PENDING"} and idx_apm.payload:
+                if idx_apm.payload.opt_symbol == depth.symbol:
+                    idx_apm.evaluate_tick(
                         current_spot=spot,
                         current_opt_ltp=ltp,
                         tick_time_str=now_time.strftime("%H:%M:%S"),

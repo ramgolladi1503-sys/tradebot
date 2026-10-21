@@ -205,15 +205,20 @@ class ActivePositionManager:
         max_session_trades: int = 4
     ) -> bool:
         """Arms and executes entry into IN_FLIGHT state with dynamic volatility-scaled targets."""
-        if self.state not in {STATE_STANDBY, STATE_LIQUIDATED}:
+        if self.state not in {STATE_STANDBY, STATE_LIQUIDATED, STATE_PULLBACK_WAIT}:
             return False
 
         # Invariant: Regime-Aware Session Trade Cap
         # In GEAR_1_RANGE: Strictly cap at 4 trades to block overtrading fee churn
         # In GEAR_2_TREND: Allow up to 6 trades so clean afternoon expansion runners are not cut off
         effective_cap = 6 if session_gear == "GEAR_2_TREND" else max_session_trades
-        if len(self.trade_history) >= effective_cap:
-            logger.warning(f"SESSION_TRADE_CAP_REACHED: {len(self.trade_history)} trades already executed today (cap={effective_cap}). Suppressing entry.")
+        today_iso = datetime.now().strftime("%Y-%m-%d")
+        today_trades_count = sum(
+            1 for t in self.trade_history
+            if isinstance(t, dict) and str(t.get("entry_time", "")).startswith(today_iso)
+        )
+        if today_trades_count >= effective_cap:
+            logger.warning(f"SESSION_TRADE_CAP_REACHED: {today_trades_count} trades already executed today (cap={effective_cap}). Suppressing entry.")
             return False
 
         if not self._transition_to(STATE_ARMED):
