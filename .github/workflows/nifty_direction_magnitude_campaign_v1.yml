@@ -1,0 +1,49 @@
+name: NIFTY Direction Magnitude Campaign V1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/nifty-direction-magnitude-option-edge-v1
+    paths:
+      - '.github/workflows/nifty_direction_magnitude_campaign_v1.yml'
+      - 'scripts/run_nifty_direction_magnitude_campaign_v1.py'
+      - 'research/nifty_option_edge/**'
+
+permissions:
+  contents: read
+
+jobs:
+  campaign:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: .
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install research dependencies
+        run: pip install 'pandas<3.0' pyarrow 'scikit-learn<2.0'
+      - name: Compile campaign runner
+        run: python -m py_compile scripts/run_nifty_direction_magnitude_campaign_v1.py research/nifty_option_edge/*.py
+      - name: Run frozen DEV to validation campaign
+        run: |
+          rm -rf /tmp/nifty_direction_magnitude_campaign_v1
+          python scripts/run_nifty_direction_magnitude_campaign_v1.py \
+            --archive runtime/upstox_candidate_replay.zip \
+            --output-dir /tmp/nifty_direction_magnitude_campaign_v1
+      - name: Show report
+        if: always()
+        run: |
+          if [ -f /tmp/nifty_direction_magnitude_campaign_v1/report.md ]; then
+            cat /tmp/nifty_direction_magnitude_campaign_v1/report.md
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nifty-direction-magnitude-campaign-v1
+          path: /tmp/nifty_direction_magnitude_campaign_v1
+          if-no-files-found: warn
+          retention-days: 5
