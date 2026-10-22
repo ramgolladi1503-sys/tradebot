@@ -231,8 +231,16 @@ class QuantMetricsEngine:
         if "CRASH_RECOVERY" in reason or "LIQUIDATED" in reason or "EOD" in reason:
             return "EOD_LIQUIDATION"
 
+        raw = trade.raw_payload or {}
+        is_half_booked = bool(raw.get("half_booked") or raw.get("target_1_hit"))
+        if is_half_booked and entry and peak and trade.opt_exit_ltp is not None:
+            # Check blended PnL for root-cause classification
+            blended_pnl = 0.5 * max(0.0, float(peak) - float(entry)) + 0.5 * (float(trade.opt_exit_ltp) - float(entry))
+        else:
+            blended_pnl = pnl
+
         if "RUNNER_HWM" in reason:
-            if pnl > 0:
+            if blended_pnl > 0 or is_half_booked:
                 return "Runner Trailing"
             else:
                 return "Chop Drag"
@@ -271,11 +279,20 @@ class QuantMetricsEngine:
             costs = self.calculate_trade_costs(t, lot_size=lot_size)
 
             # Option PnL takes precedence; fall back to spot pnl if option ltp not available
-            gross_pnl_pts = (
-                t.opt_pnl_pts
-                if t.opt_pnl_pts is not None
-                else (t.pnl_pts if t.pnl_pts is not None else 0.0)
-            )
+            raw = t.raw_payload or {}
+            is_half_booked = bool(raw.get("half_booked") or raw.get("target_1_hit"))
+            
+            if is_half_booked and t.opt_entry_ltp is not None and t.opt_peak_hwm is not None and t.opt_exit_ltp is not None:
+                # Blended APM accounting: 50% booked at Target / Peak gain, 50% exited at trailing stop
+                target_gain_pts = max(0.0, float(t.opt_peak_hwm) - float(t.opt_entry_ltp))
+                runner_exit_pts = float(t.opt_exit_ltp) - float(t.opt_entry_ltp)
+                gross_pnl_pts = 0.5 * target_gain_pts + 0.5 * runner_exit_pts
+            else:
+                gross_pnl_pts = (
+                    t.opt_pnl_pts
+                    if t.opt_pnl_pts is not None
+                    else (t.pnl_pts if t.pnl_pts is not None else 0.0)
+                )
             gross_pnl_rupees = gross_pnl_pts * lot_size
             net_pnl_rupees = gross_pnl_rupees - costs.total_frictional_cost
             net_pnl_pts = net_pnl_rupees / lot_size if lot_size > 0 else 0.0
