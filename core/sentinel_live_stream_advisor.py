@@ -34,6 +34,7 @@ from core.active_position_manager import (
     STATE_IN_FLIGHT,
     STATE_LIQUIDATED,
     STATE_EXIT_PENDING,
+    STATE_PULLBACK_WAIT,
 )
 from core.expiry_calendar_resolver import ExpiryCalendarResolver
 from core.liquidity_sweep_engine import LiquiditySweepEngine
@@ -122,11 +123,15 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
         self.active_range_high = -math.inf
         self.active_range_low = math.inf
+        # Dynamic Opening Range Bounds: Clean infinity initialization to strictly capture today's session
         self.or_bounds: dict[str, dict[str, float]] = {
-            "NIFTY": {"high": 23120.90, "low": 22976.15},
-            "SENSEX": {"high": 74682.19, "low": 74149.89},
-            "BANKNIFTY": {"high": 55867.45, "low": 55595.35},
+            "NIFTY": {"high": -math.inf, "low": math.inf},
+            "SENSEX": {"high": -math.inf, "low": math.inf},
+            "BANKNIFTY": {"high": -math.inf, "low": math.inf},
         }
+        # If launched post-09:45, seed exact Opening Range from Upstox Intraday API
+        self._seed_or_bounds_from_api_if_late_boot()
+
         # If current time is past opening shock (09:45), trade lock is cleared
         self.trade_lock_active = (datetime.now().time() < self.opening_shock_end_time)
         self.spots: dict[str, float] = {"NIFTY": 0.0, "SENSEX": 0.0, "BANKNIFTY": 0.0}
@@ -193,6 +198,43 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
         # Trigger option assessment on option depth updates (NIFTY, SENSEX, or BANKNIFTY options)
         self._evaluate_option_depth(depth)
+
+    def _seed_or_bounds_from_api_if_late_boot(self) -> None:
+        """Seeds Opening Range (09:15-09:45) from Upstox Intraday API if process starts/restarts post-09:45."""
+        now_t = datetime.now().time()
+        if now_t <= self.opening_shock_end_time:
+            return
+
+        import os, requests
+        token = os.getenv("UPSTOX_ACCESS_TOKEN", "").strip()
+        if not token:
+            return
+
+        headers = {"accept": "application/json", "Api-Version": "2.0", "Authorization": f"Bearer {token}", "User-Agent": "Mozilla/5.0"}
+        indices = [
+            ("NIFTY", "NSE_INDEX%7CNifty%2050"),
+            ("BANKNIFTY", "NSE_INDEX%7CNifty%20Bank"),
+            ("SENSEX", "BSE_INDEX%7CSENSEX"),
+        ]
+        for idx, sym in indices:
+            try:
+                url = f"https://api.upstox.com/v2/historical-candle/intraday/{sym}/1minute"
+                r = requests.get(url, headers=headers, timeout=4)
+                if r.status_code == 200:
+                    candles = r.json().get("data", {}).get("candles", [])
+                    or_candles = [c for c in candles if "09:15:00" <= c[0][11:19] <= "09:45:00"]
+                    if or_candles:
+                        h = float(max(c[2] for c in or_candles))
+                        l = float(min(c[3] for c in or_candles))
+                        self.or_bounds[idx]["high"] = h
+                        self.or_bounds[idx]["low"] = l
+                        if idx == "NIFTY":
+                            self.active_range_high = h
+                            self.active_range_low = l
+                        if self.enable_stdout:
+                            print(f"📥 [OR RECOVERY] {idx}: Seeded Opening Range from Upstox API -> High={h:.2f}, Low={l:.2f} (Range={h-l:.2f} pts)")
+            except Exception as e:
+                logger.warning(f"Failed to fetch OR candles for {idx}: {e}")
 
     def on_stream_status(self, status: Any) -> None:
         pass

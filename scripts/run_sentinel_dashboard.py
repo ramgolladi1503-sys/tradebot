@@ -220,7 +220,7 @@ st.caption("Sidecar Telemetry • Real-Time Option Contract Quotes (LTP/Bid/Ask/
 # Sidebar
 st.sidebar.title("Config & Status")
 auto_refresh = st.sidebar.checkbox("Auto-Refresh Feed", value=True)
-refresh_rate = st.sidebar.slider("Refresh Interval (seconds)", min_value=1, max_value=10, value=2)
+refresh_rate = st.sidebar.slider("Refresh Interval (seconds)", min_value=2, max_value=15, value=4)
 
 if auto_refresh:
     try:
@@ -563,15 +563,24 @@ if audit_log_path.exists():
     except Exception:
         pass
 elif today_str == today_real:
-    # Read live alerts across all today's streamer task logs so the chart reflects the complete session up to the current second
-    log_candidates = [
-        Path(f"logs/upstox_daily_pipeline_{today_real}.log"),
-        Path("/Users/madhuram/.gemini/antigravity/brain/162de38c-8263-4254-8b50-0c5fa8538833/.system_generated/tasks/task-19472.log"),
-        Path("/Users/madhuram/.gemini/antigravity/brain/162de38c-8263-4254-8b50-0c5fa8538833/.system_generated/tasks/task-19828.log"),
-        Path("/Users/madhuram/.gemini/antigravity/brain/162de38c-8263-4254-8b50-0c5fa8538833/.system_generated/tasks/task-19992.log"),
-        Path("/Users/madhuram/.gemini/antigravity/brain/162de38c-8263-4254-8b50-0c5fa8538833/.system_generated/tasks/task-20075.log"),
-        Path("/Users/madhuram/.gemini/antigravity/brain/162de38c-8263-4254-8b50-0c5fa8538833/.system_generated/tasks/task-20188.log"),
-    ]
+    # Dynamically discover all task logs created or modified today so the chart never loads older sessions or gets stuck on yesterday's tasks
+    import glob
+    all_task_logs = glob.glob("/Users/madhuram/.gemini/antigravity/brain/162de38c-8263-4254-8b50-0c5fa8538833/.system_generated/tasks/task-*.log")
+    today_task_logs = []
+    for log_p in all_task_logs:
+        p_obj = Path(log_p)
+        if p_obj.exists() and p_obj.stat().st_size > 0:
+            mtime_dt = datetime.fromtimestamp(p_obj.stat().st_mtime)
+            if mtime_dt.strftime("%Y-%m-%d") == today_dash:
+                today_task_logs.append(p_obj)
+
+    # Sort sequentially by modification time
+    today_task_logs.sort(key=lambda p: p.stat().st_mtime)
+
+    pipeline_log = Path(f"logs/upstox_daily_pipeline_{today_real}.log")
+    log_candidates = [pipeline_log] if pipeline_log.exists() and pipeline_log.stat().st_size > 0 else []
+    log_candidates.extend(today_task_logs)
+
     import re
     pattern_with_conv = re.compile(r'🛰️ \[(\d{2}:\d{2}:\d{2})\] (\w+): ([\d\.]+) \| (.+?) LTP: ([\d\.]+) \| Conviction: (\d+)/100 \((\w+)\) \| Spread: ([\d\.]+) \(([\d\.]+)%\) \| Status: (\w+) \| Advisory: (.+)')
     pattern_legacy = re.compile(r'🛰️ \[(\d{2}:\d{2}:\d{2})\] (\w+): ([\d\.]+) \| (.+?) LTP: ([\d\.]+) \| Spread: ([\d\.]+) \(([\d\.]+)%\) \| Status: (\w+) \| Advisory: (.+)')
@@ -580,7 +589,10 @@ elif today_str == today_real:
         if pipe_log.exists() and pipe_log.stat().st_size > 0:
             try:
                 with open(pipe_log, "r", encoding="utf-8") as pl:
-                    for line in pl:
+                    # Read at most the last 3,000 lines from each log file to keep memory light and re-rendering snappy
+                    lines = pl.readlines()
+                    tail_lines = lines[-3000:] if len(lines) > 3000 else lines
+                    for line in tail_lines:
                         m = pattern_with_conv.search(line)
                         if m:
                             wall_t, idx, spot, sym, ltp, c_score, c_grade, spread, sp_pct, status, adv = m.groups()
