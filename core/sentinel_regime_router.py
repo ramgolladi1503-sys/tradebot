@@ -271,8 +271,9 @@ class SentinelRegimeRouter:
         temperature: float = 0.5,
         switching_penalty: float = 0.25,
         min_dwell_bars: int = 12,
-        flip_cap: int = 4,
+        flip_cap: int = 8,
         entropy_threshold: float = 0.85,
+        prob_smoothing_alpha: float = 0.35,
         wal_path: str = "runtime/regime_journal.wal",
         enable_wal: bool = False,
     ) -> None:
@@ -281,6 +282,7 @@ class SentinelRegimeRouter:
         self.min_dwell_bars = min_dwell_bars
         self.flip_cap = flip_cap
         self.entropy_threshold = entropy_threshold
+        self.prob_smoothing_alpha = prob_smoothing_alpha
 
         # Pre-allocated ring buffer
         self.ring_buffer = RingBufferFeatureExtractor(capacity=1024)
@@ -300,6 +302,7 @@ class SentinelRegimeRouter:
         self.current_dwell_bars: int = 0
         self.high_entropy_consecutive_bars: int = 0
         self.cooldown_remaining_bars: int = 0
+        self._smoothed_probs: Optional[np.ndarray] = None
 
         # Resting depth EWMM state (MICRO-04)
         self.ewmm_depth_bid: float = 0.0
@@ -568,7 +571,15 @@ class SentinelRegimeRouter:
         # Continuous softmax temperature scaling (STAT-01)
         scaled_aff = affinities / self.temperature
         exp_aff = np.exp(scaled_aff - np.max(scaled_aff))
-        probs = exp_aff / np.sum(exp_aff)
+        raw_probs = exp_aff / np.sum(exp_aff)
+
+        # Smooth probabilities via EMA to eliminate micro-whipsaw noise
+        if self._smoothed_probs is None:
+            self._smoothed_probs = raw_probs.copy()
+        else:
+            self._smoothed_probs = (1.0 - self.prob_smoothing_alpha) * self._smoothed_probs + self.prob_smoothing_alpha * raw_probs
+        
+        probs = self._smoothed_probs
 
         prob_dict = {
             REGIME_RUNAWAY_EXPANSION: float(probs[0]),
