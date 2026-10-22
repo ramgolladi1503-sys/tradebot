@@ -54,6 +54,10 @@ from core.option_confidence_scorer import (
     OptionConfidenceScorer,
     ConfidenceEvaluation,
 )
+from core.sentinel_regime_router import (
+    SentinelRegimeRouter,
+    RegimePosteriorState,
+)
 from core.upstox_stream_broadcaster import (
     StreamSubscriber,
     UpstoxLevel5DepthRecord,
@@ -170,6 +174,14 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         # Multi-Factor Option Confidence Scorer
         self.confidence_scorer = OptionConfidenceScorer(min_actionable_score=60)
 
+        # FEAT-SENTINEL-REGIME-ROUTER-001: Upstream Supervisory Regime Router
+        self.regime_routers: dict[str, SentinelRegimeRouter] = {
+            "NIFTY": SentinelRegimeRouter(),
+            "SENSEX": SentinelRegimeRouter(),
+            "BANKNIFTY": SentinelRegimeRouter(),
+        }
+        self.regime_router = self.regime_routers["NIFTY"]
+
         self.alerts_history: list[AdvisoryAlert] = []
         self._lock = threading.Lock()
         self._last_alert_time = 0.0
@@ -189,12 +201,27 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
     def on_tick(self, tick: UpstoxTickRecord) -> None:
         """Handle incoming tick for NIFTY, SENSEX, and BANKNIFTY."""
         token = tick.token
+        idx_key = None
         if "Nifty 50" in token:
-            self._update_spot("NIFTY", tick.ltp, tick.exchange_timestamp_ms)
+            idx_key = "NIFTY"
         elif "SENSEX" in token:
-            self._update_spot("SENSEX", tick.ltp, tick.exchange_timestamp_ms)
+            idx_key = "SENSEX"
         elif "Nifty Bank" in token:
-            self._update_spot("BANKNIFTY", tick.ltp, tick.exchange_timestamp_ms)
+            idx_key = "BANKNIFTY"
+
+        if idx_key is not None:
+            self._update_spot(idx_key, tick.ltp, tick.exchange_timestamp_ms)
+            # Update upstream regime router ring buffer and state
+            router = self.regime_routers.get(idx_key)
+            if router is not None:
+                now_dt = datetime.fromtimestamp(tick.exchange_timestamp_ms / 1000.0) if tick.exchange_timestamp_ms > 0 else datetime.now()
+                router.on_bar_close(
+                    bar_close=tick.ltp,
+                    bar_volume=float(tick.volume),
+                    cvd_delta=0.0,
+                    timestamp_ms=tick.exchange_timestamp_ms,
+                    bar_time=now_dt.time(),
+                )
 
     def on_depth(self, depth: UpstoxLevel5DepthRecord) -> None:
         """Handle incoming Level-5 depth snapshot."""
