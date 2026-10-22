@@ -687,8 +687,9 @@ st.caption(f"Last Evaluated Feed: **{last_bar_time}** | Total Feed Alerts: **{le
 st.markdown("---")
 
 # Main Dashboard Navigation Tabs
-tab_live, tab_portal, tab_regimes = st.tabs([
+tab_live, tab_walls, tab_portal, tab_regimes = st.tabs([
     "🛰️ Real-Time Sidecar Telemetry", 
+    "🧱 Strike Wall Heatmap",
     "📊 Multi-Session Quant Portal",
     "🧭 Microstructure Regime Router"
 ])
@@ -973,6 +974,198 @@ with tab_live:
             <div><strong style="color: #F87171;">7. Quote Uniqueness</strong> <span style="color: #64748B;">(Single unique token)</span></div>
         </div>
         """, unsafe_allow_html=True)
+
+with tab_walls:
+    st.subheader("🧱 Institutional Strike Wall Heatmap & Microstructure Ladder")
+    st.caption("Real-Time Open Interest Concentrations, Net Gamma Walls & Resting Depth Absorption Zones")
+
+    # Safety banner
+    st.markdown("""
+    <div style="background: rgba(30, 41, 59, 0.7); border-left: 4px solid #38BDF8; padding: 10px 14px; border-radius: 6px; margin-bottom: 14px;">
+        <span style="font-size: 13px; color: #E2E8F0;">
+            🛡️ <strong>Read-Only Supervisory Intelligence</strong>: Aggregates strike-level Call/Put Open Interest (OI) and L5 depth absorption. 
+            <code>read_only=True</code> | <code>is_order_action=False</code> | <code>broker_api_called=False</code>
+        </span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    wall_target_idx = "NIFTY" if selected_index in {"All", "NIFTY"} else selected_index
+    wall_file = Path(f"runtime/sentinel_wall_state_{wall_target_idx.lower()}.json")
+
+    wall_state_dict = None
+    if wall_file.exists():
+        try:
+            with open(wall_file, "r", encoding="utf-8") as wf:
+                wall_state_dict = json.load(wf)
+        except Exception:
+            pass
+
+    if not wall_state_dict or not wall_state_dict.get("wall_density_map"):
+        # Synthesize fallback from live_option_book or historical snapshot if available
+        st.info(f"Waiting for live strike wall stream ticks for **{wall_target_idx}**...")
+        # Check if live option book has data to generate a preview
+        if live_option_book:
+            from core.market_structure.sentinel_wall_observer import SentinelWallObserver
+            obs = SentinelWallObserver(underlying_symbol=wall_target_idx)
+            cur_s = live_index_spots.get(wall_target_idx, 25000.0 if wall_target_idx == "NIFTY" else 78000.0)
+            obs.on_spot_tick(spot_price=cur_s)
+            for s_sym, q in live_option_book.items():
+                if match_index(s_sym, wall_target_idx):
+                    obs.on_option_tick(
+                        symbol=s_sym,
+                        ltp=float(q.get("ltp") or 0.0),
+                        volume=0.0,
+                        oi=float(q.get("oi") or 10000.0),
+                        bid_depth=float(q.get("bid") or 0.0) * 10,
+                        ask_depth=float(q.get("ask") or 0.0) * 10,
+                    )
+            synth_state = obs.compute_wall_state()
+            if synth_state.wall_density_map:
+                from dataclasses import asdict
+                wall_state_dict = asdict(synth_state)
+                wall_state_dict["wall_density_map"] = {str(k): v for k, v in wall_state_dict["wall_density_map"].items()}
+
+    if wall_state_dict and wall_state_dict.get("wall_density_map"):
+        # Top KPI cards
+        k1, k2, k3, k4, k5 = st.columns(5)
+        spot_p = wall_state_dict.get("spot_price", 0.0)
+        c_wall = wall_state_dict.get("major_call_wall_strike", 0.0)
+        p_wall = wall_state_dict.get("major_put_wall_strike", 0.0)
+        dist_c = wall_state_dict.get("distance_to_call_wall_pts", 0.0)
+        dist_p = wall_state_dict.get("distance_to_put_wall_pts", 0.0)
+        pcr = wall_state_dict.get("pcr_oi", 0.0)
+
+        with k1:
+            st.metric("Index Spot", f"₹{spot_p:,.2f}" if spot_p else "N/A")
+        with k2:
+            st.metric("🔴 Major Call Wall (Resistance)", f"{c_wall:,.0f}" if c_wall else "N/A", f"{dist_c:+.1f} pts" if dist_c else None)
+        with k3:
+            st.metric("🟢 Major Put Wall (Support)", f"{p_wall:,.0f}" if p_wall else "N/A", f"{-dist_p:+.1f} pts" if dist_p else None)
+        with k4:
+            st.metric("Total PCR (OI)", f"{pcr:.2f}", "Bullish Floor" if pcr >= 1.0 else "Bearish Ceiling")
+        with k5:
+            call_near = abs(c_wall - spot_p) <= 50.0 if (c_wall and spot_p) else False
+            put_near = abs(spot_p - p_wall) <= 50.0 if (p_wall and spot_p) else False
+            prox_label = "⚠️ Near Call Wall" if call_near else ("⚠️ Near Put Wall" if put_near else "✅ Safe Zone")
+            st.metric("Wall Proximity", prox_label)
+
+        # Plotly Strike Ladder Heatmap Chart
+        density_map = wall_state_dict.get("wall_density_map", {})
+        strikes = sorted([float(k) for k in density_map.keys()])
+
+        # Filter strikes around spot (within ± 20 strikes)
+        if spot_p > 0 and len(strikes) > 30:
+            closest_idx = min(range(len(strikes)), key=lambda i: abs(strikes[i] - spot_p))
+            start_i = max(0, closest_idx - 15)
+            end_i = min(len(strikes), closest_idx + 16)
+            strikes = strikes[start_i:end_i]
+
+        call_ois = [density_map[str(s)].get("call_oi", 0.0) for s in strikes]
+        put_ois = [density_map[str(s)].get("put_oi", 0.0) for s in strikes]
+
+        fig_ladder = go.Figure()
+        # Put OI on left or positive green bar
+        fig_ladder.add_trace(go.Bar(
+            y=[str(int(s)) for s in strikes],
+            x=put_ois,
+            name="Put OI (Support / Green)",
+            orientation="h",
+            marker=dict(color="#10B981", line=dict(color="#059669", width=1)),
+            hovertemplate="Strike: %{y}<br>Put OI: %{x:,.0f}<extra></extra>",
+        ))
+        # Call OI as red bar
+        fig_ladder.add_trace(go.Bar(
+            y=[str(int(s)) for s in strikes],
+            x=[-val for val in call_ois],
+            name="Call OI (Resistance / Red)",
+            orientation="h",
+            marker=dict(color="#EF4444", line=dict(color="#DC2626", width=1)),
+            hovertemplate="Strike: %{y}<br>Call OI: %{customdata:,.0f}<extra></extra>",
+            customdata=call_ois,
+        ))
+
+        # Spot horizontal indicator
+        if spot_p > 0:
+            # Find nearest strike string
+            nearest_s = min(strikes, key=lambda s: abs(s - spot_p))
+            fig_ladder.add_hline(
+                y=str(int(nearest_s)),
+                line=dict(color="#06B6D4", width=3, dash="dash"),
+                annotation_text=f"Spot Price: ₹{spot_p:,.2f}",
+                annotation_position="top right",
+                annotation_font=dict(color="#06B6D4", size=12, family="monospace"),
+            )
+
+        fig_ladder.update_layout(
+            barmode="overlay",
+            title=f"🧱 {wall_target_idx} Strike-Level Order Book Wall Ladder (Put vs Call OI)",
+            template="plotly_dark",
+            paper_bgcolor="rgba(13, 17, 25, 0.95)",
+            plot_bgcolor="rgba(13, 17, 25, 0.95)",
+            font=dict(color="#E2E8F0"),
+            height=580,
+            xaxis=dict(
+                title="Open Interest (← Call OI | Put OI →)",
+                gridcolor="rgba(255, 255, 255, 0.08)",
+                zerolinecolor="#38BDF8",
+                zerolinewidth=2,
+            ),
+            yaxis=dict(
+                title="Strike Price",
+                autorange="reversed",
+                gridcolor="rgba(255, 255, 255, 0.08)",
+            ),
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="center",
+                x=0.5,
+            ),
+            margin=dict(l=40, r=40, t=50, b=40),
+        )
+        st.plotly_chart(fig_ladder, use_container_width=True)
+
+        # Tabular Strike Wall Profile
+        st.markdown("### 📋 Strike-by-Strike Wall Profile & Absorption Ledger")
+        ladder_rows = []
+        for s in strikes:
+            prof = density_map[str(s)]
+            is_maj_c = prof.get("is_major_call_wall", False)
+            is_maj_p = prof.get("is_major_put_wall", False)
+            is_sec_c = prof.get("is_secondary_call_wall", False)
+            is_sec_p = prof.get("is_secondary_put_wall", False)
+
+            tag = "🔴 MAJOR CALL WALL" if is_maj_c else (
+                "🟢 MAJOR PUT WALL" if is_maj_p else (
+                    "🔸 Secondary Call Wall" if is_sec_c else (
+                        "🔹 Secondary Put Wall" if is_sec_p else "—"
+                    )
+                )
+            )
+            ladder_rows.append({
+                "Strike": int(s),
+                "Classification": tag,
+                "Call OI": prof.get("call_oi", 0.0),
+                "Put OI": prof.get("put_oi", 0.0),
+                "Net Imbalance (PE - CE)": prof.get("net_oi_imbalance", 0.0),
+                "Call Depth (B/A)": f"{prof.get('call_bid_depth', 0.0):.0f} / {prof.get('call_ask_depth', 0.0):.0f}",
+                "Put Depth (B/A)": f"{prof.get('put_bid_depth', 0.0):.0f} / {prof.get('put_ask_depth', 0.0):.0f}",
+            })
+        st.dataframe(
+            pd.DataFrame(ladder_rows),
+            use_container_width=True,
+            height=300,
+            column_config={
+                "Strike": st.column_config.NumberColumn("Strike", format="%d"),
+                "Classification": st.column_config.TextColumn("Wall Status", width="medium"),
+                "Call OI": st.column_config.NumberColumn("Call OI", format="%d"),
+                "Put OI": st.column_config.NumberColumn("Put OI", format="%d"),
+                "Net Imbalance (PE - CE)": st.column_config.NumberColumn("Net OI Imbalance", format="%+d"),
+            }
+        )
+    else:
+        st.info(f"No active wall state snapshot found for {wall_target_idx}. Ensure streaming advisor is active.")
 
 with tab_portal:
     st.subheader("📊 Multi-Session Quant Analytics & Execution Research Portal")

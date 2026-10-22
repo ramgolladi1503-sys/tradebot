@@ -58,6 +58,10 @@ from core.sentinel_regime_router import (
     SentinelRegimeRouter,
     RegimePosteriorState,
 )
+from core.market_structure.sentinel_wall_observer import (
+    SentinelWallObserver,
+    SentinelWallState,
+)
 from core.upstox_stream_broadcaster import (
     StreamSubscriber,
     UpstoxLevel5DepthRecord,
@@ -182,9 +186,18 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         }
         self.regime_router = self.regime_routers["NIFTY"]
 
+        # FEAT-SENTINEL-WALL-OBSERVER-001: In-Memory Strike Wall Observers per index
+        self.wall_observers: dict[str, SentinelWallObserver] = {
+            "NIFTY": SentinelWallObserver(underlying_symbol="NIFTY"),
+            "SENSEX": SentinelWallObserver(underlying_symbol="SENSEX"),
+            "BANKNIFTY": SentinelWallObserver(underlying_symbol="BANKNIFTY"),
+        }
+        self.wall_observer = self.wall_observers["NIFTY"]
+
         self.alerts_history: list[AdvisoryAlert] = []
         self._lock = threading.Lock()
         self._last_alert_time = 0.0
+        self._last_wall_persist_time = 0.0
         self.session_gear = "GEAR_1_RANGE"  # "GEAR_1_RANGE" or "GEAR_2_TREND"
 
         # Non-negotiable Trading Safety Invariants
@@ -282,6 +295,9 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
     def _update_spot(self, index_name: str, spot: float, ts_ms: int) -> None:
         if spot <= 0:
             return
+        wall_obs = self.wall_observers.get(index_name)
+        if wall_obs is not None:
+            wall_obs.on_spot_tick(spot_price=spot, timestamp_ms=ts_ms)
         with self._lock:
             self.spots[index_name] = spot
             self.spots_ts_ms[index_name] = ts_ms
@@ -334,6 +350,29 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             sl_pts = 12.0
             eff_atr_15m = 12.0
             eff_atr_60m = 16.0
+
+        # Feed option depth tick to SentinelWallObserver
+        wall_obs = self.wall_observers.get(index_name)
+        if wall_obs is not None:
+            bid_d = float(depth.bid_q1 + depth.bid_q2 + depth.bid_q3 + depth.bid_q4 + depth.bid_q5)
+            ask_d = float(depth.ask_q1 + depth.ask_q2 + depth.ask_q3 + depth.ask_q4 + depth.ask_q5)
+            wall_obs.on_option_tick(
+                symbol=depth.symbol,
+                ltp=depth.ltp or depth.bid_p1,
+                volume=float(depth.volume),
+                oi=float(depth.open_interest),
+                bid_depth=bid_d,
+                ask_depth=ask_d,
+                timestamp_ms=depth.exchange_timestamp_ms,
+            )
+            # Throttle wall state snapshot persistence to disk (e.g. once every 2 seconds)
+            if now_ts - self._last_wall_persist_time >= 2.0:
+                self._last_wall_persist_time = now_ts
+                try:
+                    fn = f"runtime/sentinel_wall_state_{index_name.lower()}.json"
+                    wall_obs.persist_state_atomic(fn)
+                except Exception:
+                    pass
 
         with self._lock:
             spot = self.spots.get(index_name, 0.0)
