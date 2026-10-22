@@ -687,7 +687,11 @@ st.caption(f"Last Evaluated Feed: **{last_bar_time}** | Total Feed Alerts: **{le
 st.markdown("---")
 
 # Main Dashboard Navigation Tabs
-tab_live, tab_portal = st.tabs(["🛰️ Real-Time Sidecar Telemetry", "📊 Multi-Session Quant Portal"])
+tab_live, tab_portal, tab_regimes = st.tabs([
+    "🛰️ Real-Time Sidecar Telemetry", 
+    "📊 Multi-Session Quant Portal",
+    "🧭 Microstructure Regime Router"
+])
 
 with tab_live:
     # Main Content Layout
@@ -1275,4 +1279,157 @@ with tab_portal:
                 with st.expander(f"View {len(issues)} Audit Telemetry Issues / Gaps", expanded=False):
                     for iss in issues:
                         st.markdown(f"- **[{iss.get('severity')}] {iss.get('date_str')}**: {iss.get('description')}")
+
+with tab_regimes:
+    st.markdown("## 🧭 Sentinel Microstructure Supervisory Regime Router")
+    st.markdown("""
+    **Institutional Microstructure Oracle & Supervisory Traffic Controller**  
+    Continuously projects market state onto the 4-simplex $\\Delta^4 = [P_{Trend}, P_{Chop}, P_{Reversal}, P_{Compression}]$ with normalized Shannon entropy $\\tilde{\\mathcal{H}}$.
+    """)
+
+    # Top KPI Metrics row
+    r_col1, r_col2, r_col3, r_col4, r_col5 = st.columns(5)
+    with r_col1:
+        st.metric("Regime Kernel", "4-Simplex Softmax")
+    with r_col2:
+        st.metric("Entropy Ceiling", "0.85 (Lockout)")
+    with r_col3:
+        st.metric("Min Dwell Time", "12 Bars (Hysteresis)")
+    with r_col4:
+        st.metric("Flip Cap", "≤ 4 / Session")
+    with r_col5:
+        st.metric("Safety Mode", "READ-ONLY SUPERVISORY")
+
+    st.markdown("---")
+
+    # Load multi-session simulation report if available
+    sim_report_path = Path("reports/research/sentinel_regime_simulation_latest.json")
+    if sim_report_path.exists():
+        with open(sim_report_path) as f:
+            sim_data = json.load(f)
+
+        sessions_list = sim_data.get("sessions", [])
+        if sessions_list:
+            session_dates = [s["date"] for s in sessions_list]
+            selected_sim_date = st.selectbox("📅 Select Historical Capture Session for Regime Replay:", session_dates, index=len(session_dates)-1)
+            
+            selected_session = next(s for s in sessions_list if s["date"] == selected_sim_date)
+            
+            sc1, sc2, sc3, sc4 = st.columns(4)
+            with sc1:
+                st.metric("Day Price Range", f"{selected_session['day_range']:.1f} pts")
+            with sc2:
+                dom_color = "🟢" if "EXPANSION" in selected_session['dominant_session_regime'] else "🟠"
+                st.metric("Dominant Regime", f"{dom_color} {selected_session['dominant_session_regime']}")
+            with sc3:
+                st.metric("ORB Green Bars", f"{selected_session['orb_green_bars']} / {selected_session['total_bars']}")
+            with sc4:
+                st.metric("Capital Defense Bars", f"{selected_session['capital_defense_bars']} / {selected_session['total_bars']}")
+
+            # Regime timeline & probabilities chart
+            timeline_rows = selected_session.get("timeline", [])
+            if timeline_rows:
+                t_df = pd.DataFrame(timeline_rows)
+                
+                # Plotly Chart: Price vs Probabilities
+                fig_regime = go.Figure()
+                
+                # Primary axis: Spot Price
+                fig_regime.add_trace(go.Scatter(
+                    x=t_df["timestamp"],
+                    y=t_df["price"],
+                    mode="lines",
+                    name="NIFTY Spot Price",
+                    line=dict(color="#00FFA3", width=2),
+                    yaxis="y1"
+                ))
+
+                # Secondary axis: Expansion vs Chop Probabilities
+                p_exp = [r.get("probabilities", {}).get("RUNAWAY_EXPANSION", 0.0) for r in timeline_rows]
+                p_chop = [r.get("probabilities", {}).get("ROTATIONAL_CHOP", 0.0) for r in timeline_rows]
+                entropy_vals = [r.get("entropy", 0.0) for r in timeline_rows]
+
+                fig_regime.add_trace(go.Scatter(
+                    x=t_df["timestamp"],
+                    y=p_exp,
+                    mode="lines",
+                    name="P(Runaway Trend)",
+                    line=dict(color="#3B82F6", width=1.5, dash="dot"),
+                    yaxis="y2"
+                ))
+                fig_regime.add_trace(go.Scatter(
+                    x=t_df["timestamp"],
+                    y=p_chop,
+                    mode="lines",
+                    name="P(Rotational Chop)",
+                    line=dict(color="#F59E0B", width=1.5, dash="dot"),
+                    yaxis="y2"
+                ))
+                fig_regime.add_trace(go.Scatter(
+                    x=t_df["timestamp"],
+                    y=entropy_vals,
+                    mode="lines",
+                    name="Shannon Entropy (H)",
+                    line=dict(color="#EF4444", width=1.0),
+                    yaxis="y2"
+                ))
+
+                fig_regime.update_layout(
+                    title=f"Intraday NIFTY Price Action & Regime Probability Simplex ({selected_sim_date})",
+                    paper_bgcolor="rgba(13, 17, 25, 0.95)",
+                    plot_bgcolor="rgba(20, 26, 38, 0.6)",
+                    font=dict(color="#E2E8F0"),
+                    xaxis=dict(gridcolor="rgba(255, 255, 255, 0.05)"),
+                    yaxis=dict(
+                        title="Spot Price (₹)",
+                        titlefont=dict(color="#00FFA3"),
+                        tickfont=dict(color="#00FFA3"),
+                        gridcolor="rgba(255, 255, 255, 0.05)"
+                    ),
+                    yaxis2=dict(
+                        title="Simplex Probability & Entropy",
+                        titlefont=dict(color="#3B82F6"),
+                        tickfont=dict(color="#3B82F6"),
+                        overlaying="y",
+                        side="right",
+                        range=[0.0, 1.1],
+                        gridcolor="rgba(255, 255, 255, 0.02)"
+                    ),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                    height=450,
+                    margin=dict(l=40, r=40, t=60, b=40)
+                )
+                st.plotly_chart(fig_regime, use_container_width=True)
+
+                # Regime breakdown & dwell distribution
+                st.markdown("### 📊 Session Dwell Time & Strategy Routing Ledger")
+                c_tbl, c_pie = st.columns([2, 1])
+
+                with c_tbl:
+                    dwells = selected_session.get("regime_dwell_counts", {})
+                    dwell_df = pd.DataFrame([
+                        {"Regime State": k, "Bar Count": v, "Session Share": f"{(v / selected_session['total_bars'] * 100):.1f}%"}
+                        for k, v in dwells.items() if v > 0
+                    ])
+                    st.dataframe(dwell_df, use_container_width=True, hide_index=True)
+
+                with c_pie:
+                    fig_pie = go.Figure(data=[go.Pie(
+                        labels=list(dwells.keys()),
+                        values=list(dwells.values()),
+                        hole=0.45,
+                        marker=dict(colors=["#3B82F6", "#F59E0B", "#10B981", "#8B5CF6", "#6B7280", "#EF4444"])
+                    )])
+                    fig_pie.update_layout(
+                        title="Regime Dwell Distribution",
+                        paper_bgcolor="rgba(13, 17, 25, 0.95)",
+                        font=dict(color="#E2E8F0"),
+                        height=280,
+                        margin=dict(l=20, r=20, t=40, b=20),
+                        showlegend=False
+                    )
+                    st.plotly_chart(fig_pie, use_container_width=True)
+    else:
+        st.info("Run `python core/analytics/sentinel_multi_session_simulator.py` to generate the multi-session simulation report.")
+
 
