@@ -38,6 +38,11 @@ from core.active_position_manager import (
 )
 from core.expiry_calendar_resolver import ExpiryCalendarResolver
 from core.liquidity_sweep_engine import LiquiditySweepEngine
+from core.intraday_reversal_engine import (
+    IntradayReversalEngine,
+    ReversalDirection,
+    ReversalSetupType,
+)
 from core.sentinel_inmem_adapter import InMemorySentinelAdapter
 from core.structural_alpha_gates import (
     CrossIndexMacroGate,
@@ -147,6 +152,14 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         self.expiry_resolver = ExpiryCalendarResolver()
         self.sweep_engine = LiquiditySweepEngine()
         self.expiry_info = self.expiry_resolver.classify_session(datetime.now().date())
+
+        # FEAT-SENTINEL-INTRADAY-REVERSAL-001: Decoupled Intraday Reversal Engines per index
+        self.reversal_engines: dict[str, IntradayReversalEngine] = {
+            "NIFTY": IntradayReversalEngine(index_name="NIFTY"),
+            "SENSEX": IntradayReversalEngine(index_name="SENSEX"),
+            "BANKNIFTY": IntradayReversalEngine(index_name="BANKNIFTY"),
+        }
+        self.reversal_engine = self.reversal_engines["NIFTY"]
         # Previous Day Reference Levels (PDH / PDL / PDC)
         self.prior_day_levels: dict[str, dict[str, float]] = {
             "NIFTY": {"pdh": 23149.80, "pdl": 22913.80, "pdc": 23146.20},
@@ -377,8 +390,28 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             sl_pts = sweep_sig.sl_pts
 
         # -------------------------------------------------------------
+        # Mode 1.5: FEAT-SENTINEL-INTRADAY-REVERSAL-001 - Intraday Reversal Engine
+        # Evaluates FAH (Failure-at-High) and FAL (Failure-at-Low) extreme snapbacks to VWAP
+        # -------------------------------------------------------------
+        elif (rev_engine := self.reversal_engines.get(index_name)) is not None and (
+            rev_sig := rev_engine.evaluate_bar(
+                bar_open=spot,
+                bar_high=spot,
+                bar_low=spot,
+                bar_close=spot,
+                volume=10000,
+                timestamp_ms=depth.exchange_timestamp_ms,
+            )
+        ) is not None:
+            trigger_active = True
+            required_option_type = rev_sig.direction.value
+            setup_reason = f"[{rev_sig.setup_type.value}] {rev_sig.setup_reason}"
+            target_pts = rev_sig.reward_pts
+            sl_pts = rev_sig.risk_pts
+
+        # -------------------------------------------------------------
         # Mode 2: Existing Opening Range Breakout (ORB) Engine
-        # Evaluates clean trend expansion when no sweep trap is active
+        # Evaluates clean trend expansion when no sweep or reversal trap is active
         # -------------------------------------------------------------
         elif or_high > -math.inf and spot > or_high:
             trigger_active = True
