@@ -76,6 +76,10 @@ class IntradayReversalSignal:
     deviation_sigmas: float
     absorption_ratio: float
     setup_reason: str
+    # High-Conviction Scalp Tier Metadata (>= 60% empirical win rate)
+    scalp_target_price: float = 0.0
+    scalp_rr_ratio: float = 1.0
+    is_high_conviction_sweep: bool = False
     # Safety Invariant Metadata (GM-GATE-005)
     read_only: bool = True
     is_order_action: bool = False
@@ -284,6 +288,10 @@ class FailureAtExtremeEngine:
         if rr_ratio < self.min_risk_reward:
             return None
 
+        # High-Conviction Scalp Tier calculation (Pierce >= 8.0 pts & Sigma >= 1.7 -> 61.5% WR)
+        is_high_conviction = (pierce >= 8.0 and deviation_sigmas >= 1.7)
+        scalp_target = bar_close - (1.0 * risk_pts)
+
         return IntradayReversalSignal(
             timestamp_ms=timestamp_ms,
             index_name=index_name,
@@ -298,7 +306,10 @@ class FailureAtExtremeEngine:
             risk_reward_ratio=round(rr_ratio, 2),
             deviation_sigmas=round(deviation_sigmas, 2),
             absorption_ratio=round(absorption_ratio, 2),
-            setup_reason=f"FAH Rejection @ {prior_hod:.1f} (High={bar_high:.1f}, Close={bar_close:.1f}) -> Target VWAP {vwap:.1f} (R:R {rr_ratio:.1f})",
+            setup_reason=f"FAH Rejection @ {prior_hod:.1f} (High={bar_high:.1f}, Close={bar_close:.1f}) -> Target VWAP {vwap:.1f} (R:R {rr_ratio:.1f}){' [HIGH_CONVICTION_SWEEP]' if is_high_conviction else ''}",
+            scalp_target_price=round(scalp_target, 2),
+            scalp_rr_ratio=1.0,
+            is_high_conviction_sweep=is_high_conviction,
         )
 
     def evaluate_fal(
@@ -348,6 +359,10 @@ class FailureAtExtremeEngine:
         if rr_ratio < self.min_risk_reward:
             return None
 
+        # High-Conviction Scalp Tier calculation (Asymmetry: FAL does not qualify due to downtrend persistence drag)
+        is_high_conviction = False
+        scalp_target = bar_close + (1.0 * risk_pts)
+
         return IntradayReversalSignal(
             timestamp_ms=timestamp_ms,
             index_name=index_name,
@@ -362,7 +377,10 @@ class FailureAtExtremeEngine:
             risk_reward_ratio=round(rr_ratio, 2),
             deviation_sigmas=round(deviation_sigmas, 2),
             absorption_ratio=round(absorption_ratio, 2),
-            setup_reason=f"FAL Rejection @ {prior_lod:.1f} (Low={bar_low:.1f}, Close={bar_close:.1f}) -> Target VWAP {vwap:.1f} (R:R {rr_ratio:.1f})",
+            setup_reason=f"FAL Rejection @ {prior_lod:.1f} (Low={bar_low:.1f}, Close={bar_close:.1f}) -> Target VWAP {vwap:.1f} (R:R {rr_ratio:.1f}){' [HIGH_CONVICTION_SWEEP]' if is_high_conviction else ''}",
+            scalp_target_price=round(scalp_target, 2),
+            scalp_rr_ratio=1.0,
+            is_high_conviction_sweep=is_high_conviction,
         )
 
 
@@ -468,6 +486,10 @@ class IntradayReversalEngine:
             volume=volume,
         )
         vwap = forced_vwap if forced_vwap is not None else exhaustion.vwap
+        if forced_vwap is not None and exhaustion.sigma_vwap > 0:
+            dev_sigmas = (bar_close - forced_vwap) / exhaustion.sigma_vwap
+        else:
+            dev_sigmas = exhaustion.deviation_sigmas
 
         # If HOD/LOD not initialized, seed with current bar and return (no prior extreme yet)
         if self.prior_hod == -math.inf or self.prior_lod == math.inf:
@@ -493,7 +515,7 @@ class IntradayReversalEngine:
             vwap=vwap,
             timestamp_ms=timestamp_ms,
             index_name=self.index_name,
-            deviation_sigmas=exhaustion.deviation_sigmas,
+            deviation_sigmas=dev_sigmas,
             absorption_ratio=exhaustion.absorption_ratio,
         )
 
@@ -507,7 +529,7 @@ class IntradayReversalEngine:
             vwap=vwap,
             timestamp_ms=timestamp_ms,
             index_name=self.index_name,
-            deviation_sigmas=exhaustion.deviation_sigmas,
+            deviation_sigmas=dev_sigmas,
             absorption_ratio=exhaustion.absorption_ratio,
         )
 

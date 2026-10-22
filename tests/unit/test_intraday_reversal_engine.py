@@ -307,3 +307,41 @@ class TestIntradayReversalEngineQA:
         )
         # Should be suppressed because pierce > delta_max
         assert sig is None
+
+    def test_08_high_conviction_sweep_scalp_tier(self):
+        """Test 8: Verify High-Conviction Sweep detection (Pierce >= 8.0 & Sigma >= 1.7)
+        and 1.0R scalp target calculation.
+        """
+        engine = IntradayReversalEngine(index_name="NIFTY")
+        engine.seed_prior_extremes(hod=22700.0, lod=22500.0)
+
+        # Build VWAP history with deviation >= 1.7 sigma
+        # Feed 10 bars around 22700
+        for i in range(10):
+            engine.exhaustion_gate.update_bar(
+                high=22700.0, low=22690.0, close=22695.0, volume=10000.0
+            )
+
+        # Bar pierces HOD 22700 by 10.0 pts (High=22710.0), rejects and closes at 22695.0
+        # forced_vwap 22550 gives deviation > 1.7 sigma
+        sig = engine.evaluate_bar(
+            bar_open=22700.0,
+            bar_high=22710.0,  # 10 pt pierce >= 8.0 pt threshold
+            bar_low=22692.0,
+            bar_close=22695.0,
+            volume=50000,
+            timestamp_ms=2000000,
+            forced_vwap=22550.0,
+        )
+
+        assert sig is not None
+        assert sig.setup_type == ReversalSetupType.FAH
+        assert sig.direction == ReversalDirection.PE
+        assert sig.is_high_conviction_sweep is True
+        # Risk = Stop (22710 + 3 = 22713) - Close (22695) = 18.0 pts
+        assert sig.risk_pts == 18.0
+        # Scalp Target @ 1.0R = 22695 - 18.0 = 22677.0
+        assert sig.scalp_target_price == 22677.0
+        assert sig.scalp_rr_ratio == 1.0
+        assert "[HIGH_CONVICTION_SWEEP]" in sig.setup_reason
+
