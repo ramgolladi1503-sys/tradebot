@@ -11770,6 +11770,9 @@ def _start_depth_ws_impl(
         silent_force_full_restart_sec = float(getattr(cfg, "FEED_SILENT_FORCE_FULL_RESTART_SEC", 12.0))
         no_ticks_sec = float(getattr(cfg, "FEED_NO_TICKS_RECONNECT_SEC", 60.0))
         no_ticks_base_backoff = float(getattr(cfg, "FEED_NO_TICKS_RECONNECT_BACKOFF_SEC", 15.0))
+        option_missing_startup_grace_sec = float(
+            getattr(cfg, "FEED_OPTION_SUBSCRIPTION_MISSING_GRACE_SEC", 30.0)
+        )
         last_soft = 0.0
         last_warmup_log = 0.0
         no_tick_strikes = 0
@@ -12100,7 +12103,11 @@ def _start_depth_ws_impl(
                 refresh_payload
             )
             if expected_option_tokens > 0 and subscribed_option_tokens <= 0:
-                if (now_loop - float(last_option_subscribe_retry)) >= max(1.0, soft_cooldown):
+                elapsed_since_start = max(0.0, now_loop - float(_DEPTH_WS_START_EPOCH or 0.0))
+                restart_block = _restart_verification_restart_block()
+                verify_pending = restart_block is not None and str(restart_block.get("verification_state") or "").upper() == "PENDING"
+                startup_grace_active = (elapsed_since_start < option_missing_startup_grace_sec) or verify_pending
+                if not startup_grace_active and (now_loop - float(last_option_subscribe_retry)) >= max(1.0, soft_cooldown):
                     last_option_subscribe_retry = now_loop
                     _log_ws(
                         "FEED_OPTION_SUBSCRIPTIONS_MISSING",
@@ -12108,6 +12115,7 @@ def _start_depth_ws_impl(
                             "expected_option_tokens": int(expected_option_tokens),
                             "subscribed_option_tokens": int(subscribed_option_tokens),
                             "subscribed_tokens_count_by_symbol": _subscribed_tokens_count_by_symbol(_LAST_TOKENS),
+                            "elapsed_since_start_sec": elapsed_since_start,
                             "reason": "market_open_option_subscriptions_missing",
                         },
                         throttle_key="FEED_OPTION_SUBSCRIPTIONS_MISSING",
@@ -12218,17 +12226,20 @@ def _start_depth_ws_impl(
                     if time.time() - last_soft >= backoff:
                         last_soft = time.time()
                         try:
-                            resubscribe_result = _resubscribe_full(kws, reason=f"soft_reset:strikes={depth_stale_strikes}")
-                            if resubscribe_result.get("success") is True:
-                                if resubscribe_result.get("changed") is True:
-                                    _advance_completed_transition(
-                                        "SUBSCRIPTION_REBUILD_COMPLETED",
-                                        f"watchdog:{socket_generation}:{resubscribe_result.get('new_tokens')}",
-                                        {"socket_generation": int(socket_generation), "reason": "watchdog_soft_reset"},
-                                    )
-                                _log_ws("FEED_SOFT_RESET_OK", {"tokens": len(tokens), "backoff_sec": backoff})
+                            if _ws_connected_state() is True:
+                                resubscribe_result = _resubscribe_full(kws, reason=f"soft_reset:strikes={depth_stale_strikes}")
+                                if resubscribe_result.get("success") is True:
+                                    if resubscribe_result.get("changed") is True:
+                                        _advance_completed_transition(
+                                            "SUBSCRIPTION_REBUILD_COMPLETED",
+                                            f"watchdog:{socket_generation}:{resubscribe_result.get('new_tokens')}",
+                                            {"socket_generation": int(socket_generation), "reason": "watchdog_soft_reset"},
+                                        )
+                                    _log_ws("FEED_SOFT_RESET_OK", {"tokens": len(tokens), "backoff_sec": backoff})
+                                else:
+                                    _log_ws("FEED_SOFT_RESET_ERROR", {"reason": resubscribe_result.get("reason")})
                             else:
-                                _log_ws("FEED_SOFT_RESET_ERROR", {"reason": resubscribe_result.get("reason")})
+                                _log_ws("FEED_SOFT_RESET_SKIPPED", {"reason": "ws_not_connected", "strikes": depth_stale_strikes})
                         except Exception as exc:
                             _log_ws("FEED_SOFT_RESET_ERROR", {"error": str(exc), "backoff_sec": backoff})
 
