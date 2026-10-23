@@ -4690,13 +4690,36 @@ def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_token
                 all_applied = False
 
         if to_unsubscribe:
+            unsub_state = {"queued": False}
+
             def on_unsub_applied():
                 global _LAST_TOKENS
                 _LAST_TOKENS = list(sorted(set(_LAST_TOKENS or []) - set(to_unsubscribe)))
                 _PENDING_UNSUBSCRIBE_TOKENS.difference_update(to_unsubscribe)
                 _log_ws("FEED_MUTATION_APPLIED", {"action": "unsubscribe", "count": len(to_unsubscribe), "reason": reason})
+                # If unsubscription was queued asynchronously to the Twisted reactor thread,
+                # commit the option ownership update once the mutation has been applied.
+                if unsub_state.get("queued") and not _PENDING_SUBSCRIBE_TOKENS and not _PENDING_UNSUBSCRIBE_TOKENS:
+                    if _commit_applied_option_ownership(
+                        socket_generation=generation,
+                        desired_revision=desired_snapshot.revision,
+                        base_snapshot=base_snapshot,
+                        invalidated_revision=invalidated.revision,
+                        confirmed_tokens=_LAST_TOKENS,
+                        subscribe_tokens=to_subscribe,
+                        unsubscribe_tokens=to_unsubscribe,
+                        provenance=f"subscription_delta_async:{reason}",
+                    ):
+                        _record_completed_subscription_delta(
+                            old_tokens=old_tokens,
+                            new_tokens=sorted({int(token) for token in (_LAST_TOKENS or []) if int(token) > 0}),
+                            reason=reason,
+                            socket_generation=int(_SOCKET_GENERATION),
+                        )
+                        _log_ws("FEED_OPTION_OWNERSHIP_ASYNC_COMMITTED", {"reason": reason, "tokens": len(_LAST_TOKENS or [])})
 
             res_unsub = safe_unsubscribe(ws, to_unsubscribe, reason, now_epoch, on_applied_callback=on_unsub_applied)
+            unsub_state["queued"] = bool(res_unsub.queued)
             if res_unsub.queued:
                 _PENDING_UNSUBSCRIBE_TOKENS.update(to_unsubscribe)
                 _log_ws("FEED_MUTATION_QUEUED", {"action": "unsubscribe", "count": len(to_unsubscribe), "reason": reason})
