@@ -31,21 +31,24 @@ from typing import Dict, List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 # Standard Indian weekly/monthly regex:
-# e.g. NIFTY26OCT25000CE, BANKNIFTY24DEC50000PE, NIFTY24O2425000CE, SENSEX24N1578000PE
-_KNOWN_INDICES = r"(?:NIFTY|BANKNIFTY|FINNIFTY|MIDCPNIFTY|SENSEX|BANKEX|[A-Z]+?)"
+# Pattern 1: Spaced format e.g. "SENSEX 72700 CE 29 OCT 26", "NIFTY 22250 PE 27 OCT 26", "NIFTY 25000 CE"
+_SYMBOL_PATTERN_SPACED = re.compile(
+    r"^(NIFTY|BANKNIFTY|FINNIFTY|MIDCPNIFTY|SENSEX|BANKEX)\s+(\d+(?:\.\d+)?)\s+(CE|PE)(?:\s+.*)?$",
+    re.IGNORECASE,
+)
+# Pattern 2: Dense format e.g. "NIFTY26OCT25000CE", "BANKNIFTY24DEC50000PE", "NIFTY24O2425000CE"
 _SYMBOL_PATTERN_EXPIRY = re.compile(
-    rf"^({_KNOWN_INDICES})(?:\d{{2}}[A-Z]{{3}}|\d{{2}}[0-9OND][0-9]{{2}})[-_ ]*(\d+(?:\.\d+)?)[-_ ]*(CE|PE)$",
+    r"^(NIFTY|BANKNIFTY|FINNIFTY|MIDCPNIFTY|SENSEX|BANKEX)(?:\d{2}[A-Z]{3}|\d{2}[0-9OND][0-9]{2})[-_ ]*(\d+(?:\.\d+)?)[-_ ]*(CE|PE)$",
     re.IGNORECASE,
 )
-# Fallback pattern for symbols without standard 5-char expiry or with custom delimiters:
-# e.g. NIFTY-25000-CE, NIFTY_25000_PE, NIFTY 25000 CE, NIFTY25000CE
+# Pattern 3: Simple dash/underscore format: "NIFTY-25000-CE", "NIFTY_25000_PE", "NIFTY25000CE"
 _SYMBOL_PATTERN_SIMPLE = re.compile(
-    rf"^({_KNOWN_INDICES})[-_ ]*(\d+(?:\.\d+)?)[-_ ]*(CE|PE)$",
+    r"^(NIFTY|BANKNIFTY|FINNIFTY|MIDCPNIFTY|SENSEX|BANKEX)[-_ ]*(\d+(?:\.\d+)?)[-_ ]*(CE|PE)$",
     re.IGNORECASE,
 )
-# Generalized fallback matching any arbitrary date prefix before strike
+# Pattern 4: Generalized fallback matching any arbitrary date prefix before strike
 _SYMBOL_PATTERN_GENERAL = re.compile(
-    rf"^({_KNOWN_INDICES})\d{{2}}[A-Z0-9]{{3,5}}[-_ ]*(\d{{4,6}}(?:\.\d+)?)[-_ ]*(CE|PE)$",
+    r"^(NIFTY|BANKNIFTY|FINNIFTY|MIDCPNIFTY|SENSEX|BANKEX)\d{2}[A-Z0-9]{3,5}[-_ ]*(\d{4,6}(?:\.\d+)?)[-_ ]*(CE|PE)$",
     re.IGNORECASE,
 )
 
@@ -68,15 +71,15 @@ def parse_option_symbol(symbol: str) -> Optional[Tuple[str, float, str]]:
         return cached
 
     result: Optional[Tuple[str, float, str]] = None
-    m = _SYMBOL_PATTERN_EXPIRY.match(clean_sym)
+    m = _SYMBOL_PATTERN_SPACED.match(clean_sym)
     if m:
-        underlying, strike_str, opt_type = m.groups()
+        underlying, strike_str, opt_type = m.groups()[:3]
         try:
             result = (underlying.upper(), float(strike_str), opt_type.upper())
         except ValueError:
             result = None
     else:
-        m = _SYMBOL_PATTERN_SIMPLE.match(clean_sym)
+        m = _SYMBOL_PATTERN_EXPIRY.match(clean_sym)
         if m:
             underlying, strike_str, opt_type = m.groups()
             try:
@@ -84,13 +87,21 @@ def parse_option_symbol(symbol: str) -> Optional[Tuple[str, float, str]]:
             except ValueError:
                 result = None
         else:
-            m = _SYMBOL_PATTERN_GENERAL.match(clean_sym)
+            m = _SYMBOL_PATTERN_SIMPLE.match(clean_sym)
             if m:
                 underlying, strike_str, opt_type = m.groups()
                 try:
                     result = (underlying.upper(), float(strike_str), opt_type.upper())
                 except ValueError:
                     result = None
+            else:
+                m = _SYMBOL_PATTERN_GENERAL.match(clean_sym)
+                if m:
+                    underlying, strike_str, opt_type = m.groups()
+                    try:
+                        result = (underlying.upper(), float(strike_str), opt_type.upper())
+                    except ValueError:
+                        result = None
 
     _SYMBOL_CACHE[clean_sym] = result
     return result
