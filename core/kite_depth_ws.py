@@ -12102,7 +12102,14 @@ def _start_depth_ws_impl(
             stale_option_mutation_guard_blocked, stale_option_mutation_guard_payload = _stale_option_mutation_guard_blocked(
                 refresh_payload
             )
-            if expected_option_tokens > 0 and subscribed_option_tokens <= 0:
+            # Check if active confirmed tokens contain non-underlying (option) tokens and ticks are active.
+            # During transient ATM shift / rebalance windows, ownership state might momentarily invalidate,
+            # but if active subscriptions have option tokens and ticks are arriving, the socket is NOT missing subscriptions.
+            active_has_options = bool([t for t in (_LAST_TOKENS or []) if not _is_underlying_token(t)])
+            recent_tick_flow = (_LAST_WS_TICK_EPOCH > 0.0) and ((now_loop - float(_LAST_WS_TICK_EPOCH)) <= float(getattr(cfg, "MAX_LTP_AGE_SEC", 8.0)))
+            transient_rebalance_active = active_has_options and recent_tick_flow and (_ws_connected_state() is True)
+
+            if expected_option_tokens > 0 and subscribed_option_tokens <= 0 and not transient_rebalance_active:
                 elapsed_since_start = max(0.0, now_loop - float(_DEPTH_WS_START_EPOCH or 0.0))
                 restart_block = _restart_verification_restart_block()
                 verify_pending = restart_block is not None and str(restart_block.get("verification_state") or "").upper() == "PENDING"
