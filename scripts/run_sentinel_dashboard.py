@@ -1091,13 +1091,14 @@ with tab_walls:
         ))
 
         # Spot horizontal indicator
-        if spot_p > 0:
-            # Find nearest strike string
+        if spot_p > 0 and strikes:
+            # Find index position of nearest strike on categorical y-axis
             nearest_s = min(strikes, key=lambda s: abs(s - spot_p))
+            nearest_idx = strikes.index(nearest_s)
             fig_ladder.add_hline(
-                y=str(int(nearest_s)),
+                y=nearest_idx,
                 line=dict(color="#06B6D4", width=3, dash="dash"),
-                annotation_text=f"Spot Price: ₹{spot_p:,.2f}",
+                annotation_text=f"Spot Price: ₹{spot_p:,.2f} (~{int(nearest_s)})",
                 annotation_position="top right",
                 annotation_font=dict(color="#06B6D4", size=12, family="monospace"),
             )
