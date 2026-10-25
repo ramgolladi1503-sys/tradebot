@@ -529,7 +529,7 @@ class SentinelWallObserver:
                 is_valid = False
                 status = "UNINITIALIZED"
 
-        return SentinelWallState(
+        state = SentinelWallState(
             timestamp_ms=self._last_timestamp_ms,
             symbol=self.underlying_symbol,
             spot_price=spot,
@@ -555,6 +555,11 @@ class SentinelWallObserver:
             allowed_for_live_execution=False,
             edge_certification_status="NO_CERTIFIED_EDGE",
         )
+
+        self._cached_state = state
+        self._last_compute_time_ms = now_ms
+        self._is_dirty = False
+        return state
 
     def persist_state_atomic(
         self,

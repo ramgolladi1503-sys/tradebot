@@ -1,0 +1,312 @@
+"""Sentinel Wall Gate: Supervisory Microstructure Edge Gating Engine.
+
+Stage 3 implementation of the Sentinel Wall Intelligence architecture.
+Evaluates proximity, directional liquidity ratio, and wall vulnerability to:
+1. Veto adverse entries heading into fortified institutional walls (fade trap prevention).
+2. Confirm high-conviction breakout continuations when walls are fragile.
+3. Tighten APM runner trailing stops when approaching major opposing walls.
+
+Strict Safety Invariants:
+- read_only = True
+- is_order_action = False
+- broker_api_called = False
+- edge_certification_status = "NO_CERTIFIED_EDGE"
+"""
+
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass
+from typing import Optional
+
+from core.market_structure.sentinel_wall_observer import (
+    SentinelWallObserver,
+    SentinelWallState,
+    StrikeWallProfile,
+)
+
+logger = logging.getLogger(__name__)
+
+# Gate Decision Actions
+GATE_ACTION_PROCEED = "PROCEED"
+GATE_ACTION_VETO = "VETO_ADVERSE_WALL"
+GATE_ACTION_WARN = "WARN_FRAGILE_WALL"
+GATE_ACTION_CONFIRM_BREACH = "CONFIRM_BREACH"
+GATE_ACTION_TIGHTEN_RUNNER = "TIGHTEN_RUNNER"
+
+
+@dataclass(frozen=True)
+class WallGateDecision:
+    """Immutable audit record for a wall gate evaluation."""
+    symbol: str
+    direction: str  # "CE" or "PE"
+    action: str  # GATE_ACTION_*
+    proximity_pts: float
+    proximity_atr: float
+    major_wall_strike: float
+    wall_vulnerability: float
+    directional_liquidity_ratio: float
+    reason: str
+    timestamp_ms: int
+    read_only: bool = True
+    is_order_action: bool = False
+    broker_api_called: bool = False
+    edge_certification_status: str = "NO_CERTIFIED_EDGE"
+
+
+class SentinelWallGate:
+    """Supervisory edge gate evaluating strike wall proximity and depth vulnerability.
+    
+    Calibrated Thresholds (from Stage 2 Empirical Research REP-SENTINEL-WALL-CALIBRATION-001):
+    - Proximity Veto Window: <= 0.75 ATR
+    - Wall Fortified: Vulnerability < 0.80 or Directional Liquidity Ratio opposing trade
+    - Wall Fragile / Breach: Vulnerability > 1.50 and Directional Liquidity Ratio supporting trade
+    - Runner Tighten Window: <= 0.50 ATR towards opposing wall
+    - Proximity Hysteresis Buffer: 0.05 ATR (5%)
+    """
+
+    def __init__(
+        self,
+        observer: SentinelWallObserver,
+        proximity_veto_atr: float = 0.75,
+        runner_tighten_atr: float = 0.50,
+        hysteresis_pct: float = 0.05,
+    ) -> None:
+        self.observer = observer
+        self.proximity_veto_atr = float(proximity_veto_atr)
+        self.runner_tighten_atr = float(runner_tighten_atr)
+        self.hysteresis_pct = float(hysteresis_pct)
+
+    def evaluate_entry_gate(
+        self,
+        direction: str,
+        spot_price: float,
+        timestamp_ms: int,
+    ) -> WallGateDecision:
+        """Evaluates whether an entry signal (CE or PE) should be allowed, warned, or vetoed.
+        
+        Args:
+            direction: "CE" (bullish setup) or "PE" (bearish setup).
+            spot_price: Current index spot price.
+            timestamp_ms: Current evaluation timestamp.
+            
+        Returns:
+            WallGateDecision with action and microstructure telemetry.
+        """
+        dir_clean = direction.upper().strip()
+        state = self.observer.compute_wall_state(force_recompute=False)
+
+        # Fail-closed / Neutral fallback if observer state is uncertified or invalid
+        if not state.is_valid or state.status != "HEALTHY":
+            return WallGateDecision(
+                symbol=state.symbol,
+                direction=dir_clean,
+                action=GATE_ACTION_PROCEED,
+                proximity_pts=0.0,
+                proximity_atr=0.0,
+                major_wall_strike=0.0,
+                wall_vulnerability=0.0,
+                directional_liquidity_ratio=1.0,
+                reason=f"BYPASS_UNHEALTHY_OBSERVER: {state.status}",
+                timestamp_ms=timestamp_ms,
+            )
+
+        atr = max(state.atr_pts, 1.0)
+
+        if dir_clean == "CE":
+            # For CE, target resistance is the Major Call Wall
+            wall_strike = state.major_call_wall_strike
+            if wall_strike <= 0:
+                return self._default_proceed(state, dir_clean, timestamp_ms, "NO_CALL_WALL_DETECTED")
+
+            # Distance: positive if spot is below call wall (approaching from below)
+            dist_pts = wall_strike - spot_price
+            dist_atr = dist_pts / atr
+
+            wall_prof: Optional[StrikeWallProfile] = state.wall_density_map.get(wall_strike)
+            vuln = wall_prof.call_wall_vulnerability if wall_prof else 1.0
+            ratio = wall_prof.directional_liquidity_ratio if wall_prof else 1.0
+
+            # Case A: Breached or breaking through
+            if dist_pts <= 0:
+                if vuln > 1.20:
+                    return WallGateDecision(
+                        symbol=state.symbol,
+                        direction=dir_clean,
+                        action=GATE_ACTION_CONFIRM_BREACH,
+                        proximity_pts=dist_pts,
+                        proximity_atr=dist_atr,
+                        major_wall_strike=wall_strike,
+                        wall_vulnerability=vuln,
+                        directional_liquidity_ratio=ratio,
+                        reason=f"CALL_WALL_BREACH_CONFIRMED: Strike {wall_strike:,.0f} broken with high vulnerability ({vuln:.2f})",
+                        timestamp_ms=timestamp_ms,
+                    )
+                return self._default_proceed(state, dir_clean, timestamp_ms, "CALL_WALL_ALREADY_BREACHED")
+
+            # Case B: Approaching wall within proximity window
+            if dist_atr <= (self.proximity_veto_atr + self.hysteresis_pct):
+                # Fortified wall check: Bid depth strong, ask depth high, ratio bearish
+                if vuln < 0.80 or ratio < 0.90:
+                    return WallGateDecision(
+                        symbol=state.symbol,
+                        direction=dir_clean,
+                        action=GATE_ACTION_VETO,
+                        proximity_pts=dist_pts,
+                        proximity_atr=dist_atr,
+                        major_wall_strike=wall_strike,
+                        wall_vulnerability=vuln,
+                        directional_liquidity_ratio=ratio,
+                        reason=f"VETO_FORTIFIED_CALL_WALL: Spot ₹{spot_price:,.1f} is {dist_pts:.1f}pts ({dist_atr:.2f} ATR) below fortified wall at {wall_strike:,.0f} (Vuln={vuln:.2f}, Ratio={ratio:.2f})",
+                        timestamp_ms=timestamp_ms,
+                    )
+                else:
+                    return WallGateDecision(
+                        symbol=state.symbol,
+                        direction=dir_clean,
+                        action=GATE_ACTION_WARN,
+                        proximity_pts=dist_pts,
+                        proximity_atr=dist_atr,
+                        major_wall_strike=wall_strike,
+                        wall_vulnerability=vuln,
+                        directional_liquidity_ratio=ratio,
+                        reason=f"WARN_FRAGILE_CALL_WALL: Approaching wall at {wall_strike:,.0f} ({dist_atr:.2f} ATR), wall exhibits fragility ({vuln:.2f})",
+                        timestamp_ms=timestamp_ms,
+                    )
+
+            return self._default_proceed(state, dir_clean, timestamp_ms, "OUTSIDE_PROXIMITY_ZONE")
+
+        elif dir_clean == "PE":
+            # For PE, target support is the Major Put Wall
+            wall_strike = state.major_put_wall_strike
+            if wall_strike <= 0:
+                return self._default_proceed(state, dir_clean, timestamp_ms, "NO_PUT_WALL_DETECTED")
+
+            # Distance: positive if spot is above put wall (approaching from above)
+            dist_pts = spot_price - wall_strike
+            dist_atr = dist_pts / atr
+
+            wall_prof = state.wall_density_map.get(wall_strike)
+            vuln = wall_prof.put_wall_vulnerability if wall_prof else 1.0
+            ratio = wall_prof.directional_liquidity_ratio if wall_prof else 1.0
+
+            # Case A: Breached or breaking through downwards
+            if dist_pts <= 0:
+                if vuln < 0.80:
+                    return WallGateDecision(
+                        symbol=state.symbol,
+                        direction=dir_clean,
+                        action=GATE_ACTION_CONFIRM_BREACH,
+                        proximity_pts=dist_pts,
+                        proximity_atr=dist_atr,
+                        major_wall_strike=wall_strike,
+                        wall_vulnerability=vuln,
+                        directional_liquidity_ratio=ratio,
+                        reason=f"PUT_WALL_BREACH_CONFIRMED: Strike {wall_strike:,.0f} broken downwards with collapsed bid depth (Vuln={vuln:.2f})",
+                        timestamp_ms=timestamp_ms,
+                    )
+                return self._default_proceed(state, dir_clean, timestamp_ms, "PUT_WALL_ALREADY_BREACHED")
+
+            # Case B: Approaching put wall within proximity window
+            if dist_atr <= (self.proximity_veto_atr + self.hysteresis_pct):
+                # Fortified floor check: Put bid depth strong (vuln > 1.20), ratio bearish or floor defending
+                if vuln > 1.20 or ratio < 0.90:
+                    return WallGateDecision(
+                        symbol=state.symbol,
+                        direction=dir_clean,
+                        action=GATE_ACTION_VETO,
+                        proximity_pts=dist_pts,
+                        proximity_atr=dist_atr,
+                        major_wall_strike=wall_strike,
+                        wall_vulnerability=vuln,
+                        directional_liquidity_ratio=ratio,
+                        reason=f"VETO_FORTIFIED_PUT_WALL: Spot ₹{spot_price:,.1f} is {dist_pts:.1f}pts ({dist_atr:.2f} ATR) above fortified floor at {wall_strike:,.0f} (Vuln={vuln:.2f}, Ratio={ratio:.2f})",
+                        timestamp_ms=timestamp_ms,
+                    )
+                else:
+                    return WallGateDecision(
+                        symbol=state.symbol,
+                        direction=dir_clean,
+                        action=GATE_ACTION_WARN,
+                        proximity_pts=dist_pts,
+                        proximity_atr=dist_atr,
+                        major_wall_strike=wall_strike,
+                        wall_vulnerability=vuln,
+                        directional_liquidity_ratio=ratio,
+                        reason=f"WARN_FRAGILE_PUT_WALL: Approaching floor at {wall_strike:,.0f} ({dist_atr:.2f} ATR), floor exhibits fragility ({vuln:.2f})",
+                        timestamp_ms=timestamp_ms,
+                    )
+
+            return self._default_proceed(state, dir_clean, timestamp_ms, "OUTSIDE_PROXIMITY_ZONE")
+
+        return self._default_proceed(state, dir_clean, timestamp_ms, f"UNKNOWN_DIRECTION_{dir_clean}")
+
+    def evaluate_runner_tightening(
+        self,
+        position_direction: str,
+        spot_price: float,
+        timestamp_ms: int,
+    ) -> WallGateDecision:
+        """Evaluates whether an active APM runner should tighten its trailing stop due to wall proximity."""
+        dir_clean = position_direction.upper().strip()
+        state = self.observer.compute_wall_state(force_recompute=False)
+
+        if not state.is_valid or state.status != "HEALTHY":
+            return self._default_proceed(state, dir_clean, timestamp_ms, "BYPASS_UNHEALTHY_OBSERVER")
+
+        atr = max(state.atr_pts, 1.0)
+
+        # For CE runner, opposing barrier is Call Wall
+        # For PE runner, opposing barrier is Put Wall
+        target_wall = state.major_call_wall_strike if dir_clean == "CE" else state.major_put_wall_strike
+        if target_wall <= 0:
+            return self._default_proceed(state, dir_clean, timestamp_ms, "NO_WALL_DETECTED")
+
+        dist_pts = abs(spot_price - target_wall)
+        dist_atr = dist_pts / atr
+
+        wall_prof = state.wall_density_map.get(target_wall)
+        ratio = wall_prof.directional_liquidity_ratio if wall_prof else 1.0
+
+        if dir_clean == "CE":
+            vuln_tighten = wall_prof.call_wall_vulnerability if wall_prof else 1.0
+            is_fortified = vuln_tighten < 1.0
+        else:
+            vuln_tighten = wall_prof.put_wall_vulnerability if wall_prof else 1.0
+            is_fortified = vuln_tighten > 1.0
+
+        if dist_atr <= self.runner_tighten_atr and is_fortified:
+            return WallGateDecision(
+                symbol=state.symbol,
+                direction=dir_clean,
+                action=GATE_ACTION_TIGHTEN_RUNNER,
+                proximity_pts=dist_pts,
+                proximity_atr=dist_atr,
+                major_wall_strike=target_wall,
+                wall_vulnerability=vuln_tighten,
+                directional_liquidity_ratio=ratio,
+                reason=f"RUNNER_TIGHTEN_RECOMMENDED: Spot within {dist_atr:.2f} ATR of opposing wall {target_wall:,.0f} (Vuln={vuln_tighten:.2f})",
+                timestamp_ms=timestamp_ms,
+            )
+
+        return self._default_proceed(state, dir_clean, timestamp_ms, "RUNNER_SAFE_ZONE")
+
+    def _default_proceed(
+        self,
+        state: SentinelWallState,
+        direction: str,
+        timestamp_ms: int,
+        reason: str,
+    ) -> WallGateDecision:
+        return WallGateDecision(
+            symbol=state.symbol,
+            direction=direction,
+            action=GATE_ACTION_PROCEED,
+            proximity_pts=0.0,
+            proximity_atr=0.0,
+            major_wall_strike=0.0,
+            wall_vulnerability=1.0,
+            directional_liquidity_ratio=1.0,
+            reason=reason,
+            timestamp_ms=timestamp_ms,
+        )
