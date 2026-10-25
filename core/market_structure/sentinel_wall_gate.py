@@ -114,18 +114,26 @@ class SentinelWallGate:
         atr = max(state.atr_pts, 1.0)
 
         if dir_clean == "CE":
-            # For CE, target resistance is the Major Call Wall
-            wall_strike = state.major_call_wall_strike
-            if wall_strike <= 0:
-                return self._default_proceed(state, dir_clean, timestamp_ms, "NO_CALL_WALL_DETECTED")
+            # Scan for any relevant Call Wall (Major, Secondary, or Local Concentration)
+            # within proximity window [spot_price - 0.25*ATR, spot_price + (proximity_veto_atr + hysteresis)*ATR]
+            candidate_strikes = []
+            for s, prof in state.wall_density_map.items():
+                if prof.is_major_call_wall or prof.is_secondary_call_wall or prof.call_oi >= (0.60 * state.total_call_oi / max(len(state.wall_density_map), 1)):
+                    dist_pts = s - spot_price
+                    dist_atr = dist_pts / atr
+                    # Consider strikes in local vicinity ahead of spot or recently breached
+                    if -0.25 <= dist_atr <= (self.proximity_veto_atr + self.hysteresis_pct):
+                        candidate_strikes.append((s, prof, dist_pts, dist_atr))
 
-            # Distance: positive if spot is below call wall (approaching from below)
-            dist_pts = wall_strike - spot_price
-            dist_atr = dist_pts / atr
+            if not candidate_strikes:
+                return self._default_proceed(state, dir_clean, timestamp_ms, "OUTSIDE_PROXIMITY_ZONE")
 
-            wall_prof: Optional[StrikeWallProfile] = state.wall_density_map.get(wall_strike)
-            vuln = wall_prof.call_wall_vulnerability if wall_prof else 1.0
-            ratio = wall_prof.directional_liquidity_ratio if wall_prof else 1.0
+            # Sort by absolute distance to find the nearest barrier
+            candidate_strikes.sort(key=lambda x: abs(x[2]))
+            wall_strike, wall_prof, dist_pts, dist_atr = candidate_strikes[0]
+
+            vuln = wall_prof.call_wall_vulnerability
+            ratio = wall_prof.directional_liquidity_ratio
 
             # Case A: Breached or breaking through
             if dist_pts <= 0:
@@ -177,18 +185,26 @@ class SentinelWallGate:
             return self._default_proceed(state, dir_clean, timestamp_ms, "OUTSIDE_PROXIMITY_ZONE")
 
         elif dir_clean == "PE":
-            # For PE, target support is the Major Put Wall
-            wall_strike = state.major_put_wall_strike
-            if wall_strike <= 0:
-                return self._default_proceed(state, dir_clean, timestamp_ms, "NO_PUT_WALL_DETECTED")
+            # Scan for any relevant Put Wall (Major, Secondary, or Local Concentration)
+            # within proximity window [spot_price - (proximity_veto_atr + hysteresis)*ATR, spot_price + 0.25*ATR]
+            candidate_strikes = []
+            for s, prof in state.wall_density_map.items():
+                if prof.is_major_put_wall or prof.is_secondary_put_wall or prof.put_oi >= (0.60 * state.total_put_oi / max(len(state.wall_density_map), 1)):
+                    dist_pts = spot_price - s
+                    dist_atr = dist_pts / atr
+                    # Consider strikes in local vicinity below spot or recently breached downwards
+                    if -0.25 <= dist_atr <= (self.proximity_veto_atr + self.hysteresis_pct):
+                        candidate_strikes.append((s, prof, dist_pts, dist_atr))
 
-            # Distance: positive if spot is above put wall (approaching from above)
-            dist_pts = spot_price - wall_strike
-            dist_atr = dist_pts / atr
+            if not candidate_strikes:
+                return self._default_proceed(state, dir_clean, timestamp_ms, "OUTSIDE_PROXIMITY_ZONE")
 
-            wall_prof = state.wall_density_map.get(wall_strike)
-            vuln = wall_prof.put_wall_vulnerability if wall_prof else 1.0
-            ratio = wall_prof.directional_liquidity_ratio if wall_prof else 1.0
+            # Sort by absolute distance to find the nearest barrier
+            candidate_strikes.sort(key=lambda x: abs(x[2]))
+            wall_strike, wall_prof, dist_pts, dist_atr = candidate_strikes[0]
+
+            vuln = wall_prof.put_wall_vulnerability
+            ratio = wall_prof.directional_liquidity_ratio
 
             # Case A: Breached or breaking through downwards
             if dist_pts <= 0:
