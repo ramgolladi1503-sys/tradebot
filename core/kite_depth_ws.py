@@ -4673,27 +4673,28 @@ def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_token
             phase="before",
         )
 
-        def _maybe_commit_async_completion():
-            if _PENDING_SUBSCRIBE_TOKENS or _PENDING_UNSUBSCRIBE_TOKENS:
-                return
-            if not _commit_applied_option_ownership(
-                socket_generation=generation,
-                desired_revision=desired_snapshot.revision,
-                base_snapshot=base_snapshot,
-                invalidated_revision=invalidated.revision,
-                confirmed_tokens=_LAST_TOKENS,
-                subscribe_tokens=to_subscribe,
-                unsubscribe_tokens=to_unsubscribe,
-                provenance=f"subscription_delta_async:{reason}",
-            ):
-                _log_ws("FEED_OPTION_OWNERSHIP_UNCONFIRMED", {"reason": f"async:{reason}"})
-                return
-            _record_completed_subscription_delta(
-                old_tokens=old_tokens,
-                new_tokens=sorted({int(token) for token in (_LAST_TOKENS or []) if int(token) > 0}),
-                reason=reason,
-                socket_generation=int(_SOCKET_GENERATION),
-            )
+        sub_state = {"queued": False}
+        unsub_state = {"queued": False}
+
+        def _maybe_commit_async_ownership(caller_action: str):
+            if (sub_state.get("queued") or unsub_state.get("queued")) and not _PENDING_SUBSCRIBE_TOKENS and not _PENDING_UNSUBSCRIBE_TOKENS:
+                if _commit_applied_option_ownership(
+                    socket_generation=generation,
+                    desired_revision=desired_snapshot.revision,
+                    base_snapshot=base_snapshot,
+                    invalidated_revision=invalidated.revision,
+                    confirmed_tokens=_LAST_TOKENS,
+                    subscribe_tokens=to_subscribe,
+                    unsubscribe_tokens=to_unsubscribe,
+                    provenance=f"subscription_delta_async:{reason}:{caller_action}",
+                ):
+                    _record_completed_subscription_delta(
+                        old_tokens=old_tokens,
+                        new_tokens=sorted({int(token) for token in (_LAST_TOKENS or []) if int(token) > 0}),
+                        reason=reason,
+                        socket_generation=int(_SOCKET_GENERATION),
+                    )
+                    _log_ws("FEED_OPTION_OWNERSHIP_ASYNC_COMMITTED", {"reason": reason, "action": caller_action, "tokens": len(_LAST_TOKENS or [])})
 
         if to_subscribe:
             def on_sub_applied():
@@ -4701,7 +4702,7 @@ def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_token
                 _LAST_TOKENS = list(sorted(set(_LAST_TOKENS or []).union(set(to_subscribe))))
                 _PENDING_SUBSCRIBE_TOKENS.difference_update(to_subscribe)
                 _log_ws("FEED_MUTATION_APPLIED", {"action": "subscribe", "count": len(to_subscribe), "reason": reason})
-                _maybe_commit_async_completion()
+                _maybe_commit_async_ownership("subscribe")
 
             res_sub, res_mode = safe_subscribe_full_mode_observed(
                 ws, to_subscribe, reason, now_epoch,
@@ -4709,6 +4710,7 @@ def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_token
                 active_generation=_current_socket_generation,
                 on_applied_callback=on_sub_applied,
             )
+            sub_state["queued"] = bool(res_sub.queued or res_mode.queued)
 
             if res_sub.queued or res_mode.queued:
                 _PENDING_SUBSCRIBE_TOKENS.update(to_subscribe)
@@ -4724,9 +4726,10 @@ def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_token
                 _LAST_TOKENS = list(sorted(set(_LAST_TOKENS or []) - set(to_unsubscribe)))
                 _PENDING_UNSUBSCRIBE_TOKENS.difference_update(to_unsubscribe)
                 _log_ws("FEED_MUTATION_APPLIED", {"action": "unsubscribe", "count": len(to_unsubscribe), "reason": reason})
-                _maybe_commit_async_completion()
+                _maybe_commit_async_ownership("unsubscribe")
 
             res_unsub = safe_unsubscribe(ws, to_unsubscribe, reason, now_epoch, on_applied_callback=on_unsub_applied)
+            unsub_state["queued"] = bool(res_unsub.queued)
             if res_unsub.queued:
                 _PENDING_UNSUBSCRIBE_TOKENS.update(to_unsubscribe)
                 _log_ws("FEED_MUTATION_QUEUED", {"action": "unsubscribe", "count": len(to_unsubscribe), "reason": reason})
@@ -12130,8 +12133,19 @@ def _start_depth_ws_impl(
             stale_option_mutation_guard_blocked, stale_option_mutation_guard_payload = _stale_option_mutation_guard_blocked(
                 refresh_payload
             )
-            if expected_option_tokens > 0 and subscribed_option_tokens <= 0:
-                if (now_loop - float(last_option_subscribe_retry)) >= max(1.0, soft_cooldown):
+            # Check if active confirmed tokens contain non-underlying (option) tokens and ticks are active.
+            # During transient ATM shift / rebalance windows, ownership state might momentarily invalidate,
+            # but if active subscriptions have option tokens and ticks are arriving, the socket is NOT missing subscriptions.
+            active_has_options = bool([t for t in (_LAST_TOKENS or []) if not _is_underlying_token(t)])
+            recent_tick_flow = (_LAST_WS_TICK_EPOCH > 0.0) and ((now_loop - float(_LAST_WS_TICK_EPOCH)) <= float(getattr(cfg, "MAX_LTP_AGE_SEC", 8.0)))
+            transient_rebalance_active = active_has_options and recent_tick_flow and (_ws_connected_state() is True)
+
+            if expected_option_tokens > 0 and subscribed_option_tokens <= 0 and not transient_rebalance_active:
+                elapsed_since_start = max(0.0, now_loop - float(_DEPTH_WS_START_EPOCH or 0.0))
+                restart_block = _restart_verification_restart_block()
+                verify_pending = restart_block is not None and str(restart_block.get("verification_state") or "").upper() == "PENDING"
+                startup_grace_active = (elapsed_since_start < option_missing_startup_grace_sec) or verify_pending
+                if not startup_grace_active and (now_loop - float(last_option_subscribe_retry)) >= max(1.0, soft_cooldown):
                     last_option_subscribe_retry = now_loop
                     _log_ws(
                         "FEED_OPTION_SUBSCRIPTIONS_MISSING",
@@ -12249,18 +12263,21 @@ def _start_depth_ws_impl(
                     if time.time() - last_soft >= backoff:
                         last_soft = time.time()
                         try:
-                            resubscribe_result = _resubscribe_full(kws, reason=f"soft_reset:strikes={depth_stale_strikes}")
-                            if resubscribe_result.get("success") is True:
-                                if resubscribe_result.get("changed") is True:
-                                    active_gen = _current_socket_generation()
-                                    _advance_completed_transition(
-                                        "SUBSCRIPTION_REBUILD_COMPLETED",
-                                        f"watchdog:{active_gen}:{resubscribe_result.get('new_tokens')}",
-                                        {"socket_generation": int(active_gen), "reason": "watchdog_soft_reset"},
-                                    )
-                                _log_ws("FEED_SOFT_RESET_OK", {"tokens": len(tokens), "backoff_sec": backoff})
+                            if _ws_connected_state() is True:
+                                resubscribe_result = _resubscribe_full(kws, reason=f"soft_reset:strikes={depth_stale_strikes}")
+                                if resubscribe_result.get("success") is True:
+                                    if resubscribe_result.get("changed") is True:
+                                        active_gen = _current_socket_generation()
+                                        _advance_completed_transition(
+                                            "SUBSCRIPTION_REBUILD_COMPLETED",
+                                            f"watchdog:{active_gen}:{resubscribe_result.get('new_tokens')}",
+                                            {"socket_generation": int(active_gen), "reason": "watchdog_soft_reset"},
+                                        )
+                                    _log_ws("FEED_SOFT_RESET_OK", {"tokens": len(tokens), "backoff_sec": backoff})
+                                else:
+                                    _log_ws("FEED_SOFT_RESET_ERROR", {"reason": resubscribe_result.get("reason")})
                             else:
-                                _log_ws("FEED_SOFT_RESET_ERROR", {"reason": resubscribe_result.get("reason")})
+                                _log_ws("FEED_SOFT_RESET_SKIPPED", {"reason": "ws_not_connected", "strikes": depth_stale_strikes})
                         except Exception as exc:
                             _log_ws("FEED_SOFT_RESET_ERROR", {"error": str(exc), "backoff_sec": backoff})
 
