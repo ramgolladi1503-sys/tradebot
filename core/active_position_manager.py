@@ -55,6 +55,11 @@ class PositionPayload:
     exit_reason: Optional[str] = None
     exit_time: Optional[str] = None
     pnl_pts: Optional[float] = None
+    # Integer Lot Math & Capital Discretization Fields (Gate 1)
+    lots: int = 1
+    sizing_tier: str = "FULL_SIZE"  # "FULL_SIZE", "HALF_SIZE", "ZERO_SUPPRESS", "REJECT_INSUFFICIENT_MARGIN"
+    lot_size: int = 65              # NIFTY=65, BANKNIFTY=40, SENSEX=20
+    total_quantity: int = 65        # lots * lot_size
     # Real Traded Option Strike Fields (100% empirical read from WebSocket stream)
     opt_symbol: Optional[str] = None
     opt_token: Optional[str] = None
@@ -202,9 +207,20 @@ class ActivePositionManager:
         session_gear: str = "GEAR_1_RANGE",
         opt_stop_loss_pct: Optional[float] = None,
         atr_1m: float = 10.0,
-        max_session_trades: int = 4
+        max_session_trades: int = 4,
+        lots: int = 1,
+        sizing_tier: str = "FULL_SIZE",
+        lot_size: int = 65,
+        total_quantity: Optional[int] = None,
     ) -> bool:
-        """Arms and executes entry into IN_FLIGHT state with dynamic volatility-scaled targets."""
+        """Arms and executes entry into IN_FLIGHT state with dynamic volatility-scaled targets.
+        
+        Enforces Floor-or-Reject: If lots < 1, entry is rejected (never round up).
+        """
+        if lots < 1:
+            logger.warning(f"ENTRY_REJECTED: lots={lots} < 1 (Floor-or-Reject invariant). Suppressing entry.")
+            return False
+
         if self.state not in {STATE_STANDBY, STATE_LIQUIDATED, STATE_PULLBACK_WAIT}:
             return False
 
@@ -272,6 +288,10 @@ class ActivePositionManager:
             target_price=target,
             max_hold_minutes=hold_horizon,
             trail_locked=False,
+            lots=int(lots),
+            sizing_tier=sizing_tier,
+            lot_size=int(lot_size),
+            total_quantity=int(total_quantity if total_quantity is not None else lots * lot_size),
             opt_symbol=opt_symbol,
             opt_token=opt_token,
             opt_entry_ltp=opt_entry_ltp,

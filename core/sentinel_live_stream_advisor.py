@@ -62,6 +62,15 @@ from core.market_structure.sentinel_wall_observer import (
     SentinelWallObserver,
     SentinelWallState,
 )
+from core.market_structure.sentinel_wall_gate import (
+    SentinelWallGate,
+    GATE_ACTION_VETO,
+    GATE_ACTION_CONFIRM_BREACH,
+)
+from core.sentinel_dynamic_sizing import (
+    calculate_discrete_lots,
+    get_exchange_lot_size,
+)
 from core.upstox_stream_broadcaster import (
     StreamSubscriber,
     UpstoxLevel5DepthRecord,
@@ -195,6 +204,14 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             "BANKNIFTY": SentinelWallObserver(underlying_symbol="BANKNIFTY"),
         }
         self.wall_observer = self.wall_observers["NIFTY"]
+
+        # Gate 2: SentinelWallGates for pre-entry barrier verification
+        self.wall_gates: dict[str, SentinelWallGate] = {
+            "NIFTY": SentinelWallGate(observer=self.wall_observers["NIFTY"], proximity_veto_atr=0.50),
+            "SENSEX": SentinelWallGate(observer=self.wall_observers["SENSEX"], proximity_veto_atr=0.50),
+            "BANKNIFTY": SentinelWallGate(observer=self.wall_observers["BANKNIFTY"], proximity_veto_atr=0.50),
+        }
+        self.wall_gate = self.wall_gates["NIFTY"]
 
         self.alerts_history: list[AdvisoryAlert] = []
         self._lock = threading.Lock()
@@ -363,11 +380,18 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         if wall_obs is not None:
             bid_d = float(depth.bid_q1 + depth.bid_q2 + depth.bid_q3 + depth.bid_q4 + depth.bid_q5)
             ask_d = float(depth.ask_q1 + depth.ask_q2 + depth.ask_q3 + depth.ask_q4 + depth.ask_q5)
+            
+            # Gate 4: Derivatives OI Quarantine (Pre-09:15:00 IST stand-aside)
+            # OI broadcast during pre-market is stale remnant from prior session
+            effective_oi = float(depth.open_interest)
+            if datetime.now().time() < self.market_open_time:
+                effective_oi = 0.0
+
             wall_obs.on_option_tick(
                 symbol=depth.symbol,
                 ltp=depth.ltp or depth.bid_p1,
                 volume=float(depth.volume),
-                oi=float(depth.open_interest),
+                oi=effective_oi,
                 bid_depth=bid_d,
                 ask_depth=ask_d,
                 timestamp_ms=depth.exchange_timestamp_ms,
@@ -544,9 +568,26 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 recent_displacement_pts=displacement,
             )
 
+            # Gate 2: SentinelWallGate pre-entry check (0.5 * ATR Adverse Wall Clamping)
+            wall_gate = self.wall_gates.get(index_name)
+            wall_vetoed = False
+            wall_reason = ""
+            if wall_gate is not None:
+                wall_decision = wall_gate.evaluate_entry_gate(
+                    direction=required_option_type,
+                    spot_price=spot,
+                    timestamp_ms=depth.exchange_timestamp_ms,
+                )
+                if wall_decision.action == GATE_ACTION_VETO:
+                    wall_vetoed = True
+                    wall_reason = wall_decision.reason
+
             if is_vetoed:
                 status_flag = "VETO_SPREAD_EXPANDED"
                 advisory = f"🚨 [SPREAD VETO] BUY {depth.symbol} @ {setup_reason} -> SUPPRESSED (>4.0% spread)"
+            elif wall_vetoed:
+                status_flag = "VETO_ADVERSE_WALL"
+                advisory = f"🚨 [WALL VETO: {wall_reason}] BUY {depth.symbol} @ {setup_reason} -> SUPPRESSED (Within 0.5 ATR of fortified wall)"
             elif not macro_ok:
                 status_flag = "VETO_MACRO_DIVERGENCE"
                 advisory = f"🚨 [{macro_reason}] BUY {depth.symbol} @ {setup_reason} -> SUPPRESSED"
@@ -557,56 +598,77 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 status_flag = "VETO_LOW_CONFIDENCE"
                 advisory = f"🚨 [LOW CONVICTION: {conf_eval.total_score}/100 {conf_eval.grade}] BUY {depth.symbol} @ {setup_reason} -> SUPPRESSED"
             else:
-                status_flag = "SIGNAL_TRIGGERED"
-                advisory = (
-                    f"🎯 [BUY {depth.symbol}] @ {setup_reason} | "
-                    f"Conviction: {conf_eval.total_score}/100 ({conf_eval.grade}, WinRate ~{conf_eval.probable_win_rate_pct:.0f}%, {conf_eval.sizing_recommendation}) | "
-                    f"Target: +{target_pts:.1f}pts | Vol-SL: -{sl_pts:.1f}pts"
+                # Gate 1: Capital Discretization & Integer Lot Math (Floor-or-Reject Model)
+                computed_lots, sizing_tier = calculate_discrete_lots(
+                    total_capital=100000.0,
+                    risk_budget_pct=0.02,
+                    opt_premium=ltp,
+                    sl_points=sl_pts,
+                    index_name=index_name,
+                    sizing_recommendation=conf_eval.sizing_recommendation,
                 )
+                ex_lot_size = get_exchange_lot_size(index_name)
+                total_qty = computed_lots * ex_lot_size
 
-                # Gate 4: Passive Midpoint Queue Execution Price
-                fill_price, savings, fill_mode = self.passive_midpoint_queue.calculate_entry_fill(
-                    bid=bid,
-                    ask=ask,
-                    passive_fill_enabled=True,
-                )
+                if computed_lots < 1 or sizing_tier == "ZERO_SUPPRESS":
+                    status_flag = "VETO_INSUFFICIENT_MARGIN" if computed_lots < 1 else "VETO_SIZING_SUPPRESSED"
+                    advisory = f"🚨 [SIZING VETO: {sizing_tier}] BUY {depth.symbol} @ {setup_reason} -> SUPPRESSED (Lots={computed_lots})"
+                else:
+                    status_flag = "SIGNAL_TRIGGERED"
+                    advisory = (
+                        f"🎯 [BUY {depth.symbol}] @ {setup_reason} | "
+                        f"Conviction: {conf_eval.total_score}/100 ({conf_eval.grade}, WinRate ~{conf_eval.probable_win_rate_pct:.0f}%, {sizing_tier}, {computed_lots} lots / {total_qty} qty) | "
+                        f"Target: +{target_pts:.1f}pts | Vol-SL: -{sl_pts:.1f}pts"
+                    )
 
-                with self._lock:
-                    idx_apm = self.apms.get(index_name, self.apm)
-                    # Allow entry if APM is in STANDBY, LIQUIDATED, or PULLBACK_WAIT
-                    if is_target_strike and idx_apm.state in {STATE_STANDBY, STATE_LIQUIDATED, STATE_PULLBACK_WAIT}:
-                        opt_q = {
-                            "symbol": depth.symbol,
-                            "token": depth.token,
-                            "ltp": fill_price,
-                            "bid": bid,
-                            "ask": ask,
-                            "midpoint": round((bid + ask) / 2.0, 2),
-                            "spread_savings": savings,
-                            "fill_mode": fill_mode,
-                        }
-                        pos_id = f"TRADE_{index_name}_{now_time.strftime('%H%M%S')}_{required_option_type}"
-                        entered = idx_apm.arm_and_enter(
-                            position_id=pos_id,
-                            direction=required_option_type,
-                            contract=depth.symbol,
-                            entry_price=spot,
-                            entry_time_str=now_dt.isoformat(),
-                            sl_pts=sl_pts,
-                            tp_pts=target_pts,
-                            friction_drag_pts=total_drag,
-                            opt_quote=opt_q,
-                            is_runner_mode=True,
-                            session_gear="GEAR_2_TREND",
-                            opt_stop_loss_pct=0.20,
-                        )
-                        if entered and self.enable_stdout:
-                            print(
-                                f"\n🚀 [APM IN_FLIGHT ENTRY ({index_name}) - {itm_res.moneyness}] {pos_id} | {depth.symbol} @ {spot:.1f} | "
-                                f"Conviction: {conf_eval.total_score}/100 ({conf_eval.grade}) | "
-                                f"Fill: ₹{fill_price:.2f} ({fill_mode}, Saved ₹{savings:.2f}) | "
-                                f"SL: {sl_pts:.1f}pts | TP: {target_pts:.1f}pts"
+                    # Gate 4: Passive Midpoint Queue Execution Price
+                    fill_price, savings, fill_mode = self.passive_midpoint_queue.calculate_entry_fill(
+                        bid=bid,
+                        ask=ask,
+                        passive_fill_enabled=True,
+                    )
+
+                    with self._lock:
+                        idx_apm = self.apms.get(index_name, self.apm)
+                        # Allow entry if APM is in STANDBY, LIQUIDATED, or PULLBACK_WAIT
+                        if is_target_strike and idx_apm.state in {STATE_STANDBY, STATE_LIQUIDATED, STATE_PULLBACK_WAIT}:
+                            opt_q = {
+                                "symbol": depth.symbol,
+                                "token": depth.token,
+                                "ltp": fill_price,
+                                "bid": bid,
+                                "ask": ask,
+                                "midpoint": round((bid + ask) / 2.0, 2),
+                                "spread_savings": savings,
+                                "fill_mode": fill_mode,
+                            }
+                            pos_id = f"TRADE_{index_name}_{now_time.strftime('%H%M%S')}_{required_option_type}"
+                            entered = idx_apm.arm_and_enter(
+                                position_id=pos_id,
+                                direction=required_option_type,
+                                contract=depth.symbol,
+                                entry_price=spot,
+                                entry_time_str=now_dt.isoformat(),
+                                sl_pts=sl_pts,
+                                tp_pts=target_pts,
+                                friction_drag_pts=total_drag,
+                                opt_quote=opt_q,
+                                is_runner_mode=True,
+                                session_gear="GEAR_2_TREND",
+                                opt_stop_loss_pct=0.20,
+                                lots=computed_lots,
+                                sizing_tier=sizing_tier,
+                                lot_size=ex_lot_size,
+                                total_quantity=total_qty,
                             )
+                            if entered and self.enable_stdout:
+                                print(
+                                    f"\n🚀 [APM IN_FLIGHT ENTRY ({index_name}) - {itm_res.moneyness}] {pos_id} | {depth.symbol} @ {spot:.1f} | "
+                                    f"Conviction: {conf_eval.total_score}/100 ({conf_eval.grade}) | "
+                                    f"Lots: {computed_lots} ({sizing_tier}, Qty={total_qty}) | "
+                                    f"Fill: ₹{fill_price:.2f} ({fill_mode}, Saved ₹{savings:.2f}) | "
+                                    f"SL: {sl_pts:.1f}pts | TP: {target_pts:.1f}pts"
+                                )
         else:
             if is_vetoed:
                 status_flag = "HALTED_SPREAD_VIOLATION"
