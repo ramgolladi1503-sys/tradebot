@@ -432,3 +432,70 @@ def test_non_negotiable_safety_invariants(tmp_path: Path) -> None:
                 if node.module:
                     for forbidden in forbidden_imports:
                         assert not node.module.startswith(forbidden), f"Forbidden import from {node.module} in {fpath}"
+
+
+# -------------------------------------------------------------------------
+# Test 7: Opening Range Pre-Market Guard & Reconciliation
+# -------------------------------------------------------------------------
+
+def test_sentinel_opening_range_premarket_guard_and_reconciliation(tmp_path: Path) -> None:
+    """AC: Pre-market ticks (< 09:15) must NOT contaminate Opening Range.
+    
+    Reconciliation at 09:45 must overwrite any anomalous bounds with official candles.
+    """
+    import datetime as dt_module
+    from datetime import datetime, time as dt_time, date as dt_date
+    from unittest.mock import patch, MagicMock
+    from core.sentinel_live_stream_advisor import SentinelLiveStreamAdvisor
+
+    adapter = InMemorySentinelAdapter()
+
+    fake_now_premarket = datetime(2026, 10, 26, 8, 50, 0)
+    fake_now_open = datetime(2026, 10, 26, 9, 20, 0)
+    fake_now_shock_end = datetime(2026, 10, 26, 9, 45, 1)
+
+    with patch("core.sentinel_live_stream_advisor.datetime") as mock_dt:
+        mock_dt.now.return_value = fake_now_premarket
+        advisor = SentinelLiveStreamAdvisor(
+            adapter=adapter,
+            enable_stdout=False,
+            market_open_time=dt_time(9, 15),
+            opening_shock_end_time=dt_time(9, 45),
+            wal_path=str(tmp_path / "test_apm_wal.json"),
+        )
+
+        # 1. Simulate Pre-Market tick at 08:50 AM with corrupted high
+        advisor._update_spot("SENSEX", 74721.3, 1729900000000)
+
+        # Assert SENSEX OR bounds were NOT updated by pre-market tick
+        assert advisor.or_bounds["SENSEX"]["high"] == -float("inf")
+        assert advisor.or_bounds["SENSEX"]["low"] == float("inf")
+
+        # 2. Simulate Regular Market Open ticks at 09:20 AM
+        mock_dt.now.return_value = fake_now_open
+        advisor._update_spot("SENSEX", 72600.0, 1729900500000)
+        advisor._update_spot("SENSEX", 72950.0, 1729900600000)
+
+        assert advisor.or_bounds["SENSEX"]["high"] == 72950.0
+        assert advisor.or_bounds["SENSEX"]["low"] == 72600.0
+
+        # 3. Simulate Opening Shock End at 09:45:01 AM with API Reconciliation Mock
+        fake_candles = [
+            ["2026-10-26T09:15:00+05:30", 72550.0, 72990.0, 72514.0, 72800.0, 1000, 0],
+            ["2026-10-26T09:30:00+05:30", 72800.0, 72900.0, 72750.0, 72850.0, 1000, 0],
+        ]
+        mock_dt.now.return_value = fake_now_shock_end
+        with patch("requests.get") as mock_get, \
+             patch.dict("os.environ", {"UPSTOX_ACCESS_TOKEN": "mock_token"}):
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            mock_resp.json.return_value = {"data": {"candles": fake_candles}}
+            mock_get.return_value = mock_resp
+
+            # Trigger tick post-09:45
+            advisor._update_spot("SENSEX", 72900.0, 1729902000000)
+
+        # Verify reconciliation updated bounds to true candle values
+        assert advisor.trade_lock_active is False
+        assert advisor.or_bounds["SENSEX"]["high"] == 72990.0
+        assert advisor.or_bounds["SENSEX"]["low"] == 72514.0

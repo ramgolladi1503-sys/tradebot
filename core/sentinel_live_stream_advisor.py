@@ -102,6 +102,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         self,
         adapter: InMemorySentinelAdapter,
         spread_veto_threshold: float = 0.04,
+        market_open_time: dt_time = dt_time(9, 15),
         opening_shock_end_time: dt_time = dt_time(9, 45),
         market_close_time: dt_time = dt_time(15, 30),
         skew_threshold_ms: float = 250.0,
@@ -110,6 +111,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
     ) -> None:
         self.adapter = adapter
         self.spread_veto_threshold = float(spread_veto_threshold)
+        self.market_open_time = market_open_time
         self.opening_shock_end_time = opening_shock_end_time
         self.market_close_time = market_close_time
         self.skew_threshold_ms = float(skew_threshold_ms)
@@ -253,9 +255,10 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         self._evaluate_option_depth(depth)
 
     def _seed_or_bounds_from_api_if_late_boot(self) -> None:
-        """Seeds Opening Range (09:15-09:45) from Upstox Intraday API if process starts/restarts post-09:45."""
+        """Seeds or reconciles Opening Range (09:15-09:45) from Upstox Intraday API."""
         now_t = datetime.now().time()
-        if now_t <= self.opening_shock_end_time:
+        # Only run if post-opening shock (>= 09:45:00)
+        if now_t < self.opening_shock_end_time:
             return
 
         import os, requests
@@ -285,7 +288,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                             self.active_range_high = h
                             self.active_range_low = l
                         if self.enable_stdout:
-                            print(f"📥 [OR RECOVERY] {idx}: Seeded Opening Range from Upstox API -> High={h:.2f}, Low={l:.2f} (Range={h-l:.2f} pts)")
+                            print(f"📥 [OR RECOVERY/RECONCILE] {idx}: Seeded Opening Range from Upstox API -> High={h:.2f}, Low={l:.2f} (Range={h-l:.2f} pts)")
             except Exception as e:
                 logger.warning(f"Failed to fetch OR candles for {idx}: {e}")
 
@@ -305,15 +308,19 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             now_t = datetime.now().time()
             if now_t < self.opening_shock_end_time:
                 self.trade_lock_active = True
-                b = self.or_bounds[index_name]
-                b["high"] = max(b["high"], spot)
-                b["low"] = min(b["low"], spot)
-                if index_name == "NIFTY":
-                    self.active_range_high = b["high"]
-                    self.active_range_low = b["low"]
+                # Strictly accumulate opening range ticks only after official market open (09:15)
+                if now_t >= self.market_open_time:
+                    b = self.or_bounds[index_name]
+                    b["high"] = max(b["high"], spot)
+                    b["low"] = min(b["low"], spot)
+                    if index_name == "NIFTY":
+                        self.active_range_high = b["high"]
+                        self.active_range_low = b["low"]
             else:
                 if self.trade_lock_active:
                     self.trade_lock_active = False
+                    # Reconcile OR with official 1m candles to eliminate any stream drops or spurious ticks
+                    self._seed_or_bounds_from_api_if_late_boot()
                     if self.enable_stdout:
                         print("\n🔓 [OPENING SHOCK CONCLUDED] Opening Range Boundaries Established:")
                         for idx, bounds in self.or_bounds.items():
