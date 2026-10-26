@@ -287,7 +287,8 @@ if not wal_path_banknifty.exists():
 
 wal_path = wal_path_nifty
 
-# Helper to read latest option quotes from live capture parquet
+# Helper to read latest option quotes from live capture parquet (cached for 1.5s to eliminate disk thrashing)
+@st.cache_data(ttl=1.5, show_spinner=False)
 def get_live_option_quotes() -> dict:
     for base in [Path("/Volumes/TradeBot/live market capture"), Path("/Volumes/TradeBotData/live market capture")]:
         chunks_dir = base / today_dash / "chunks"
@@ -595,9 +596,23 @@ elif today_str == today_real:
         if pipe_log.exists() and pipe_log.stat().st_size > 0:
             try:
                 with open(pipe_log, "r", encoding="utf-8") as pl:
-                    # Read at most the last 3,000 lines from each log file to keep memory light and re-rendering snappy
-                    lines = pl.readlines()
-                    tail_lines = lines[-3000:] if len(lines) > 3000 else lines
+                    # Seek to end minus 128KB for instantaneous tailing without reading whole file into memory
+                    try:
+                        pl.seek(0, 2)
+                        fsize = pl.tell()
+                        read_bytes = min(fsize, 128 * 1024)
+                        pl.seek(fsize - read_bytes, 0)
+                        # Discard partial first line
+                        if read_bytes == fsize:
+                            tail_lines = pl.readlines()
+                        else:
+                            pl.readline()
+                            tail_lines = pl.readlines()
+                    except Exception:
+                        pl.seek(0)
+                        lines = pl.readlines()
+                        tail_lines = lines[-500:] if len(lines) > 500 else lines
+
                     for line in tail_lines:
                         m = pattern_with_conv.search(line)
                         if m:
