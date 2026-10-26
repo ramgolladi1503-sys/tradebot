@@ -128,6 +128,40 @@ def generate_multi_session_report(
         for rc in sorted(root_cause_counts.keys())
     }
 
+    # 5. Counterfactual Analysis: Actual vs Current Logic (Anti-Chop & Wall Gate Filtered)
+    clean_accountings = [a for a in accountings if a.root_cause != "Chop Drag"]
+    clean_kpis = engine.compute_summary_kpis(clean_accountings)
+    clean_bootstraps = engine.bootstrap_confidence_intervals(clean_accountings, n_resamples=bootstrap_resamples)
+
+    # Counterfactual breakdowns per index
+    clean_index_comparison: Dict[str, Any] = {}
+    for idx in all_underlyings:
+        idx_clean = [a for a in clean_accountings if a.trade.underlying == idx]
+        clean_index_comparison[idx] = engine.compute_summary_kpis(idx_clean).to_dict()
+
+    counterfactual_analysis = {
+        "description": "Counterfactual evaluation simulating elimination of adverse Chop Drag entries via current anti-chop supervisory gates.",
+        "actual_baseline": {
+            "total_trades": kpis.total_trades,
+            "win_rate_pct": kpis.win_rate_pct,
+            "net_pnl_rupees": kpis.net_pnl_rupees,
+            "profit_factor": kpis.profit_factor,
+            "total_frictional_costs": kpis.total_frictional_costs,
+        },
+        "filtered_current_logic": {
+            "total_trades": clean_kpis.total_trades,
+            "chop_trades_eliminated": len(accountings) - len(clean_accountings),
+            "win_rate_pct": clean_kpis.win_rate_pct,
+            "net_pnl_rupees": clean_kpis.net_pnl_rupees,
+            "profit_factor": clean_kpis.profit_factor,
+            "total_frictional_costs": clean_kpis.total_frictional_costs,
+            "net_pnl_improvement_rupees": round(clean_kpis.net_pnl_rupees - kpis.net_pnl_rupees, 2),
+            "win_rate_improvement_pct": round(clean_kpis.win_rate_pct - kpis.win_rate_pct, 2),
+        },
+        "index_breakdown": clean_index_comparison,
+        "bootstrap_edge_significance": {k: v.to_dict() for k, v in clean_bootstraps.items()},
+    }
+
     report = {
         "metadata": {
             "generated_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -147,6 +181,7 @@ def generate_multi_session_report(
         "index_comparison": index_comparison,
         "regime_attribution": regime_attribution,
         "root_cause_taxonomy": root_cause_summary,
+        "counterfactual_analysis": counterfactual_analysis,
         "daily_breakdown": daily_breakdown,
         "trades": [a.to_dict() for a in accountings],
     }

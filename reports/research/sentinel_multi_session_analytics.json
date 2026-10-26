@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generated_at_utc": "2026-10-26T13:21:29.802688+00:00",
+    "generated_at_utc": "2026-10-26T13:43:58.028236+00:00",
     "period_start": "2026-10-07",
     "period_end": "2026-10-26",
     "status": "NO_CERTIFIED_EDGE",
@@ -303,6 +303,118 @@
       "count": 15,
       "total_net_pnl_rupees": 7588.98,
       "pct_of_trades": 21.7
+    }
+  },
+  "counterfactual_analysis": {
+    "description": "Counterfactual evaluation simulating elimination of adverse Chop Drag entries via current anti-chop supervisory gates.",
+    "actual_baseline": {
+      "total_trades": 69,
+      "win_rate_pct": 52.17,
+      "net_pnl_rupees": 20159.52,
+      "profit_factor": 1.77,
+      "total_frictional_costs": 7891.86
+    },
+    "filtered_current_logic": {
+      "total_trades": 54,
+      "chop_trades_eliminated": 15,
+      "win_rate_pct": 64.81,
+      "net_pnl_rupees": 34955.67,
+      "profit_factor": 4.09,
+      "total_frictional_costs": 6121.21,
+      "net_pnl_improvement_rupees": 14796.15,
+      "win_rate_improvement_pct": 12.64
+    },
+    "index_breakdown": {
+      "BANKNIFTY": {
+        "total_trades": 7,
+        "completed_trades": 7,
+        "in_flight_trades": 0,
+        "winning_trades": 4,
+        "losing_trades": 3,
+        "win_rate_pct": 57.14,
+        "gross_pnl_rupees": 8659.0,
+        "net_pnl_rupees": 7755.4,
+        "total_frictional_costs": 903.6,
+        "profit_factor": 2.85,
+        "win_loss_ratio": 2.14,
+        "avg_win_rupees": 2986.45,
+        "avg_loss_rupees": 1396.8,
+        "expectancy_rupees": 1107.91,
+        "max_drawdown_rupees": 3934.46,
+        "max_drawdown_pct": 50.73,
+        "sharpe_ratio": 12.47,
+        "sortino_ratio": 99.0,
+        "calmar_ratio": 1.97,
+        "status": "NO_CERTIFIED_EDGE"
+      },
+      "NIFTY": {
+        "total_trades": 25,
+        "completed_trades": 25,
+        "in_flight_trades": 0,
+        "winning_trades": 16,
+        "losing_trades": 9,
+        "win_rate_pct": 64.0,
+        "gross_pnl_rupees": 17124.59,
+        "net_pnl_rupees": 13796.29,
+        "total_frictional_costs": 3328.29,
+        "profit_factor": 4.17,
+        "win_loss_ratio": 2.35,
+        "avg_win_rupees": 1133.94,
+        "avg_loss_rupees": 482.98,
+        "expectancy_rupees": 551.85,
+        "max_drawdown_rupees": 3401.19,
+        "max_drawdown_pct": 24.65,
+        "sharpe_ratio": 9.16,
+        "sortino_ratio": 13.42,
+        "calmar_ratio": 4.06,
+        "status": "NO_CERTIFIED_EDGE"
+      },
+      "SENSEX": {
+        "total_trades": 22,
+        "completed_trades": 22,
+        "in_flight_trades": 0,
+        "winning_trades": 15,
+        "losing_trades": 7,
+        "win_rate_pct": 68.18,
+        "gross_pnl_rupees": 15293.3,
+        "net_pnl_rupees": 13403.98,
+        "total_frictional_costs": 1889.32,
+        "profit_factor": 5.84,
+        "win_loss_ratio": 2.73,
+        "avg_win_rupees": 1078.15,
+        "avg_loss_rupees": 395.46,
+        "expectancy_rupees": 609.27,
+        "max_drawdown_rupees": 2053.28,
+        "max_drawdown_pct": 15.32,
+        "sharpe_ratio": 10.42,
+        "sortino_ratio": 168.85,
+        "calmar_ratio": 6.53,
+        "status": "NO_CERTIFIED_EDGE"
+      }
+    },
+    "bootstrap_edge_significance": {
+      "win_rate": {
+        "metric_name": "win_rate_pct",
+        "sample_value": 64.81,
+        "bootstrap_mean": 66.13,
+        "standard_error": 6.0,
+        "ci_95_lower": 53.7,
+        "ci_95_upper": 76.9,
+        "ci_99_lower": 51.85,
+        "ci_99_upper": 79.63,
+        "num_resamples": 100
+      },
+      "expectancy": {
+        "metric_name": "expectancy_rupees",
+        "sample_value": 647.33,
+        "bootstrap_mean": 692.67,
+        "standard_error": 266.19,
+        "ci_95_lower": 207.39,
+        "ci_95_upper": 1236.55,
+        "ci_99_lower": 175.15,
+        "ci_99_upper": 1323.08,
+        "num_resamples": 100
+      }
     }
   },
   "daily_breakdown": [
