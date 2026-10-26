@@ -317,6 +317,37 @@ def get_live_option_quotes() -> dict:
                     pass
     return {}
 
+# Helper to fetch sub-second direct market quote for active in-flight contracts via Upstox API
+@st.cache_data(ttl=1, show_spinner=False)
+def get_live_contract_quote_upstox(opt_token: str) -> dict | None:
+    if not opt_token:
+        return None
+    import urllib.parse
+    import requests
+    from dotenv import load_dotenv
+    load_dotenv(WORKTREE / ".env")
+    load_dotenv("/Users/madhuram/tradebot/.env")
+    token = os.getenv("UPSTOX_ACCESS_TOKEN", "").strip()
+    if not token:
+        return None
+    encoded = urllib.parse.quote(opt_token)
+    headers = {"accept": "application/json", "Api-Version": "2.0", "Authorization": f"Bearer {token}", "User-Agent": "Mozilla/5.0"}
+    url = f"https://api.upstox.com/v2/market-quote/quotes?instrument_key={encoded}"
+    try:
+        r = requests.get(url, headers=headers, timeout=1.5)
+        if r.status_code == 200:
+            data = r.json().get("data", {})
+            for _, v in data.items():
+                ltp = float(v.get("last_price") or 0.0)
+                bids = v.get("depth", {}).get("buy", [])
+                asks = v.get("depth", {}).get("sell", [])
+                bid = float(bids[0].get("price") or ltp) if bids else ltp
+                ask = float(asks[0].get("price") or ltp) if asks else ltp
+                return {"ltp": ltp, "bid": bid, "ask": ask}
+    except Exception:
+        pass
+    return None
+
 # Helper to fetch real-time spot prices for primary indices
 @st.cache_data(ttl=2)
 def get_live_index_spots() -> dict:
@@ -522,8 +553,10 @@ def get_all_executed_trades_today() -> list:
         time_str = entry_t.replace("T", " ")[:19] if entry_t else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         # Check live quote for in-flight contract
         inflight_sym = str(wal_payload.get("opt_symbol", ""))
+        inflight_tok = str(wal_payload.get("opt_token", ""))
         live_entry_ltp = float(wal_payload.get("opt_entry_ltp") or 0.0)
-        q_now = live_option_book.get(inflight_sym)
+        q_direct_now = get_live_contract_quote_upstox(inflight_tok) if inflight_tok else None
+        q_now = q_direct_now or live_option_book.get(inflight_sym)
         active_curr_ltp = q_now.get("ltp") if q_now else wal_payload.get("opt_current_ltp")
         peak_hwm = float(wal_payload.get("opt_peak_hwm") or (active_curr_ltp or 0.0))
         
@@ -746,8 +779,10 @@ with tab_live:
                 pos_dir = str(pos.get("direction", "PE"))
                 pos_gear = str(pos.get("session_gear", "GEAR_2_TREND")).replace("_", " ")
 
-                # Live streaming quote lookup
-                q_live = live_option_book.get(pos_sym)
+                # Live streaming quote lookup (check direct Upstox sub-second quote first, then parquet book, then WAL fallback)
+                opt_token = str(pos.get("opt_token") or "")
+                q_direct = get_live_contract_quote_upstox(opt_token) if opt_token else None
+                q_live = q_direct or live_option_book.get(pos_sym)
                 c_ltp = q_live.get("ltp") if q_live else pos.get("opt_current_ltp")
                 c_bid = q_live.get("bid") if q_live else (c_ltp or pos.get("opt_bid"))
                 c_ask = q_live.get("ask") if q_live else (c_ltp or pos.get("opt_ask"))
