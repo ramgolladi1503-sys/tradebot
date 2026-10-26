@@ -103,17 +103,69 @@ class NormalizedTrade:
 class MultiSessionAggregator:
     """Aggregates Sentinel execution telemetry across multiple historical sessions."""
 
+    CANONICAL_WALS = {
+        "NIFTY": Path("runtime/sentinel_apm_wal.json"),
+        "SENSEX": Path("runtime/sentinel_apm_wal_sensex.json"),
+        "BANKNIFTY": Path("runtime/sentinel_apm_wal_banknifty.json"),
+    }
+
     def __init__(
         self,
         audit_dir: str | Path = "runtime/audit",
-        wal_path: str | Path = "runtime/sentinel_apm_wal.json",
+        wal_path: str | Path | Sequence[str | Path] | Dict[str, str | Path] | None = None,
         start_date: str = "2026-10-07",
-        end_date: str = "2026-10-19",
+        end_date: Optional[str] = None,
     ) -> None:
         self.audit_dir = Path(audit_dir)
-        self.wal_path = Path(wal_path)
+
+        # Normalize wal_paths to Dict[str, Path]
+        self.wal_paths: Dict[str, Path] = {}
+        if wal_path is None:
+            # Default to all existing canonical WALs
+            for idx_name, p in self.CANONICAL_WALS.items():
+                if p.exists():
+                    self.wal_paths[idx_name] = p
+            # If none exist, keep default NIFTY path for safety
+            if not self.wal_paths:
+                self.wal_paths["NIFTY"] = self.CANONICAL_WALS["NIFTY"]
+        elif isinstance(wal_path, dict):
+            for k, v in wal_path.items():
+                self.wal_paths[str(k)] = Path(v)
+        elif isinstance(wal_path, (list, tuple)):
+            for i, p in enumerate(wal_path):
+                p_path = Path(p)
+                # Infer index name from filename
+                name_upper = p_path.stem.upper()
+                if "BANKNIFTY" in name_upper:
+                    k = "BANKNIFTY"
+                elif "SENSEX" in name_upper:
+                    k = "SENSEX"
+                else:
+                    k = f"NIFTY_{i}" if "NIFTY" in self.wal_paths else "NIFTY"
+                self.wal_paths[k] = p_path
+        else:
+            # Single path or str
+            p_path = Path(wal_path)
+            name_upper = p_path.stem.upper()
+            if "BANKNIFTY" in name_upper:
+                k = "BANKNIFTY"
+            elif "SENSEX" in name_upper:
+                k = "SENSEX"
+            else:
+                k = "NIFTY"
+            self.wal_paths[k] = p_path
+
+        # Preserve legacy self.wal_path referencing primary NIFTY wal or first wal
+        if "NIFTY" in self.wal_paths:
+            self.wal_path = self.wal_paths["NIFTY"]
+        elif self.wal_paths:
+            self.wal_path = next(iter(self.wal_paths.values()))
+        else:
+            self.wal_path = Path("runtime/sentinel_apm_wal.json")
+
         self.start_date = start_date
-        self.end_date = end_date
+        # Dynamic auto-date detection for end_date defaulting to current session date
+        self.end_date = end_date or date.today().isoformat()
 
     def get_expected_trading_days(self) -> List[str]:
         """Generate weekday date strings (YYYY-MM-DD) between start_date and end_date inclusive."""
@@ -127,11 +179,36 @@ class MultiSessionAggregator:
             cur += timedelta(days=1)
         return expected
 
+    def _detect_underlying(self, symbol: str, raw_payload: Optional[Dict[str, Any]] = None) -> str:
+        """Resolve underlying index with BANKNIFTY evaluated before NIFTY."""
+        # Check payload fields first if present
+        if raw_payload:
+            for field_name in ("underlying", "contract", "opt_symbol", "strike_contract", "symbol"):
+                val = str(raw_payload.get(field_name, "")).upper()
+                if "BANKNIFTY" in val:
+                    return "BANKNIFTY"
+                if "SENSEX" in val:
+                    return "SENSEX"
+                if "NIFTY" in val:
+                    return "NIFTY"
+            if "spot_nifty" in raw_payload:
+                return "NIFTY"
+
+        # Check symbol string directly
+        s = (symbol or "").upper()
+        if "BANKNIFTY" in s:
+            return "BANKNIFTY"
+        if "SENSEX" in s:
+            return "SENSEX"
+        if "NIFTY" in s:
+            return "NIFTY"
+        return "NIFTY"
+
     def run_continuity_audit(self) -> Tuple[SessionContinuityAudit, Dict[str, List[Dict[str, Any]]]]:
         """Audit multi-session data continuity fail-closed.
         
         Reads JSONL files, detects corrupted lines, identifies missing calendar days,
-        and flags intraday timeline gaps > MAX_INTER_BAR_GAP_SECONDS.
+        and flags intraday timeline gaps > MAX_INTER_BAR_GAP_SECONDS partitioned per underlying index.
         """
         expected_days = self.get_expected_trading_days()
         present_days_set: Set[str] = set()
@@ -185,35 +262,37 @@ class MultiSessionAggregator:
                 present_days_set.add(day_iso)
                 parsed_records_by_day[day_iso] = day_records
 
-                # Check intraday continuity gaps
-                sorted_records = []
+                # Check intraday continuity gaps partitioned per underlying index
+                records_by_idx: Dict[str, List[Tuple[datetime, Dict[str, Any]]]] = {}
                 for r in day_records:
                     ts_str = r.get("timestamp")
                     if ts_str:
                         try:
                             dt = datetime.fromisoformat(ts_str)
-                            sorted_records.append((dt, r))
+                            rec_und = self._detect_underlying(r.get("opt_symbol") or r.get("contract") or "", r)
+                            records_by_idx.setdefault(rec_und, []).append((dt, r))
                         except Exception:
                             pass
-                sorted_records.sort(key=lambda x: x[0])
 
-                for i in range(len(sorted_records) - 1):
-                    dt_curr, _ = sorted_records[i]
-                    dt_next, _ = sorted_records[i + 1]
-                    delta_sec = (dt_next - dt_curr).total_seconds()
-                    if delta_sec > MAX_INTER_BAR_GAP_SECONDS:
-                        gap_count += 1
-                        issues.append(
-                            SessionContinuityIssue(
-                                issue_type="INTRADAY_DATA_GAP",
-                                date_str=day_iso,
-                                description=(
-                                    f"Telemetry gap of {delta_sec/60:.1f}m between "
-                                    f"{dt_curr.time()} and {dt_next.time()}"
-                                ),
-                                severity="WARNING",
+                for rec_und, sorted_records in records_by_idx.items():
+                    sorted_records.sort(key=lambda x: x[0])
+                    for i in range(len(sorted_records) - 1):
+                        dt_curr, _ = sorted_records[i]
+                        dt_next, _ = sorted_records[i + 1]
+                        delta_sec = (dt_next - dt_curr).total_seconds()
+                        if delta_sec > MAX_INTER_BAR_GAP_SECONDS:
+                            gap_count += 1
+                            issues.append(
+                                SessionContinuityIssue(
+                                    issue_type="INTRADAY_DATA_GAP",
+                                    date_str=day_iso,
+                                    description=(
+                                        f"[{rec_und}] Telemetry gap of {delta_sec/60:.1f}m between "
+                                        f"{dt_curr.time()} and {dt_next.time()}"
+                                    ),
+                                    severity="WARNING",
+                                )
                             )
-                        )
 
         # Check for missing calendar trading days
         missing_days = [d for d in expected_days if d not in present_days_set]
@@ -261,85 +340,108 @@ class MultiSessionAggregator:
         return audit, parsed_records_by_day
 
     def extract_trades(self) -> List[NormalizedTrade]:
-        """Extract all completed and in-flight trade lifecycles from sentinel_apm_wal.json.
+        """Extract all completed and in-flight trade lifecycles from all configured WALs.
         
         Handles both completed trades in 'trade_history' and in-flight positions in 'payload'.
+        Deduplicates trades across WALs using composite key:
+        (underlying, strike_contract, direction, entry_time, position_id).
         """
         trades: List[NormalizedTrade] = []
-        if not self.wal_path.exists():
-            logger.warning("WAL path does not exist: %s", self.wal_path)
-            return trades
+        seen_keys: Set[Tuple[str, str, str, str, str]] = set()
 
-        with open(self.wal_path, "r", encoding="utf-8") as f:
-            wal = json.load(f)
+        for wal_label, current_wal_path in self.wal_paths.items():
+            if not current_wal_path.exists():
+                logger.warning("WAL path does not exist for %s: %s", wal_label, current_wal_path)
+                continue
 
-        wal_state = wal.get("state", "STANDBY")
-        trade_history = wal.get("trade_history", [])
+            try:
+                with open(current_wal_path, "r", encoding="utf-8") as f:
+                    wal = json.load(f)
+            except Exception as e:
+                logger.error("Failed to read WAL %s (%s): %s", wal_label, current_wal_path, e)
+                continue
 
-        for t in trade_history:
-            pos_id = t.get("position_id", "UNKNOWN")
-            symbol = t.get("opt_symbol") or t.get("strike_contract", "UNKNOWN")
-            underlying = "SENSEX" if "SENSEX" in symbol.upper() else "NIFTY"
-            direction = t.get("direction", "CE" if "CE" in symbol.upper() else "PE")
+            wal_state = wal.get("state", "STANDBY")
+            trade_history = wal.get("trade_history", [])
 
-            norm = NormalizedTrade(
-                position_id=pos_id,
-                symbol=symbol,
-                underlying=underlying,
-                direction=direction,
-                strike_contract=t.get("strike_contract", symbol),
-                entry_time=str(t.get("entry_time", "")),
-                exit_time=str(t.get("exit_time", "")) if t.get("exit_time") else None,
-                entry_price=float(t.get("entry_price", 0.0) or 0.0),
-                exit_price=float(t.get("exit_price", 0.0)) if t.get("exit_price") is not None else None,
-                pnl_pts=float(t.get("pnl_pts")) if t.get("pnl_pts") is not None else None,
-                opt_entry_ltp=float(t.get("opt_entry_ltp")) if t.get("opt_entry_ltp") is not None else None,
-                opt_exit_ltp=float(t.get("opt_exit_ltp")) if t.get("opt_exit_ltp") is not None else None,
-                opt_pnl_pts=float(t.get("opt_pnl_pts")) if t.get("opt_pnl_pts") is not None else None,
-                opt_peak_hwm=float(t.get("opt_peak_hwm")) if t.get("opt_peak_hwm") is not None else None,
-                exit_reason=t.get("exit_reason"),
-                session_gear=t.get("session_gear", "GEAR_2_TREND"),
-                is_in_flight=False,
-                opt_bid=float(t.get("opt_bid")) if t.get("opt_bid") is not None else None,
-                opt_ask=float(t.get("opt_ask")) if t.get("opt_ask") is not None else None,
-                raw_payload=t,
-            )
-            trades.append(norm)
+            for t in trade_history:
+                pos_id = str(t.get("position_id") or "UNKNOWN")
+                symbol = t.get("opt_symbol") or t.get("strike_contract") or "UNKNOWN"
+                underlying = self._detect_underlying(symbol, t)
+                direction = t.get("direction", "CE" if "CE" in symbol.upper() else "PE")
+                strike_contract = t.get("strike_contract", symbol)
+                entry_time = str(t.get("entry_time", ""))
 
-        # In-flight trade extraction
-        if wal_state in ("IN_FLIGHT", "TRAIL_LOCK") and wal.get("payload"):
-            p = wal["payload"]
-            pos_id = p.get("position_id", "IN_FLIGHT")
-            symbol = p.get("opt_symbol") or p.get("strike_contract", "UNKNOWN")
-            underlying = "SENSEX" if "SENSEX" in symbol.upper() else "NIFTY"
-            direction = p.get("direction", "CE" if "CE" in symbol.upper() else "PE")
+                composite_key = (underlying, strike_contract, direction, entry_time, pos_id)
+                if composite_key in seen_keys:
+                    continue
+                seen_keys.add(composite_key)
 
-            in_flight_norm = NormalizedTrade(
-                position_id=pos_id,
-                symbol=symbol,
-                underlying=underlying,
-                direction=direction,
-                strike_contract=p.get("strike_contract", symbol),
-                entry_time=str(p.get("entry_time", "")),
-                exit_time=None,
-                entry_price=float(p.get("entry_price", 0.0) or 0.0),
-                exit_price=None,
-                pnl_pts=None,
-                opt_entry_ltp=float(p.get("opt_entry_ltp")) if p.get("opt_entry_ltp") is not None else None,
-                opt_exit_ltp=float(p.get("opt_current_ltp")) if p.get("opt_current_ltp") is not None else None,
-                opt_pnl_pts=(
-                    float(p["opt_current_ltp"]) - float(p["opt_entry_ltp"])
-                    if p.get("opt_current_ltp") is not None and p.get("opt_entry_ltp") is not None
-                    else None
-                ),
-                opt_peak_hwm=float(p.get("opt_peak_hwm")) if p.get("opt_peak_hwm") is not None else None,
-                exit_reason="IN_FLIGHT",
-                session_gear=p.get("session_gear", "GEAR_2_TREND"),
-                is_in_flight=True,
-                opt_bid=float(p.get("opt_bid")) if p.get("opt_bid") is not None else None,
-                opt_ask=float(p.get("opt_ask")) if p.get("opt_ask") is not None else None,
-                raw_payload=p,
-            )
-            trades.append(in_flight_norm)
+                norm = NormalizedTrade(
+                    position_id=pos_id,
+                    symbol=symbol,
+                    underlying=underlying,
+                    direction=direction,
+                    strike_contract=strike_contract,
+                    entry_time=entry_time,
+                    exit_time=str(t.get("exit_time", "")) if t.get("exit_time") else None,
+                    entry_price=float(t.get("entry_price", 0.0) or 0.0),
+                    exit_price=float(t.get("exit_price", 0.0)) if t.get("exit_price") is not None else None,
+                    pnl_pts=float(t.get("pnl_pts")) if t.get("pnl_pts") is not None else None,
+                    opt_entry_ltp=float(t.get("opt_entry_ltp")) if t.get("opt_entry_ltp") is not None else None,
+                    opt_exit_ltp=float(t.get("opt_exit_ltp")) if t.get("opt_exit_ltp") is not None else None,
+                    opt_pnl_pts=float(t.get("opt_pnl_pts")) if t.get("opt_pnl_pts") is not None else None,
+                    opt_peak_hwm=float(t.get("opt_peak_hwm")) if t.get("opt_peak_hwm") is not None else None,
+                    exit_reason=t.get("exit_reason"),
+                    session_gear=t.get("session_gear", "GEAR_2_TREND"),
+                    is_in_flight=False,
+                    opt_bid=float(t.get("opt_bid")) if t.get("opt_bid") is not None else None,
+                    opt_ask=float(t.get("opt_ask")) if t.get("opt_ask") is not None else None,
+                    raw_payload=t,
+                )
+                trades.append(norm)
+
+            # In-flight trade extraction
+            if wal_state in ("IN_FLIGHT", "TRAIL_LOCK") and wal.get("payload"):
+                p = wal["payload"]
+                pos_id = str(p.get("position_id") or "IN_FLIGHT")
+                symbol = p.get("opt_symbol") or p.get("strike_contract") or "UNKNOWN"
+                underlying = self._detect_underlying(symbol, p)
+                direction = p.get("direction", "CE" if "CE" in symbol.upper() else "PE")
+                strike_contract = p.get("strike_contract", symbol)
+                entry_time = str(p.get("entry_time", ""))
+
+                composite_key = (underlying, strike_contract, direction, entry_time, pos_id)
+                if composite_key in seen_keys:
+                    continue
+                seen_keys.add(composite_key)
+
+                in_flight_norm = NormalizedTrade(
+                    position_id=pos_id,
+                    symbol=symbol,
+                    underlying=underlying,
+                    direction=direction,
+                    strike_contract=strike_contract,
+                    entry_time=entry_time,
+                    exit_time=None,
+                    entry_price=float(p.get("entry_price", 0.0) or 0.0),
+                    exit_price=None,
+                    pnl_pts=None,
+                    opt_entry_ltp=float(p.get("opt_entry_ltp")) if p.get("opt_entry_ltp") is not None else None,
+                    opt_exit_ltp=float(p.get("opt_current_ltp")) if p.get("opt_current_ltp") is not None else None,
+                    opt_pnl_pts=(
+                        float(p["opt_current_ltp"]) - float(p["opt_entry_ltp"])
+                        if p.get("opt_current_ltp") is not None and p.get("opt_entry_ltp") is not None
+                        else None
+                    ),
+                    opt_peak_hwm=float(p.get("opt_peak_hwm")) if p.get("opt_peak_hwm") is not None else None,
+                    exit_reason="IN_FLIGHT",
+                    session_gear=p.get("session_gear", "GEAR_2_TREND"),
+                    is_in_flight=True,
+                    opt_bid=float(p.get("opt_bid")) if p.get("opt_bid") is not None else None,
+                    opt_ask=float(p.get("opt_ask")) if p.get("opt_ask") is not None else None,
+                    raw_payload=p,
+                )
+                trades.append(in_flight_norm)
 
         return trades

@@ -235,9 +235,14 @@ class TestNonBlockingUIContract:
         assert "daily_breakdown" in report
         assert "trades" in report
 
-        # Must have NIFTY and SENSEX under index_comparison
+        # Must have NIFTY, SENSEX, and BANKNIFTY under index_comparison
         assert "NIFTY" in report["index_comparison"]
         assert "SENSEX" in report["index_comparison"]
+        assert "BANKNIFTY" in report["index_comparison"]
+        assert report["summary_kpis"]["total_trades"] == 69
+        assert report["index_comparison"]["BANKNIFTY"]["total_trades"] == 7
+        assert report["index_comparison"]["NIFTY"]["total_trades"] == 36
+        assert report["index_comparison"]["SENSEX"]["total_trades"] == 26
 
 
 class TestTradingSafetyInvariants:
@@ -255,3 +260,98 @@ class TestTradingSafetyInvariants:
 
         # Check KPI status
         assert report["summary_kpis"]["status"] == "NO_CERTIFIED_EDGE"
+
+
+class TestMultiWALIngestionAndLotSizes:
+    """QA Case 7: Multi-WAL Ingestion, Correct Lot Sizes, and Partitioned Continuity."""
+
+    def test_lot_sizes_configuration(self):
+        from core.analytics.quant_metrics_engine import LOT_SIZES
+        assert LOT_SIZES["NIFTY"] == 65
+        assert LOT_SIZES["BANKNIFTY"] == 40
+        assert LOT_SIZES["SENSEX"] == 20
+
+    def test_all_69_trades_ingested_and_deduplicated(self):
+        aggregator = MultiSessionAggregator()
+        trades = aggregator.extract_trades()
+        assert len(trades) == 69
+
+        by_underlying = {}
+        for t in trades:
+            by_underlying[t.underlying] = by_underlying.get(t.underlying, 0) + 1
+
+        assert by_underlying["NIFTY"] == 36
+        assert by_underlying["SENSEX"] == 26
+        assert by_underlying["BANKNIFTY"] == 7
+
+        # Verify underlying detection logic (BANKNIFTY checked before NIFTY)
+        for t in trades:
+            if "BANKNIFTY" in t.symbol.upper():
+                assert t.underlying == "BANKNIFTY"
+            elif "SENSEX" in t.symbol.upper():
+                assert t.underlying == "SENSEX"
+            elif "NIFTY" in t.symbol.upper():
+                assert t.underlying == "NIFTY"
+
+    def test_partitioned_continuity_gap_detection(self, tmp_path: Path):
+        audit_dir = tmp_path / "audit"
+        audit_dir.mkdir()
+
+        # Day with interleaved records: NIFTY has no gap, BANKNIFTY has a 10 min gap
+        day_file = audit_dir / "sentinel_execution_paths_20261026.jsonl"
+        with open(day_file, "w") as f:
+            # BANKNIFTY at 09:15:00
+            f.write(json.dumps({"timestamp": "2026-10-26T09:15:00+05:30", "opt_symbol": "BANKNIFTY 54900 CE", "underlying": "BANKNIFTY"}) + "\n")
+            # NIFTY at 09:18:00
+            f.write(json.dumps({"timestamp": "2026-10-26T09:18:00+05:30", "opt_symbol": "NIFTY 22600 CE", "underlying": "NIFTY"}) + "\n")
+            # NIFTY at 09:20:00 (NIFTY delta = 2m <= 5m)
+            f.write(json.dumps({"timestamp": "2026-10-26T09:20:00+05:30", "opt_symbol": "NIFTY 22600 CE", "underlying": "NIFTY"}) + "\n")
+            # BANKNIFTY at 09:26:00 (BANKNIFTY delta = 11m > 5m)
+            f.write(json.dumps({"timestamp": "2026-10-26T09:26:00+05:30", "opt_symbol": "BANKNIFTY 54900 CE", "underlying": "BANKNIFTY"}) + "\n")
+
+        wal_file = tmp_path / "wal.json"
+        wal_file.write_text(json.dumps({"state": "STANDBY", "trade_history": []}))
+
+        aggregator = MultiSessionAggregator(
+            audit_dir=audit_dir,
+            wal_path=wal_file,
+            start_date="2026-10-26",
+            end_date="2026-10-26",
+        )
+
+        audit, _ = aggregator.run_continuity_audit()
+        gap_issues = [i for i in audit.issues if i.issue_type == "INTRADAY_DATA_GAP"]
+        assert len(gap_issues) == 1
+        assert "[BANKNIFTY]" in gap_issues[0].description
+        assert "11.0m" in gap_issues[0].description
+
+    def test_options_cost_breakdown_with_updated_lot_sizes(self):
+        engine = QuantMetricsEngine()
+        trade_nifty = NormalizedTrade(
+            position_id="T_NIFTY", symbol="NIFTY 22600 CE", underlying="NIFTY", direction="CE",
+            strike_contract="NIFTY 22600 CE", entry_time="2026-10-26T10:00:00", exit_time="2026-10-26T10:15:00",
+            entry_price=22600.0, exit_price=22650.0, pnl_pts=50.0,
+            opt_entry_ltp=100.0, opt_exit_ltp=120.0, opt_pnl_pts=20.0, opt_peak_hwm=125.0,
+            exit_reason="TARGET_HIT", session_gear="GEAR_2_TREND",
+        )
+        trade_banknifty = NormalizedTrade(
+            position_id="T_BANKNIFTY", symbol="BANKNIFTY 54900 CE", underlying="BANKNIFTY", direction="CE",
+            strike_contract="BANKNIFTY 54900 CE", entry_time="2026-10-26T10:00:00", exit_time="2026-10-26T10:15:00",
+            entry_price=54900.0, exit_price=55000.0, pnl_pts=100.0,
+            opt_entry_ltp=200.0, opt_exit_ltp=250.0, opt_pnl_pts=50.0, opt_peak_hwm=260.0,
+            exit_reason="TARGET_HIT", session_gear="GEAR_2_TREND",
+        )
+
+        cost_nifty = engine.calculate_trade_costs(trade_nifty)
+        # NIFTY lot size 65: Slippage = 0.5 * 2 * 65 = 65.0
+        assert cost_nifty.slippage_cost == 65.0
+        # Gross PnL: 20 pts * 65 = 1300.0
+        acc_nifty = engine.process_trades([trade_nifty])[0]
+        assert acc_nifty.gross_pnl_rupees == 1300.0
+
+        cost_banknifty = engine.calculate_trade_costs(trade_banknifty)
+        # BANKNIFTY lot size 40: Slippage = 0.5 * 2 * 40 = 40.0
+        assert cost_banknifty.slippage_cost == 40.0
+        # Gross PnL: 50 pts * 40 = 2000.0
+        acc_banknifty = engine.process_trades([trade_banknifty])[0]
+        assert acc_banknifty.gross_pnl_rupees == 2000.0

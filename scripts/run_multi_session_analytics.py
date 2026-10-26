@@ -37,19 +37,22 @@ OUTPUT_PATH = Path("reports/research/sentinel_multi_session_analytics.json")
 
 def generate_multi_session_report(
     start_date: str = "2026-10-07",
-    end_date: str = "2026-10-19",
+    end_date: Optional[str] = None,
     audit_dir: str = "runtime/audit",
-    wal_path: str = "runtime/sentinel_apm_wal.json",
+    wal_path: Any = None,
     bootstrap_resamples: int = 2000,
 ) -> Dict[str, Any]:
+    # Dynamic end_date defaulting to today's date if None
+    effective_end_date = end_date or datetime.now().date().isoformat()
+
     aggregator = MultiSessionAggregator(
         audit_dir=audit_dir,
         wal_path=wal_path,
         start_date=start_date,
-        end_date=end_date,
+        end_date=effective_end_date,
     )
 
-    logger.info("Running Session Continuity Audit (%s to %s)...", start_date, end_date)
+    logger.info("Running Session Continuity Audit (%s to %s)...", start_date, effective_end_date)
     continuity_audit, parsed_records = aggregator.run_continuity_audit()
 
     logger.info("Extracting trades from WAL...")
@@ -65,11 +68,17 @@ def generate_multi_session_report(
     logger.info("Computing Bootstrap Confidence Intervals (%d resamples)...", bootstrap_resamples)
     bootstraps = engine.bootstrap_confidence_intervals(accountings, n_resamples=bootstrap_resamples)
 
-    # 1. Index-level breakdowns (NIFTY vs SENSEX)
-    nifty_trades = [a for a in accountings if a.trade.underlying == "NIFTY"]
-    sensex_trades = [a for a in accountings if a.trade.underlying == "SENSEX"]
-    nifty_kpis = engine.compute_summary_kpis(nifty_trades)
-    sensex_kpis = engine.compute_summary_kpis(sensex_trades)
+    # 1. Index-level breakdowns (dynamically computed for all detected underlyings)
+    all_underlyings = sorted(list(set(a.trade.underlying for a in accountings)))
+    # Ensure standard indices are present even if 0 trades
+    for standard_idx in ("NIFTY", "SENSEX", "BANKNIFTY"):
+        if standard_idx not in all_underlyings:
+            all_underlyings.append(standard_idx)
+
+    index_comparison = {}
+    for und in all_underlyings:
+        und_trades = [a for a in accountings if a.trade.underlying == und]
+        index_comparison[und] = engine.compute_summary_kpis(und_trades).to_dict()
 
     # 2. Daily breakdown table
     daily_groups: Dict[str, List[Any]] = defaultdict(list)
@@ -123,7 +132,7 @@ def generate_multi_session_report(
         "metadata": {
             "generated_at_utc": datetime.now(timezone.utc).isoformat(),
             "period_start": start_date,
-            "period_end": end_date,
+            "period_end": effective_end_date,
             "status": "NO_CERTIFIED_EDGE",
             "safety": {
                 "read_only": True,
@@ -135,10 +144,7 @@ def generate_multi_session_report(
         "continuity_audit": continuity_audit.to_dict(),
         "summary_kpis": kpis.to_dict(),
         "bootstrap_edge_significance": {k: v.to_dict() for k, v in bootstraps.items()},
-        "index_comparison": {
-            "NIFTY": nifty_kpis.to_dict(),
-            "SENSEX": sensex_kpis.to_dict(),
-        },
+        "index_comparison": index_comparison,
         "regime_attribution": regime_attribution,
         "root_cause_taxonomy": root_cause_summary,
         "daily_breakdown": daily_breakdown,
@@ -156,9 +162,9 @@ def generate_multi_session_report(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Sentinel Multi-Session Quant Analytics Runner")
     parser.add_argument("--start-date", default="2026-10-07", help="Start date YYYY-MM-DD")
-    parser.add_argument("--end-date", default="2026-10-19", help="End date YYYY-MM-DD")
+    parser.add_argument("--end-date", default=None, help="End date YYYY-MM-DD (defaults to today)")
     parser.add_argument("--audit-dir", default="runtime/audit", help="Audit directory")
-    parser.add_argument("--wal-path", default="runtime/sentinel_apm_wal.json", help="WAL path")
+    parser.add_argument("--wal-path", default=None, help="WAL path (or None for canonical multi-WALs)")
     parser.add_argument("--resamples", type=int, default=2000, help="Number of bootstrap resamples")
     args = parser.parse_args()
 

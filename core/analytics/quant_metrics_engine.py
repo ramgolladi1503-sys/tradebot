@@ -38,10 +38,11 @@ BROKERAGE_PER_LEG = 20.0
 GST_RATE = 0.18
 DEFAULT_SLIPPAGE_PTS = 0.50
 
-# Index lot sizes
+# Index lot sizes (Current SEBI / Exchange standard)
 LOT_SIZES = {
-    "NIFTY": 50,  # Standard NIFTY 50 lot size
-    "SENSEX": 20,  # Standard BSE SENSEX lot size (re-indexed 20/25)
+    "NIFTY": 65,  # Standard NIFTY lot size
+    "BANKNIFTY": 40,  # Standard BANKNIFTY lot size
+    "SENSEX": 20,  # Standard BSE SENSEX lot size
 }
 
 
