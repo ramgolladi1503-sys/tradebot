@@ -123,3 +123,101 @@ def test_gate_c_multi_tranche_accounting_preserves_pnl(tmp_path):
     assert summary["opt_pnl_pts"] == 9.0
     assert summary["tranche_1_pnl_pts"] == 24.0
     assert summary["runner_pnl_pts"] == -6.0
+
+
+def test_gate_d_reversal_allowed_during_cool_off(tmp_path):
+    """Proves that opposite-direction reversal trades are NOT blocked during cooldown."""
+    wal = tmp_path / "test_wal_reversal.json"
+    apm = ActivePositionManager(wal_path=str(wal))
+
+    # Enter and liquidate a PE trade
+    apm.arm_and_enter(
+        position_id="TRADE_PE_STOPPED",
+        direction="PE",
+        contract="NIFTY 22500 PE",
+        entry_price=22500.0,
+        entry_time_str="2026-10-28T10:30:00",
+        atr_1m=10.0,
+    )
+    apm.state = "EXIT_PENDING"
+    state, summary = apm.liquidate()
+    assert state == STATE_COOL_OFF
+    assert apm.cool_off_direction == "PE"
+
+    # 1. Attempt same-direction PE trade -> REJECTED
+    pe_entered = apm.arm_and_enter(
+        position_id="TRADE_PE_CHURN",
+        direction="PE",
+        contract="NIFTY 22500 PE",
+        entry_price=22500.0,
+        entry_time_str="2026-10-28T10:30:05",
+        atr_1m=10.0,
+    )
+    assert pe_entered is False
+    assert apm.state == STATE_COOL_OFF
+
+    # 2. Attempt opposite-direction CE trade (reversal pivot) -> ACCEPTED
+    ce_entered = apm.arm_and_enter(
+        position_id="TRADE_CE_REVERSAL",
+        direction="CE",
+        contract="NIFTY 22500 CE",
+        entry_price=22510.0,
+        entry_time_str="2026-10-28T10:30:10",
+        atr_1m=10.0,
+    )
+    assert ce_entered is True
+    assert apm.state == "IN_FLIGHT"
+    assert apm.payload.direction == "CE"
+
+
+def test_gate_e_wal_persistence_and_recovery_of_cooldown(tmp_path):
+    """Proves that WAL serialization preserves cool_off_* fields across process crashes."""
+    wal = tmp_path / "test_wal_cooldown_recovery.json"
+    apm = ActivePositionManager(wal_path=str(wal))
+
+    apm.arm_and_enter(
+        position_id="TRADE_1",
+        direction="CE",
+        contract="NIFTY 22600 CE",
+        entry_price=22600.0,
+        entry_time_str="2026-10-28T11:00:00",
+    )
+    apm.state = "EXIT_PENDING"
+    apm.liquidate(cooldown_seconds=120.0)
+    assert apm.state == STATE_COOL_OFF
+    assert apm.cool_off_direction == "CE"
+    assert apm.cool_off_until is not None
+
+    # Simulate process reboot with a new APM instance pointing to same WAL
+    apm_recovered = ActivePositionManager(wal_path=str(wal))
+    assert apm_recovered.state == STATE_COOL_OFF
+    assert apm_recovered.cool_off_direction == "CE"
+    assert apm_recovered.cool_off_until is not None
+    assert apm_recovered.cool_off_ref_spot == 22600.0
+
+
+def test_gate_f_dynamic_itm_strike_escalation():
+    """Proves that ITMStrikeResolver escalates to ITM-2 when IV > 18%."""
+    from core.structural_alpha_gates import ITMStrikeResolver
+
+    # Low/Normal IV (14%): Selects ITM-1 (50 pts ITM for Nifty)
+    res_normal = ITMStrikeResolver.resolve_target_strike(
+        spot=22520.0,
+        direction="CE",
+        index_name="NIFTY",
+        iv_annualized=0.14,
+    )
+    assert res_normal.moneyness == "ITM_1"
+    assert res_normal.target_strike == 22450.0  # ATM (22500) - 50 = 22450
+    assert res_normal.estimated_delta >= 0.65
+
+    # High IV (22%): Escalates to ITM-2 (100 pts ITM for Nifty) to maintain Delta >= 0.65
+    res_high_iv = ITMStrikeResolver.resolve_target_strike(
+        spot=22520.0,
+        direction="CE",
+        index_name="NIFTY",
+        iv_annualized=0.22,
+    )
+    assert res_high_iv.moneyness == "ITM_2"
+    assert res_high_iv.target_strike == 22400.0  # ATM (22500) - 100 = 22400
+    assert res_high_iv.estimated_delta >= 0.65

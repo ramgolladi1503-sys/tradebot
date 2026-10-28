@@ -41,6 +41,8 @@ class ITMStrikeResolver:
         direction: str,  # "CE" or "PE"
         index_name: str = "NIFTY",
         target_delta: float = 0.70,
+        iv_annualized: float = 0.14,
+        dte_days: float = 3.0,
     ) -> StrikeSelectionResult:
         if index_name == "SENSEX":
             interval = 100.0
@@ -52,18 +54,29 @@ class ITMStrikeResolver:
         atm = round(spot / interval) * interval
         dir_clean = direction.upper()
 
+        # Adversarial Hardening: Defensive clamping against unseeded spots, zero/negative IV, or NaN
+        safe_spot = max(spot, 1.0)
+        safe_iv = max(abs(iv_annualized) if not math.isnan(iv_annualized) else 0.14, 0.01)
+        safe_dte = max(dte_days if not math.isnan(dte_days) else 0.5, 0.5)
+
+        # Dynamic Strike Escalation: If IV > 18.0%, escalate to ITM-2 to preserve Delta >= 0.65
+        step_multiplier = 2 if safe_iv > 0.18 else 1
+        effective_offset_val = interval * step_multiplier
+
+        # Robust BSM delta approximation with bounded 0.50 - 0.90 clamping
+        raw_delta = 0.50 + (effective_offset_val / (safe_spot * safe_iv * math.sqrt(safe_dte / 365.0)))
+        delta_mag = round(max(0.50, min(0.90, raw_delta)), 2)
+
         if dir_clean == "CE":
-            # For Call: Lower strike is ITM (ATM - 1 interval)
-            target = atm - interval
-            offset = -1
-            moneyness = "ITM_1"
-            est_delta = 0.68
+            target = atm - effective_offset_val
+            offset = -step_multiplier
+            moneyness = f"ITM_{step_multiplier}"
+            est_delta = delta_mag
         else:
-            # For Put: Higher strike is ITM (ATM + 1 interval)
-            target = atm + interval
-            offset = 1
-            moneyness = "ITM_1"
-            est_delta = -0.68
+            target = atm + effective_offset_val
+            offset = step_multiplier
+            moneyness = f"ITM_{step_multiplier}"
+            est_delta = -delta_mag
 
         return StrikeSelectionResult(
             target_strike=target,

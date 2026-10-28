@@ -103,18 +103,23 @@ class OptionConfidenceScorer:
         if total_depth > 0:
             # For buying options (both CE and PE), we want aggressive buyers lining up on the bid
             queue_ratio = depth_bid_q_sum / max(depth_ask_q_sum, 1)
-            if queue_ratio >= 2.0:
-                depth_score = 20
-                reasons.append(f"Massive Level-5 Buyer Queue (Ratio={queue_ratio:.2f}x) (+20)")
-            elif queue_ratio >= 1.2:
-                depth_score = 12
-                reasons.append(f"Favorable Level-5 Depth (Ratio={queue_ratio:.2f}x) (+12)")
-            elif queue_ratio >= 0.8:
-                depth_score = 6
-                reasons.append(f"Balanced Order Book (+6)")
+            # Require minimum depth threshold (>= 50 qty) to filter illiquid or synthetic single-lot quotes
+            if total_depth >= 50:
+                if queue_ratio >= 2.0:
+                    depth_score = 20
+                    reasons.append(f"Level-5 Buyer Queue Dominance (Ratio={queue_ratio:.2f}x, Vol={total_depth}) (+20)")
+                elif queue_ratio >= 1.2:
+                    depth_score = 12
+                    reasons.append(f"Favorable Level-5 Depth (Ratio={queue_ratio:.2f}x, Vol={total_depth}) (+12)")
+                elif queue_ratio >= 0.8:
+                    depth_score = 6
+                    reasons.append(f"Balanced Order Book (+6)")
+                else:
+                    depth_score = 0
+                    reasons.append(f"Ask-Heavy Book Selling Pressure (Ratio={queue_ratio:.2f}x) (+0)")
             else:
-                depth_score = 0
-                reasons.append(f"Ask-Heavy Book Selling Pressure (Ratio={queue_ratio:.2f}x) (+0)")
+                depth_score = 4
+                reasons.append(f"Thin Level-5 Book Depth ({total_depth} qty) (+4)")
         else:
             depth_score = 5
 

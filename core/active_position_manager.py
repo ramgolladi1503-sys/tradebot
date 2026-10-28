@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import math
+import time
 from datetime import datetime, time as dtime
 from pathlib import Path
 from dataclasses import dataclass, asdict
@@ -109,23 +110,37 @@ class ActivePositionManager:
         self.cool_off_until: Optional[datetime] = None
         self.cool_off_ref_spot: Optional[float] = None
         self.cool_off_direction: Optional[str] = None
+        self._last_wal_persist_ts: float = 0.0
         self._recover_state_or_fail_closed()
 
-    def _persist_wal_atomic(self):
-        """Invariant 1.2: Atomic Write-Ahead Log persistence via temp file rename."""
+    def _persist_wal_atomic(self, force_sync: bool = True):
+        """Invariant 1.2: Atomic Write-Ahead Log persistence via temp file rename.
+        
+        When force_sync=False, updates are debounced to at most once per 1.0s to protect
+        the event loop thread from os.fsync storage jitter during continuous tick HWM updates.
+        """
+        now_ts = time.time()
+        if not force_sync and (now_ts - self._last_wal_persist_ts) < 1.0:
+            return
+
         tmp_path = self.wal_path.with_suffix(".tmp")
         data = {
             "state": self.state,
             "payload": asdict(self.payload) if self.payload else None,
             "last_completed_trade": self.last_completed_trade,
             "trade_history": self.trade_history,
+            "cool_off_until": self.cool_off_until.isoformat() if self.cool_off_until else None,
+            "cool_off_ref_spot": self.cool_off_ref_spot,
+            "cool_off_direction": self.cool_off_direction,
             "persisted_at": datetime.now().isoformat()
         }
         with open(tmp_path, "w") as f:
             json.dump(data, f, indent=2)
             f.flush()
-            os.fsync(f.fileno())
+            if force_sync:
+                os.fsync(f.fileno())
         os.replace(tmp_path, self.wal_path)
+        self._last_wal_persist_ts = now_ts
 
     def _recover_state_or_fail_closed(self):
         """Invariant 1.3: On boot, load WAL. If crashed mid-trade, mark fail-closed EXIT_PENDING."""
@@ -140,6 +155,16 @@ class ActivePositionManager:
             self.last_completed_trade = data.get("last_completed_trade")
             self.trade_history = data.get("trade_history", [])
 
+            # Recover cool-off state
+            saved_cool_until = data.get("cool_off_until")
+            if saved_cool_until:
+                try:
+                    self.cool_off_until = datetime.fromisoformat(saved_cool_until)
+                except Exception:
+                    self.cool_off_until = None
+            self.cool_off_ref_spot = data.get("cool_off_ref_spot")
+            self.cool_off_direction = data.get("cool_off_direction")
+
             if saved_payload:
                 self.payload = PositionPayload(**saved_payload)
 
@@ -149,7 +174,7 @@ class ActivePositionManager:
                 self.state = STATE_EXIT_PENDING
                 if self.payload:
                     self.payload.exit_reason = "CRASH_RECOVERY_FAIL_CLOSED"
-                self._persist_wal_atomic()
+                self._persist_wal_atomic(force_sync=True)
             else:
                 self.state = saved_state
         except Exception as e:
@@ -234,24 +259,31 @@ class ActivePositionManager:
             return False
 
         # Invariant 2.3: Anti-Churn Cool-Off State Gate
+        cleared_cool_off = False
         if self.state == STATE_COOL_OFF:
             now_dt = datetime.now()
-            if self.cool_off_until and now_dt < self.cool_off_until:
-                rem_sec = (self.cool_off_until - now_dt).total_seconds()
-                logger.warning(f"ENTRY_REJECTED: APM in STATE_COOL_OFF for {rem_sec:.1f}s more. Suppressing churn.")
-                return False
-            # Check structural extreme if ref spot available
-            if self.cool_off_ref_spot is not None and self.cool_off_direction:
-                if self.cool_off_direction == "CE" and entry_price <= self.cool_off_ref_spot:
-                    logger.warning("ENTRY_REJECTED: Spot has not exceeded pre-exit high extreme. Suppressing churn.")
+            # If the new setup is a reversal (opposite direction), allow immediate pivot
+            is_same_direction = (self.cool_off_direction is not None and self.cool_off_direction == direction)
+            
+            if is_same_direction:
+                if self.cool_off_until and now_dt < self.cool_off_until:
+                    rem_sec = (self.cool_off_until - now_dt).total_seconds()
+                    logger.warning(f"ENTRY_REJECTED: APM in STATE_COOL_OFF for {rem_sec:.1f}s more. Suppressing same-direction churn.")
                     return False
-                elif self.cool_off_direction == "PE" and entry_price >= self.cool_off_ref_spot:
-                    logger.warning("ENTRY_REJECTED: Spot has not broken pre-exit low extreme. Suppressing churn.")
-                    return False
-            # Cleared cool-off
-            self._transition_to(STATE_STANDBY)
+                # Check structural extreme if ref spot available
+                if self.cool_off_ref_spot is not None:
+                    if self.cool_off_direction == "CE" and entry_price <= self.cool_off_ref_spot:
+                        logger.warning("ENTRY_REJECTED: Spot has not exceeded pre-exit high extreme. Suppressing same-direction churn.")
+                        return False
+                    elif self.cool_off_direction == "PE" and entry_price >= self.cool_off_ref_spot:
+                        logger.warning("ENTRY_REJECTED: Spot has not broken pre-exit low extreme. Suppressing same-direction churn.")
+                        return False
+            else:
+                logger.info(f"COOL_OFF_PIVOT_ALLOWED: Immediate reversal trade permitted ({self.cool_off_direction} -> {direction}).")
+            
+            cleared_cool_off = True
 
-        if self.state not in {STATE_STANDBY, STATE_LIQUIDATED, STATE_PULLBACK_WAIT}:
+        if not cleared_cool_off and self.state not in {STATE_STANDBY, STATE_LIQUIDATED, STATE_PULLBACK_WAIT}:
             return False
 
         # Invariant: Regime-Aware Session Trade Cap
@@ -267,6 +299,10 @@ class ActivePositionManager:
         if today_trades_count >= effective_cap:
             logger.warning(f"SESSION_TRADE_CAP_REACHED: {today_trades_count} trades already executed today (cap={effective_cap}). Suppressing entry.")
             return False
+
+        # If cool-off was cleared and downstream gates pass, transition to STANDBY
+        if cleared_cool_off:
+            self._transition_to(STATE_STANDBY)
 
         if not self._transition_to(STATE_ARMED):
             return False
@@ -530,7 +566,7 @@ class ActivePositionManager:
                 if self.state == STATE_IN_FLIGHT:
                     self._transition_to(STATE_TRAIL_LOCK)
 
-        self._persist_wal_atomic()
+        self._persist_wal_atomic(force_sync=False)
         return self.state, asdict(p)
 
     def evaluate_bar(
@@ -714,11 +750,16 @@ class ActivePositionManager:
         except Exception:
             pass
 
-        self._persist_wal_atomic()
+        self._persist_wal_atomic(force_sync=False)
         return self.state, asdict(p)
 
-    def liquidate(self, cooldown_seconds: float = 180.0) -> Tuple[str, Dict[str, Any]]:
-        """Completes liquidation, arms COOL_OFF state to prevent 2-second churn loops, and records summary."""
+    def liquidate(self, cooldown_seconds: Optional[float] = None) -> Tuple[str, Dict[str, Any]]:
+        """Completes liquidation, arms COOL_OFF state to prevent 2-second churn loops, and records summary.
+        
+        Dynamically scales cooldown by session gear:
+        - GEAR_2_TREND: 60 seconds (allows rapid resumption of trending moves)
+        - GEAR_1_RANGE / ROTATIONAL_CHOP: 300 seconds (dampens whipsaw churn)
+        """
         if self.state != STATE_EXIT_PENDING:
             return self.state, asdict(self.payload) if self.payload else {}
         summary = asdict(self.payload) if self.payload else {}
@@ -726,10 +767,17 @@ class ActivePositionManager:
         if summary:
             self.trade_history.append(summary)
 
+        # Dynamic regime-scaled cooldown
+        if cooldown_seconds is None:
+            gear = self.payload.session_gear if self.payload else "GEAR_1_RANGE"
+            effective_cooldown = 60.0 if gear == "GEAR_2_TREND" else 300.0
+        else:
+            effective_cooldown = cooldown_seconds
+
         # Invariant 2.1: Transition to STATE_COOL_OFF rather than direct naked standby
-        if cooldown_seconds > 0.0:
+        if effective_cooldown > 0.0:
             from datetime import timedelta
-            self.cool_off_until = datetime.now() + timedelta(seconds=cooldown_seconds)
+            self.cool_off_until = datetime.now() + timedelta(seconds=effective_cooldown)
             if self.payload:
                 self.cool_off_ref_spot = self.payload.exit_price or self.payload.entry_price
                 self.cool_off_direction = self.payload.direction
@@ -744,7 +792,7 @@ class ActivePositionManager:
 
         # Clear payload for next trade
         self.payload = None
-        self._persist_wal_atomic()
+        self._persist_wal_atomic(force_sync=True)
         return next_state, summary
 
     def evaluate_pullback_reentry(

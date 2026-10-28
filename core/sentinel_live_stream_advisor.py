@@ -564,13 +564,18 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 or_bounds=self.or_bounds,
             )
 
-            # Dynamic Orderbook Conviction (Hermes Invariant 4.2)
-            tot_depth = depth_bids + depth_asks
-            if tot_depth > 0:
-                imbalance = (depth_bids - depth_asks) / tot_depth
-                # For CE, high bid depth is bullish; for PE, high ask depth or negative imbalance indicates put demand
-                signed_imb = imbalance if required_option_type == "CE" else -imbalance
-                dyn_conviction = max(0.20, min(0.95, round(0.50 + 0.50 * signed_imb, 2)))
+            # Factor 2: Macro Multi-Strike Option Writer Conviction (Decoupled from Factor 3 Depth)
+            wall_obs = self.wall_observers.get(index_name)
+            if wall_obs:
+                w_state = wall_obs.compute_wall_state()
+                # Derive writer conviction from multi-strike open interest asymmetry (PCR and Net OI)
+                pcr = w_state.pcr_oi
+                if required_option_type == "CE":
+                    # Bullish: Low call wall resistance or put buildup (pcr > 1.0)
+                    dyn_conviction = max(0.20, min(0.95, round(0.50 + 0.35 * (pcr - 1.0), 2)))
+                else:
+                    # Bearish: High call writing or put unwinding (pcr < 1.0)
+                    dyn_conviction = max(0.20, min(0.95, round(0.50 + 0.35 * (1.0 - pcr), 2)))
             else:
                 dyn_conviction = 0.50
 
