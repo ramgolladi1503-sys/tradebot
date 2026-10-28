@@ -13,6 +13,7 @@ from core.active_position_manager import (
     STATE_IN_FLIGHT,
     STATE_TRAIL_LOCK,
     STATE_EXIT_PENDING,
+    STATE_COOL_OFF,
     STATE_LIQUIDATED
 )
 from core.analytics.writer_oi_analyzer import OptionWriterRadar
@@ -39,7 +40,7 @@ def test_dynamic_target_scaling_sensex_vs_nifty(tmp_path):
     assert apm.payload.initial_sl == 22962.0
 
     apm.state = STATE_EXIT_PENDING
-    apm.liquidate()
+    apm.liquidate(cooldown_seconds=0.0)
 
     # SENSEX test: ATR = 30, Entry = 74000
     sensex_entered = apm.arm_and_enter(
@@ -79,24 +80,26 @@ def test_chandelier_trailing_stop_survives_noise_dips(tmp_path):
     state, p = apm.evaluate_tick(current_spot=73840.0, current_opt_ltp=450.0, atr_1m=30.0)
     assert p["half_booked"] is True
     assert state == STATE_TRAIL_LOCK
-    # Chandelier cushion for SENSEX: max(25.0, 0.20 * 450) = 90.0
-    # runner_trailing_sl = 450 - 90 = 360.0
-    assert p["runner_trailing_sl"] == 360.0
+    # Clamped cushion with monotonic floor (Hermes Invariant 1.1 & 1.2):
+    # Monotonic floor: 400 + 5.0 = 405.0. Clamped cushion preserves >= 65% gain (432.5)
+    assert p["runner_trailing_sl"] == 432.5
 
     # 2. Option rallies to 500 (+100 pts)
     state, p = apm.evaluate_tick(current_spot=73750.0, current_opt_ltp=500.0, atr_1m=30.0)
-    # runner_trailing_sl = 500 - max(25.0, 0.20 * 500) = 500 - 100 = 400.0 (locked entry)
-    assert p["runner_trailing_sl"] == 400.0
+    # Peak excursion = 100 pts. Clamped cushion preserves >= 65% of 100 pts -> 500 - 35 = 465.0
+    assert p["runner_trailing_sl"] == 465.0
 
     # 3. Microstructure noise dip: Option pulls back 18 pts from 500 to 482
     state, p = apm.evaluate_tick(current_spot=73765.0, current_opt_ltp=482.0, atr_1m=30.0)
-    # Must NOT exit on 18-point noise dip!
+    # Must NOT exit on 18-point noise dip (SL is at 465.0)
     assert state == STATE_TRAIL_LOCK
     assert p["exit_reason"] is None
 
-    # 4. Macro reversal: Option falls below Chandelier trailing stop (400.0)
+    # 4. Macro reversal: Option falls below Chandelier trailing stop (465.0)
     state, p = apm.evaluate_tick(current_spot=73900.0, current_opt_ltp=395.0, atr_1m=30.0)
-    assert state == STATE_LIQUIDATED
+    # Liquidated runner enters STATE_COOL_OFF to block immediate churn
+    assert state == STATE_COOL_OFF
+    assert p["exit_reason"] == "RUNNER_HWM_TRAILING_EXIT"
     assert p["exit_reason"] == "RUNNER_HWM_TRAILING_EXIT"
     assert p["opt_exit_ltp"] == 395.0
 

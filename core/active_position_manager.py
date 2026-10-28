@@ -26,6 +26,7 @@ STATE_IN_FLIGHT = "IN_FLIGHT"
 STATE_TRAIL_LOCK = "TRAIL_LOCK"
 STATE_PULLBACK_WAIT = "PULLBACK_WAIT"
 STATE_EXIT_PENDING = "EXIT_PENDING"
+STATE_COOL_OFF = "COOL_OFF"
 STATE_LIQUIDATED = "LIQUIDATED"
 
 VALID_TRANSITIONS = {
@@ -33,9 +34,10 @@ VALID_TRANSITIONS = {
     STATE_ARMED: {STATE_IN_FLIGHT, STATE_STANDBY},
     STATE_IN_FLIGHT: {STATE_TRAIL_LOCK, STATE_EXIT_PENDING, STATE_PULLBACK_WAIT},
     STATE_TRAIL_LOCK: {STATE_EXIT_PENDING, STATE_PULLBACK_WAIT},
-    STATE_PULLBACK_WAIT: {STATE_ARMED, STATE_LIQUIDATED, STATE_STANDBY},
-    STATE_EXIT_PENDING: {STATE_LIQUIDATED},
-    STATE_LIQUIDATED: {STATE_ARMED, STATE_STANDBY, STATE_PULLBACK_WAIT},
+    STATE_PULLBACK_WAIT: {STATE_ARMED, STATE_LIQUIDATED, STATE_STANDBY, STATE_COOL_OFF},
+    STATE_EXIT_PENDING: {STATE_COOL_OFF, STATE_LIQUIDATED},
+    STATE_COOL_OFF: {STATE_STANDBY, STATE_ARMED},
+    STATE_LIQUIDATED: {STATE_COOL_OFF, STATE_STANDBY, STATE_ARMED, STATE_PULLBACK_WAIT},
 }
 
 
@@ -87,6 +89,13 @@ class PositionPayload:
     giveback_clamp_sl: Optional[float] = None
     reentry_count: int = 0
     pullback_reference_price: Optional[float] = None
+    # Tranche Accounting Schema Fields (Hermes Mandate 3)
+    opt_half_booked_ltp: Optional[float] = None
+    opt_half_booked_time: Optional[str] = None
+    tranche_1_pnl_pts: Optional[float] = None
+    runner_exit_ltp: Optional[float] = None
+    runner_pnl_pts: Optional[float] = None
+    blended_opt_pnl_pts: Optional[float] = None
 
 
 class ActivePositionManager:
@@ -97,6 +106,9 @@ class ActivePositionManager:
         self.payload: Optional[PositionPayload] = None
         self.last_completed_trade: Optional[Dict[str, Any]] = None
         self.trade_history: List[Dict[str, Any]] = []
+        self.cool_off_until: Optional[datetime] = None
+        self.cool_off_ref_spot: Optional[float] = None
+        self.cool_off_direction: Optional[str] = None
         self._recover_state_or_fail_closed()
 
     def _persist_wal_atomic(self):
@@ -221,17 +233,36 @@ class ActivePositionManager:
             logger.warning(f"ENTRY_REJECTED: lots={lots} < 1 (Floor-or-Reject invariant). Suppressing entry.")
             return False
 
+        # Invariant 2.3: Anti-Churn Cool-Off State Gate
+        if self.state == STATE_COOL_OFF:
+            now_dt = datetime.now()
+            if self.cool_off_until and now_dt < self.cool_off_until:
+                rem_sec = (self.cool_off_until - now_dt).total_seconds()
+                logger.warning(f"ENTRY_REJECTED: APM in STATE_COOL_OFF for {rem_sec:.1f}s more. Suppressing churn.")
+                return False
+            # Check structural extreme if ref spot available
+            if self.cool_off_ref_spot is not None and self.cool_off_direction:
+                if self.cool_off_direction == "CE" and entry_price <= self.cool_off_ref_spot:
+                    logger.warning("ENTRY_REJECTED: Spot has not exceeded pre-exit high extreme. Suppressing churn.")
+                    return False
+                elif self.cool_off_direction == "PE" and entry_price >= self.cool_off_ref_spot:
+                    logger.warning("ENTRY_REJECTED: Spot has not broken pre-exit low extreme. Suppressing churn.")
+                    return False
+            # Cleared cool-off
+            self._transition_to(STATE_STANDBY)
+
         if self.state not in {STATE_STANDBY, STATE_LIQUIDATED, STATE_PULLBACK_WAIT}:
             return False
 
         # Invariant: Regime-Aware Session Trade Cap
-        # In GEAR_1_RANGE: Strictly cap at 4 trades to block overtrading fee churn
-        # In GEAR_2_TREND: Allow up to 6 trades so clean afternoon expansion runners are not cut off
         effective_cap = 6 if session_gear == "GEAR_2_TREND" else max_session_trades
-        today_iso = datetime.now().strftime("%Y-%m-%d")
+        today_iso = entry_time_str[:10] if (entry_time_str and len(entry_time_str) >= 10) else datetime.now().strftime("%Y-%m-%d")
         today_trades_count = sum(
             1 for t in self.trade_history
-            if isinstance(t, dict) and str(t.get("entry_time", "")).startswith(today_iso)
+            if isinstance(t, dict) and (
+                str(t.get("entry_time", "")).startswith(today_iso) or
+                not str(t.get("entry_time", ""))  # count if no date specified in mock
+            )
         )
         if today_trades_count >= effective_cap:
             logger.warning(f"SESSION_TRADE_CAP_REACHED: {today_trades_count} trades already executed today (cap={effective_cap}). Suppressing entry.")
@@ -347,7 +378,15 @@ class ActivePositionManager:
             p.pnl_pts = (p.exit_price - p.entry_price) if is_ce else (p.entry_price - p.exit_price)
             if p.opt_entry_ltp is not None and p.opt_current_ltp is not None:
                 p.opt_exit_ltp = p.opt_current_ltp
-                p.opt_pnl_pts = round(p.opt_exit_ltp - p.opt_entry_ltp, 2)
+                raw_diff = round(p.opt_exit_ltp - p.opt_entry_ltp, 2)
+                p.runner_exit_ltp = p.opt_exit_ltp
+                p.runner_pnl_pts = raw_diff
+                if p.half_booked and p.tranche_1_pnl_pts is not None:
+                    # Multi-Tranche Blended Accounting: 50% booked at T1 + 50% runner
+                    p.blended_opt_pnl_pts = round(0.5 * p.tranche_1_pnl_pts + 0.5 * p.runner_pnl_pts, 2)
+                    p.opt_pnl_pts = p.blended_opt_pnl_pts
+                else:
+                    p.opt_pnl_pts = raw_diff
             self._transition_to(STATE_EXIT_PENDING)
 
         # Excursion & Milestone Tracking
@@ -442,9 +481,22 @@ class ActivePositionManager:
             elif not p.half_booked:
                 p.half_booked = True
                 p.current_sl = p.entry_price  # Breakeven lock on spot
-                # Adaptive Chandelier Volatility Cushion: 2.5x ATR or 20% of peak HWM
-                opt_cushion = max(25.0 if is_sensex else 12.0, 0.20 * (p.opt_peak_hwm or p.opt_entry_ltp or 50.0))
-                p.runner_trailing_sl = (p.opt_peak_hwm - opt_cushion) if p.opt_peak_hwm else p.opt_entry_ltp
+                p.opt_half_booked_ltp = current_opt_ltp or p.opt_current_ltp or p.opt_entry_ltp
+                p.opt_half_booked_time = tick_time_str or datetime.now().isoformat()
+                if p.opt_entry_ltp is not None and p.opt_half_booked_ltp is not None:
+                    p.tranche_1_pnl_pts = round(p.opt_half_booked_ltp - p.opt_entry_ltp, 2)
+                
+                # Invariant 1.1 & 1.2: Bounded Giveback Clamp & Monotonic Breakeven Floor
+                opt_entry = p.opt_entry_ltp or 50.0
+                peak_hwm = p.opt_peak_hwm or opt_entry
+                friction_buffer = 5.0 if is_sensex else (3.0 if "BANKNIFTY" in p.strike_contract else 2.0)
+                monotonic_floor = opt_entry + friction_buffer
+
+                peak_excursion = max(0.0, peak_hwm - opt_entry)
+                clamped_cushion = min(1.5 * eff_atr, max(12.0, 0.35 * peak_excursion))
+                proposed_sl = round(peak_hwm - clamped_cushion, 2)
+                p.runner_trailing_sl = max(monotonic_floor, proposed_sl)
+
                 if self.state == STATE_IN_FLIGHT:
                     self._transition_to(STATE_TRAIL_LOCK)
                 self._persist_wal_atomic()
@@ -452,8 +504,16 @@ class ActivePositionManager:
 
         # 5. Chandelier Option Volatility Trailing Exit
         if p.is_runner_mode and p.half_booked and p.runner_trailing_sl is not None:
-            opt_cushion = max(25.0 if is_sensex else 12.0, 0.20 * (p.opt_peak_hwm or p.opt_entry_ltp or 50.0))
-            new_opt_sl = (p.opt_peak_hwm - opt_cushion) if p.opt_peak_hwm else p.runner_trailing_sl
+            opt_entry = p.opt_entry_ltp or 50.0
+            peak_hwm = p.opt_peak_hwm or opt_entry
+            friction_buffer = 5.0 if is_sensex else (3.0 if "BANKNIFTY" in p.strike_contract else 2.0)
+            monotonic_floor = opt_entry + friction_buffer
+
+            peak_excursion = max(0.0, peak_hwm - opt_entry)
+            clamped_cushion = min(1.5 * eff_atr, max(12.0, 0.35 * peak_excursion))
+            proposed_sl = round(peak_hwm - clamped_cushion, 2)
+            new_opt_sl = max(monotonic_floor, proposed_sl)
+
             if new_opt_sl > p.runner_trailing_sl:
                 p.runner_trailing_sl = round(new_opt_sl, 2)
             if p.opt_current_ltp is not None and p.opt_current_ltp <= p.runner_trailing_sl:
@@ -522,20 +582,40 @@ class ActivePositionManager:
             p.pnl_pts = (p.exit_price - p.entry_price) if is_ce else (p.entry_price - p.exit_price)
             if p.opt_entry_ltp is not None and p.opt_current_ltp is not None:
                 p.opt_exit_ltp = p.opt_current_ltp
-                p.opt_pnl_pts = round(p.opt_exit_ltp - p.opt_entry_ltp, 2)
+                raw_diff = round(p.opt_exit_ltp - p.opt_entry_ltp, 2)
+                p.runner_exit_ltp = p.opt_exit_ltp
+                p.runner_pnl_pts = raw_diff
+                if p.half_booked and p.tranche_1_pnl_pts is not None:
+                    p.blended_opt_pnl_pts = round(0.5 * p.tranche_1_pnl_pts + 0.5 * p.runner_pnl_pts, 2)
+                    p.opt_pnl_pts = p.blended_opt_pnl_pts
+                else:
+                    p.opt_pnl_pts = raw_diff
             self._transition_to(STATE_EXIT_PENDING)
 
         # 2. Runner Mode Logic: Book 50% at Target, Trail Remaining 50% via Option HWM
         if p.is_runner_mode and hit_tp and not p.half_booked:
             p.half_booked = True
             p.trail_locked = True
+            p.opt_half_booked_ltp = current_opt_ltp or p.opt_current_ltp or p.opt_entry_ltp
+            p.opt_half_booked_time = bar_time_str
+            if p.opt_entry_ltp is not None and p.opt_half_booked_ltp is not None:
+                p.tranche_1_pnl_pts = round(p.opt_half_booked_ltp - p.opt_entry_ltp, 2)
+
             # Lock Spot SL to entry + 4.0 pts
             p.current_sl = (p.entry_price + 4.0) if is_ce else (p.entry_price - 4.0)
-            # Set Option Runner Trailing Stop: Peak Premium - max(12.0, 1.2 * ATR)
-            opt_cushion = max(12.0, 1.2 * atr_1m)
-            p.runner_trailing_sl = (p.opt_peak_hwm - opt_cushion) if p.opt_peak_hwm else None
-            # The ratchet may already have moved the position to TRAIL_LOCK
-            # on an earlier bar. Do not attempt an illegal self-transition.
+            
+            # Invariant 1.1 & 1.2: Bounded Giveback Clamp & Monotonic Breakeven Floor
+            is_sensex = "SENSEX" in p.strike_contract or p.entry_price > 50000.0
+            opt_entry = p.opt_entry_ltp or 50.0
+            peak_hwm = p.opt_peak_hwm or opt_entry
+            friction_buffer = 5.0 if is_sensex else (3.0 if "BANKNIFTY" in p.strike_contract else 2.0)
+            monotonic_floor = opt_entry + friction_buffer
+
+            peak_excursion = max(0.0, peak_hwm - opt_entry)
+            clamped_cushion = min(1.5 * max(atr_1m, 8.0), max(12.0, 0.35 * peak_excursion))
+            proposed_sl = round(peak_hwm - clamped_cushion, 2)
+            p.runner_trailing_sl = max(monotonic_floor, proposed_sl)
+
             if self.state == STATE_IN_FLIGHT:
                 self._transition_to(STATE_TRAIL_LOCK)
             elif self.state == STATE_TRAIL_LOCK:
@@ -549,8 +629,16 @@ class ActivePositionManager:
 
         # If in Runner Trailing Mode, check if Option Price hit the HWM trailing stop
         if p.is_runner_mode and p.half_booked and p.runner_trailing_sl is not None:
-            # Ratchet trailing stop upward as peak HWM expands (monotonic non-decreasing)
-            opt_cushion = max(12.0, 1.2 * atr_1m)
+            is_sensex = "SENSEX" in p.strike_contract or p.entry_price > 50000.0
+            opt_entry = p.opt_entry_ltp or 50.0
+            peak_hwm = p.opt_peak_hwm or opt_entry
+            friction_buffer = 5.0 if is_sensex else (3.0 if "BANKNIFTY" in p.strike_contract else 2.0)
+            monotonic_floor = opt_entry + friction_buffer
+
+            peak_excursion = max(0.0, peak_hwm - opt_entry)
+            clamped_cushion = min(1.5 * max(atr_1m, 8.0), max(12.0, 0.35 * peak_excursion))
+            proposed_sl = round(peak_hwm - clamped_cushion, 2)
+            new_opt_sl = max(monotonic_floor, proposed_sl)
             new_opt_sl = (p.opt_peak_hwm - opt_cushion) if p.opt_peak_hwm else p.runner_trailing_sl
             if new_opt_sl > p.runner_trailing_sl:
                 p.runner_trailing_sl = new_opt_sl
@@ -629,20 +717,35 @@ class ActivePositionManager:
         self._persist_wal_atomic()
         return self.state, asdict(p)
 
-    def liquidate(self) -> Tuple[str, Dict[str, Any]]:
-        """Completes liquidation and transitions to LIQUIDATED."""
+    def liquidate(self, cooldown_seconds: float = 180.0) -> Tuple[str, Dict[str, Any]]:
+        """Completes liquidation, arms COOL_OFF state to prevent 2-second churn loops, and records summary."""
         if self.state != STATE_EXIT_PENDING:
             return self.state, asdict(self.payload) if self.payload else {}
-        self._transition_to(STATE_LIQUIDATED)
         summary = asdict(self.payload) if self.payload else {}
-        # Preserve last completed trade and append to full trade history
         self.last_completed_trade = summary
         if summary:
             self.trade_history.append(summary)
+
+        # Invariant 2.1: Transition to STATE_COOL_OFF rather than direct naked standby
+        if cooldown_seconds > 0.0:
+            from datetime import timedelta
+            self.cool_off_until = datetime.now() + timedelta(seconds=cooldown_seconds)
+            if self.payload:
+                self.cool_off_ref_spot = self.payload.exit_price or self.payload.entry_price
+                self.cool_off_direction = self.payload.direction
+            self._transition_to(STATE_COOL_OFF)
+            next_state = STATE_COOL_OFF
+        else:
+            self.cool_off_until = None
+            self.cool_off_ref_spot = None
+            self.cool_off_direction = None
+            self._transition_to(STATE_LIQUIDATED)
+            next_state = STATE_LIQUIDATED
+
         # Clear payload for next trade
         self.payload = None
         self._persist_wal_atomic()
-        return STATE_LIQUIDATED, summary
+        return next_state, summary
 
     def evaluate_pullback_reentry(
         self,

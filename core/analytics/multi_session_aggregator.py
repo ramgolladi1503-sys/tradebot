@@ -94,6 +94,11 @@ class NormalizedTrade:
     is_in_flight: bool = False
     opt_bid: Optional[float] = None
     opt_ask: Optional[float] = None
+    # Tranche Accounting Fields (Hermes Mandate 3)
+    tranche_1_pnl_pts: Optional[float] = None
+    runner_pnl_pts: Optional[float] = None
+    blended_opt_pnl_pts: Optional[float] = None
+    half_booked: bool = False
     raw_payload: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -377,6 +382,15 @@ class MultiSessionAggregator:
                     continue
                 seen_keys.add(composite_key)
 
+                hb = bool(t.get("half_booked", False))
+                t1_pnl = float(t.get("tranche_1_pnl_pts")) if t.get("tranche_1_pnl_pts") is not None else None
+                run_pnl = float(t.get("runner_pnl_pts")) if t.get("runner_pnl_pts") is not None else None
+                blend_pnl = float(t.get("blended_opt_pnl_pts")) if t.get("blended_opt_pnl_pts") is not None else None
+                
+                # If blended points not explicitly stored, derive for half_booked trades
+                raw_opt_pnl = float(t.get("opt_pnl_pts")) if t.get("opt_pnl_pts") is not None else None
+                effective_pnl = blend_pnl if blend_pnl is not None else raw_opt_pnl
+
                 norm = NormalizedTrade(
                     position_id=pos_id,
                     symbol=symbol,
@@ -390,13 +404,17 @@ class MultiSessionAggregator:
                     pnl_pts=float(t.get("pnl_pts")) if t.get("pnl_pts") is not None else None,
                     opt_entry_ltp=float(t.get("opt_entry_ltp")) if t.get("opt_entry_ltp") is not None else None,
                     opt_exit_ltp=float(t.get("opt_exit_ltp")) if t.get("opt_exit_ltp") is not None else None,
-                    opt_pnl_pts=float(t.get("opt_pnl_pts")) if t.get("opt_pnl_pts") is not None else None,
+                    opt_pnl_pts=effective_pnl,
                     opt_peak_hwm=float(t.get("opt_peak_hwm")) if t.get("opt_peak_hwm") is not None else None,
                     exit_reason=t.get("exit_reason"),
                     session_gear=t.get("session_gear", "GEAR_2_TREND"),
                     is_in_flight=False,
                     opt_bid=float(t.get("opt_bid")) if t.get("opt_bid") is not None else None,
                     opt_ask=float(t.get("opt_ask")) if t.get("opt_ask") is not None else None,
+                    tranche_1_pnl_pts=t1_pnl,
+                    runner_pnl_pts=run_pnl,
+                    blended_opt_pnl_pts=blend_pnl,
+                    half_booked=hb,
                     raw_payload=t,
                 )
                 trades.append(norm)

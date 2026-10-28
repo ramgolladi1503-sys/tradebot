@@ -32,6 +32,8 @@ from core.active_position_manager import (
     ActivePositionManager,
     STATE_STANDBY,
     STATE_IN_FLIGHT,
+    STATE_TRAIL_LOCK,
+    STATE_COOL_OFF,
     STATE_LIQUIDATED,
     STATE_EXIT_PENDING,
     STATE_PULLBACK_WAIT,
@@ -509,15 +511,30 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         # -------------------------------------------------------------
         # Mode 2: Existing Opening Range Breakout (ORB) Engine
         # Evaluates clean trend expansion when no sweep or reversal trap is active
+        # Invariant 4.1: Consult RegimeRouter to block blind ORB during ROTATIONAL_CHOP
         # -------------------------------------------------------------
         elif or_high > -math.inf and spot > or_high:
-            trigger_active = True
-            required_option_type = "CE"
-            setup_reason = f"Breakout > {or_high:.1f}"
+            router = self.regime_routers.get(index_name)
+            regime_permits = True
+            if router:
+                post = router.get_posterior()
+                if post.dominant_regime == "ROTATIONAL_CHOP" or not post.permissions.get("ORB", True):
+                    regime_permits = False
+            if regime_permits:
+                trigger_active = True
+                required_option_type = "CE"
+                setup_reason = f"Breakout > {or_high:.1f}"
         elif or_low < math.inf and spot < or_low:
-            trigger_active = True
-            required_option_type = "PE"
-            setup_reason = f"Breakdown < {or_low:.1f}"
+            router = self.regime_routers.get(index_name)
+            regime_permits = True
+            if router:
+                post = router.get_posterior()
+                if post.dominant_regime == "ROTATIONAL_CHOP" or not post.permissions.get("ORB", True):
+                    regime_permits = False
+            if regime_permits:
+                trigger_active = True
+                required_option_type = "PE"
+                setup_reason = f"Breakdown < {or_low:.1f}"
 
         # Compute Multi-Factor Confidence Score
         conf_eval = None
@@ -547,11 +564,21 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 or_bounds=self.or_bounds,
             )
 
+            # Dynamic Orderbook Conviction (Hermes Invariant 4.2)
+            tot_depth = depth_bids + depth_asks
+            if tot_depth > 0:
+                imbalance = (depth_bids - depth_asks) / tot_depth
+                # For CE, high bid depth is bullish; for PE, high ask depth or negative imbalance indicates put demand
+                signed_imb = imbalance if required_option_type == "CE" else -imbalance
+                dyn_conviction = max(0.20, min(0.95, round(0.50 + 0.50 * signed_imb, 2)))
+            else:
+                dyn_conviction = 0.50
+
             conf_eval = self.confidence_scorer.evaluate_confidence(
                 macro_aligned=macro_ok,
                 macro_reason=macro_reason,
                 writer_alignment="BEARS_IN_CONTROL" if required_option_type == "PE" else "BULLS_IN_CONTROL",
-                writer_conviction=0.75,
+                writer_conviction=dyn_conviction,
                 setup_direction=required_option_type,
                 depth_bid_q_sum=depth_bids,
                 depth_ask_q_sum=depth_asks,
@@ -630,8 +657,11 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
                     with self._lock:
                         idx_apm = self.apms.get(index_name, self.apm)
+                        # Invariant 2.3: Reject entry if in COOL_OFF or unarmable state
+                        if idx_apm.state in {STATE_COOL_OFF, STATE_IN_FLIGHT, STATE_TRAIL_LOCK, STATE_EXIT_PENDING}:
+                            is_target_strike = False
                         # Allow entry if APM is in STANDBY, LIQUIDATED, or PULLBACK_WAIT
-                        if is_target_strike and idx_apm.state in {STATE_STANDBY, STATE_LIQUIDATED, STATE_PULLBACK_WAIT}:
+                        elif is_target_strike and idx_apm.state in {STATE_STANDBY, STATE_LIQUIDATED, STATE_PULLBACK_WAIT}:
                             opt_q = {
                                 "symbol": depth.symbol,
                                 "token": depth.token,
