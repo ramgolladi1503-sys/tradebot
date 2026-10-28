@@ -425,6 +425,16 @@ class ActivePositionManager:
                     p.opt_pnl_pts = raw_diff
             self._transition_to(STATE_EXIT_PENDING)
 
+        # Invariant: EOD Mandatory Square-Off (15:15:00 IST)
+        if tick_time_str:
+            try:
+                t_str = tick_time_str.split("T")[1][:8] if "T" in tick_time_str else (tick_time_str.split(" ")[1][:8] if " " in tick_time_str else tick_time_str[:8])
+                if t_str >= "15:15:00":
+                    _record_tick_exit("EOD_MANDATORY_SQUAREOFF", current_spot)
+                    return self.liquidate()
+            except Exception:
+                pass
+
         # Excursion & Milestone Tracking
         gain = (current_spot - p.entry_price) if is_ce else (p.entry_price - current_spot)
         if gain > p.max_spot_excursion:
@@ -627,6 +637,16 @@ class ActivePositionManager:
                 else:
                     p.opt_pnl_pts = raw_diff
             self._transition_to(STATE_EXIT_PENDING)
+
+        # Invariant: EOD Mandatory Square-Off (15:15:00 IST)
+        if bar_time_str:
+            try:
+                t_str = bar_time_str.split("T")[1][:8] if "T" in bar_time_str else (bar_time_str.split(" ")[1][:8] if " " in bar_time_str else bar_time_str[:8])
+                if t_str >= "15:15:00":
+                    _record_exit("EOD_MANDATORY_SQUAREOFF", bar_close)
+                    return self.liquidate()
+            except Exception:
+                pass
 
         # 2. Runner Mode Logic: Book 50% at Target, Trail Remaining 50% via Option HWM
         if p.is_runner_mode and hit_tp and not p.half_booked:

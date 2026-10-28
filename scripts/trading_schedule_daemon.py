@@ -32,6 +32,8 @@ from core.market_calendar import _is_nse_fno_holiday
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("trading_schedule_daemon")
 
+PYTHON_EXEC = "/opt/anaconda3/bin/python" if Path("/opt/anaconda3/bin/python").exists() else sys.executable
+
 
 def is_trading_day(d: date) -> bool:
     """Verifies that the date is a weekday and not an NSE F&O market holiday."""
@@ -45,7 +47,7 @@ def is_trading_day(d: date) -> bool:
 def run_premarket_briefing(today_str: str) -> None:
     logger.info("🌅 [08:45 IST] Running Pre-Market Briefing for %s...", today_str)
     # Output briefing summary
-    cmd = [sys.executable, "-c", f"""
+    cmd = [PYTHON_EXEC, "-c", f"""
 import sys
 from pathlib import Path
 sys.path.insert(0, '{REPO_ROOT}')
@@ -58,9 +60,22 @@ print('🛡️ Prior session boundaries active. Derivatives OI quarantined until
     subprocess.run(cmd, check=False)
 
 
+def run_live_capture_and_alerts(today_str: str) -> None:
+    logger.info("🚀 [09:14 IST] Launching Live Streaming, Sentinel Advisory & Decoupled Telemetry for %s...", today_str)
+    # 1. Launch Decoupled Telemetry Alert Dispatcher (WAL Tailer)
+    notifier_cmd = [PYTHON_EXEC, str(REPO_ROOT / "scripts" / "sentinel_alert_notifier.py")]
+    subprocess.Popen(notifier_cmd)
+    logger.info("📡 Dispatched SentinelAlertNotifier background worker.")
+
+    # 2. Launch Upstox Daily Live Streaming & Embedded Sentinel Advisor (runs until 15:41 IST)
+    stream_cmd = [PYTHON_EXEC, str(REPO_ROOT / "scripts" / "upstox_daily_live_capture_and_stitch.py")]
+    subprocess.Popen(stream_cmd)
+    logger.info("🛰️ Dispatched Upstox Daily Live Capture with Embedded Sentinel Advisor.")
+
+
 def run_midday_check(today_str: str) -> None:
     logger.info("☀️ [12:30 IST] Running Mid-Day Regime & Wall Health Audit for %s...", today_str)
-    cmd = [sys.executable, "-c", f"""
+    cmd = [PYTHON_EXEC, "-c", f"""
 import sys
 from pathlib import Path
 sys.path.insert(0, '{REPO_ROOT}')
@@ -72,7 +87,7 @@ print('🛰️ Mid-Day Supervisory Audit: Checking feed freshness, wall stabilit
 def run_postmarket_forensics(today_str: str) -> None:
     logger.info("🌆 [15:40 IST] Triggering Pillar 1 Post-Market Forensics for %s...", today_str)
     cmd = [
-        sys.executable,
+        PYTHON_EXEC,
         str(REPO_ROOT / "scripts" / "run_daily_sentinel_analytics.py"),
         "--date", today_str,
     ]
@@ -123,9 +138,14 @@ def main() -> None:
             now_t = datetime.now().time()
 
             # 1. 08:45 IST Pre-market
-            if dt_time(8, 45) <= now_t < dt_time(9, 15) and last_phase_executed.get("premarket") != today_str:
+            if dt_time(8, 45) <= now_t < dt_time(9, 14) and last_phase_executed.get("premarket") != today_str:
                 run_premarket_briefing(today_str)
                 last_phase_executed["premarket"] = today_str
+
+            # 1b. 09:14 IST: Launch Live Streaming & Sentinel Advisory Pipeline + Alert Notifier
+            elif dt_time(9, 14) <= now_t < dt_time(15, 38) and last_phase_executed.get("live_stream") != today_str:
+                run_live_capture_and_alerts(today_str)
+                last_phase_executed["live_stream"] = today_str
 
             # 2. 12:30 IST Mid-day
             elif dt_time(12, 30) <= now_t < dt_time(13, 0) and last_phase_executed.get("midday") != today_str:

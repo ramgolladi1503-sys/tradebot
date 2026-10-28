@@ -26,7 +26,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, time as dt_time
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional, Dict
 
 from core.active_position_manager import (
     ActivePositionManager,
@@ -111,20 +111,28 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
     def __init__(
         self,
-        adapter: InMemorySentinelAdapter,
+        adapter: Optional[InMemorySentinelAdapter] = None,
         spread_veto_threshold: float = 0.04,
         market_open_time: dt_time = dt_time(9, 15),
         opening_shock_end_time: dt_time = dt_time(9, 45),
+        eod_entry_freeze_time: dt_time = dt_time(15, 0),
+        eod_mandatory_squareoff_time: dt_time = dt_time(15, 15),
         market_close_time: dt_time = dt_time(15, 30),
+        min_strike_oi_nifty: int = 250000,
+        min_strike_oi_other: int = 100000,
         skew_threshold_ms: float = 250.0,
         enable_stdout: bool = True,
         wal_path: str = "runtime/sentinel_apm_wal.json",
     ) -> None:
-        self.adapter = adapter
+        self.adapter = adapter if adapter is not None else InMemorySentinelAdapter()
         self.spread_veto_threshold = float(spread_veto_threshold)
         self.market_open_time = market_open_time
         self.opening_shock_end_time = opening_shock_end_time
+        self.eod_entry_freeze_time = eod_entry_freeze_time
+        self.eod_mandatory_squareoff_time = eod_mandatory_squareoff_time
         self.market_close_time = market_close_time
+        self.min_strike_oi_nifty = int(min_strike_oi_nifty)
+        self.min_strike_oi_other = int(min_strike_oi_other)
         self.skew_threshold_ms = float(skew_threshold_ms)
         self.enable_stdout = enable_stdout
 
@@ -231,6 +239,16 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
     def latest_spot(self) -> float:
         with self._lock:
             return self.spots.get("NIFTY", 0.0)
+
+    def is_eod_entry_frozen(self, check_time: Optional[dt_time] = None) -> bool:
+        """Evaluates whether current session time is in late-day entry freeze (>= 15:00:00)."""
+        t = check_time or datetime.now().time()
+        return t >= self.eod_entry_freeze_time
+
+    def evaluate_strike_oi(self, index_name: str, effective_oi: float) -> bool:
+        """Enforces institutional Open Interest floor (250k NIFTY, 100k BANKNIFTY/SENSEX)."""
+        min_oi = self.min_strike_oi_nifty if index_name == "NIFTY" else self.min_strike_oi_other
+        return effective_oi >= min_oi
 
     def on_tick(self, tick: UpstoxTickRecord) -> None:
         """Handle incoming tick for NIFTY, SENSEX, and BANKNIFTY."""
@@ -423,6 +441,20 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
         # Opening shock freeze: strictly suppress all candidate setups
         if trade_lock or now_time < self.opening_shock_end_time:
+            return
+
+        # Late-session entry freeze: strictly suppress all candidate setups (>= 15:00:00 IST)
+        if self.is_eod_entry_frozen(now_time):
+            # Check if active position requires 15:15:00 mandatory square-off
+            if now_time >= self.eod_mandatory_squareoff_time:
+                apm = self.apms.get(index_name)
+                if apm and apm.state in {STATE_IN_FLIGHT, STATE_TRAIL_LOCK}:
+                    apm.evaluate_tick(current_spot=spot, current_opt_ltp=ltp, tick_time_str=now_dt.isoformat())
+            return
+
+        # Structural strike liquidity gate: require minimum open interest
+        effective_oi = float(depth.open_interest)
+        if not self.evaluate_strike_oi(index_name, effective_oi):
             return
 
         # Causal cross-strike skew check
