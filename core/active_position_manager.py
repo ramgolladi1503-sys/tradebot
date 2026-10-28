@@ -21,6 +21,50 @@ from typing import Optional, Tuple, Dict, Any
 
 logger = logging.getLogger(__name__)
 
+def compute_expiry_theta_holding_ceiling(
+    base_max_hold_minutes: int,
+    entry_time_str: str,
+    is_expiry_day: bool,
+    is_deep_itm: bool = False,
+    accelerator_start: dtime = dtime(12, 30),
+    accelerator_end: dtime = dtime(15, 0),
+    min_hold_minutes: int = 15,
+) -> int:
+    """Computes dynamic theta accelerated holding ceiling on expiry afternoons.
+
+    Invariant Specifications (Hermes Architecture & Gauntlet Protections):
+    1. If not expiry day or if option is deep ITM, decay is zero -> returns base_max_hold_minutes.
+    2. Continuous linear scaling from accelerator_start (12:30 IST) to accelerator_end (15:00 IST).
+       Prevents arbitrary step-function boundary glitches.
+    3. Floor clamped at min_hold_minutes (default 15m) to ensure statistical trade maturation.
+    """
+    if not is_expiry_day or is_deep_itm or not entry_time_str:
+        return base_max_hold_minutes
+
+    try:
+        if "T" in entry_time_str:
+            t_part = entry_time_str.split("T")[1][:8]
+        elif " " in entry_time_str:
+            t_part = entry_time_str.split(" ")[1][:8]
+        else:
+            t_part = entry_time_str[:8]
+        dt = datetime.strptime(t_part, "%H:%M:%S").time()
+    except Exception:
+        return base_max_hold_minutes
+
+    entry_mins = dt.hour * 60 + dt.minute + dt.second / 60.0
+    start_mins = accelerator_start.hour * 60 + accelerator_start.minute
+    end_mins = accelerator_end.hour * 60 + accelerator_end.minute
+
+    if entry_mins <= start_mins:
+        return base_max_hold_minutes
+    if entry_mins >= end_mins:
+        return min(base_max_hold_minutes, min_hold_minutes)
+
+    decay_ratio = (entry_mins - start_mins) / float(end_mins - start_mins)
+    scaled_hold = base_max_hold_minutes - (base_max_hold_minutes - min_hold_minutes) * decay_ratio
+    return max(min_hold_minutes, int(round(scaled_hold)))
+
 STATE_STANDBY = "STANDBY"
 STATE_ARMED = "ARMED"
 STATE_IN_FLIGHT = "IN_FLIGHT"
@@ -227,7 +271,6 @@ class ActivePositionManager:
 
         can_enter = e_atr_rem >= required_energy
         return can_enter, e_atr_rem, required_energy
-        return can_enter, e_atr_rem, required_energy
 
     def arm_and_enter(
         self,
@@ -249,6 +292,8 @@ class ActivePositionManager:
         sizing_tier: str = "FULL_SIZE",
         lot_size: int = 65,
         total_quantity: Optional[int] = None,
+        is_expiry_day: bool = False,
+        is_deep_itm: bool = False,
     ) -> bool:
         """Arms and executes entry into IN_FLIGHT state with dynamic volatility-scaled targets.
         
@@ -343,6 +388,20 @@ class ActivePositionManager:
             hold_horizon = 360
         elif is_runner_mode:
             hold_horizon = 45
+
+        # Dynamic Expiry-Day Theta Accelerator:
+        # Scale holding ceiling continuously post-12:30 IST down to 15m minimum floor
+        # for non-deep-ITM options in range/scalp mode (or runner mode).
+        if is_expiry_day and not is_deep_itm and session_gear != "GEAR_2_TREND":
+            hold_horizon = compute_expiry_theta_holding_ceiling(
+                base_max_hold_minutes=hold_horizon,
+                entry_time_str=entry_time_str,
+                is_expiry_day=is_expiry_day,
+                is_deep_itm=is_deep_itm,
+                accelerator_start=dtime(12, 30),
+                accelerator_end=dtime(15, 0),
+                min_hold_minutes=15,
+            )
 
         self.payload = PositionPayload(
             position_id=position_id,
@@ -575,6 +634,27 @@ class ActivePositionManager:
                 p.trail_locked = True
                 if self.state == STATE_IN_FLIGHT:
                     self._transition_to(STATE_TRAIL_LOCK)
+
+        # 7. Time Horizon Exit (Dynamic Expiry Theta Acceleration or Base Hold Horizon)
+        # Suppressed if option is in positive excursion runner mode with trail locked (let trend winners run)
+        if tick_time_str and not (p.half_booked or p.trail_locked):
+            try:
+                entry_dt = datetime.fromisoformat(p.entry_time)
+                cur_dt = datetime.fromisoformat(tick_time_str)
+                held_minutes = (cur_dt - entry_dt).total_seconds() / 60.0
+                if held_minutes >= p.max_hold_minutes:
+                    # Liquidity Spread Spike Defense: if bid-ask spread is severely blown (> 15% of LTP),
+                    # allow 60-second grace window rather than market selling into spread expansion
+                    allow_exit = True
+                    if p.opt_bid is not None and p.opt_ask is not None and current_opt_ltp and current_opt_ltp > 0:
+                        cur_spread = p.opt_ask - p.opt_bid
+                        if (cur_spread / current_opt_ltp) > 0.15:
+                            allow_exit = False
+                    if allow_exit:
+                        _record_tick_exit(f"TIME_EXIT_{int(held_minutes)}M", current_spot)
+                        return self.liquidate()
+            except Exception:
+                pass
 
         self._persist_wal_atomic(force_sync=False)
         return self.state, asdict(p)

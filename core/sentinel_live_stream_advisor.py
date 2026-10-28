@@ -68,6 +68,7 @@ from core.market_structure.sentinel_wall_gate import (
     SentinelWallGate,
     GATE_ACTION_VETO,
     GATE_ACTION_CONFIRM_BREACH,
+    GATE_ACTION_CLAMP_TARGET,
 )
 from core.sentinel_dynamic_sizing import (
     calculate_discrete_lots,
@@ -120,6 +121,8 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         market_close_time: dt_time = dt_time(15, 30),
         min_strike_oi_nifty: int = 250000,
         min_strike_oi_other: int = 100000,
+        min_nifty_frictional_hurdle_atr: float = 12.0,
+        min_nifty_hurdle_ratio: float = 2.0,
         skew_threshold_ms: float = 250.0,
         enable_stdout: bool = True,
         wal_path: str = "runtime/sentinel_apm_wal.json",
@@ -133,6 +136,8 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         self.market_close_time = market_close_time
         self.min_strike_oi_nifty = int(min_strike_oi_nifty)
         self.min_strike_oi_other = int(min_strike_oi_other)
+        self.min_nifty_frictional_hurdle_atr = float(min_nifty_frictional_hurdle_atr)
+        self.min_nifty_hurdle_ratio = float(min_nifty_hurdle_ratio)
         self.skew_threshold_ms = float(skew_threshold_ms)
         self.enable_stdout = enable_stdout
 
@@ -249,6 +254,58 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         """Enforces institutional Open Interest floor (250k NIFTY, 100k BANKNIFTY/SENSEX)."""
         min_oi = self.min_strike_oi_nifty if index_name == "NIFTY" else self.min_strike_oi_other
         return effective_oi >= min_oi
+
+    def evaluate_nifty_frictional_hurdle(
+        self,
+        index_name: str,
+        atr_15m: float,
+        friction_drag_pts: float,
+        target_pts: float,
+        spot_price: float = 0.0,
+    ) -> tuple[bool, str]:
+        """Evaluates dynamic frictional hurdle for NIFTY.
+
+        Prevents trades in low-volatility regimes where frictional drag consumes
+        substantially all gross expectancy (e.g. 45 NIFTY historical trades paid
+        ₹5,965 in friction on ₹6,070 gross PnL, leaving only ₹104 net PnL).
+
+        Non-NIFTY indices pass unconditionally.
+        For NIFTY:
+        1. atr_15m must meet or exceed min_nifty_frictional_hurdle_atr (default 12.0 pts).
+        2. Expected profit capacity (target_pts) must clear the frictional hurdle:
+           target_pts >= min_nifty_hurdle_ratio * max(friction_drag_pts, 2.0).
+        3. Spot price percentage volatility sanity: percentage volatility
+           (atr_15m / spot_price) must be >= 0.05% when spot_price > 0.
+        """
+        if index_name != "NIFTY":
+            return True, f"NON_NIFTY_INDEX_{index_name}_BYPASS"
+
+        # Check 1: ATR Hurdle Floor
+        if atr_15m < self.min_nifty_frictional_hurdle_atr:
+            return (
+                False,
+                f"NIFTY_INSUFFICIENT_VOLATILITY: ATR 15m {atr_15m:.1f} < hurdle {self.min_nifty_frictional_hurdle_atr:.1f} pts",
+            )
+
+        # Check 2: Minimum Hurdle Ratio (Target / Friction)
+        effective_drag = max(float(friction_drag_pts), 2.0)
+        hurdle_req = self.min_nifty_hurdle_ratio * effective_drag
+        if target_pts < hurdle_req:
+            return (
+                False,
+                f"NIFTY_FRICTION_DRAG_UNECONOMIC: Target {target_pts:.1f}pts < {self.min_nifty_hurdle_ratio:.1f}x friction {effective_drag:.2f}pts (req {hurdle_req:.1f}pts)",
+            )
+
+        # Check 3: Percentage Volatility Fallacy Guard (Spot Level Normalization)
+        if spot_price > 0:
+            pct_vol = (atr_15m / spot_price) * 100.0
+            if pct_vol < 0.05:
+                return (
+                    False,
+                    f"NIFTY_PCT_VOLATILITY_STARVATION: Vol {pct_vol:.3f}% < 0.05% of spot {spot_price:.1f}",
+                )
+
+        return True, f"NIFTY_FRICTIONAL_HURDLE_CLEARED (ATR={atr_15m:.1f}, HurdleReq={hurdle_req:.1f}pts)"
 
     def on_tick(self, tick: UpstoxTickRecord) -> None:
         """Handle incoming tick for NIFTY, SENSEX, and BANKNIFTY."""
@@ -549,8 +606,8 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             router = self.regime_routers.get(index_name)
             regime_permits = True
             if router:
-                post = router.get_posterior()
-                if post.dominant_regime == "ROTATIONAL_CHOP" or not post.permissions.get("ORB", True):
+                post = getattr(router, "current_state", None) or (router.get_posterior() if hasattr(router, "get_posterior") else None)
+                if post is not None and (post.dominant_regime == "ROTATIONAL_CHOP" or not post.permissions.get("ORB", True)):
                     regime_permits = False
             if regime_permits:
                 trigger_active = True
@@ -560,8 +617,8 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             router = self.regime_routers.get(index_name)
             regime_permits = True
             if router:
-                post = router.get_posterior()
-                if post.dominant_regime == "ROTATIONAL_CHOP" or not post.permissions.get("ORB", True):
+                post = getattr(router, "current_state", None) or (router.get_posterior() if hasattr(router, "get_posterior") else None)
+                if post is not None and (post.dominant_regime == "ROTATIONAL_CHOP" or not post.permissions.get("ORB", True)):
                     regime_permits = False
             if regime_permits:
                 trigger_active = True
@@ -646,6 +703,32 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     wall_vetoed = True
                     wall_reason = wall_decision.reason
 
+                # Feature: Option Wall Target Clamping before fortified barrier
+                if not wall_vetoed:
+                    clamp_decision = wall_gate.clamp_target_to_wall(
+                        direction=required_option_type,
+                        spot_price=spot,
+                        nominal_target_pts=target_pts,
+                        sl_pts=sl_pts,
+                        timestamp_ms=depth.exchange_timestamp_ms,
+                        wall_buffer_pts=1.0,
+                        min_rr_ratio=1.0,
+                    )
+                    if clamp_decision.action == GATE_ACTION_CLAMP_TARGET and clamp_decision.clamped_target_pts is not None:
+                        logger.info(
+                            f"[{index_name}] Option Wall Target Clamping: Clamped TP from {target_pts:.1f} to {clamp_decision.clamped_target_pts:.1f} pts ({clamp_decision.reason})"
+                        )
+                        target_pts = clamp_decision.clamped_target_pts
+
+            # Gate 3: NIFTY Dynamic Frictional Hurdle Gate
+            hurdle_ok, hurdle_reason = self.evaluate_nifty_frictional_hurdle(
+                index_name=index_name,
+                atr_15m=eff_atr_15m,
+                friction_drag_pts=total_drag,
+                target_pts=target_pts,
+                spot_price=spot,
+            )
+
             if is_vetoed:
                 status_flag = "VETO_SPREAD_EXPANDED"
                 advisory = f"🚨 [SPREAD VETO] BUY {depth.symbol} @ {setup_reason} -> SUPPRESSED (>4.0% spread)"
@@ -658,6 +741,9 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             elif not vol_ok:
                 status_flag = "VETO_VOLATILITY_EXHAUSTED"
                 advisory = f"🚨 [{vol_reason}] BUY {depth.symbol} @ {setup_reason} -> SUPPRESSED"
+            elif not hurdle_ok:
+                status_flag = "VETO_NIFTY_FRICTIONAL_HURDLE"
+                advisory = f"🚨 [{hurdle_reason}] BUY {depth.symbol} @ {setup_reason} -> SUPPRESSED"
             elif not conf_eval.is_actionable:
                 status_flag = "VETO_LOW_CONFIDENCE"
                 advisory = f"🚨 [LOW CONVICTION: {conf_eval.total_score}/100 {conf_eval.grade}] BUY {depth.symbol} @ {setup_reason} -> SUPPRESSED"
@@ -727,6 +813,8 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                                 sizing_tier=sizing_tier,
                                 lot_size=ex_lot_size,
                                 total_quantity=total_qty,
+                                is_expiry_day=is_exp,
+                                is_deep_itm=(itm_res.moneyness == "DEEP_ITM"),
                             )
                             if entered and self.enable_stdout:
                                 print(

@@ -33,6 +33,7 @@ GATE_ACTION_VETO = "VETO_ADVERSE_WALL"
 GATE_ACTION_WARN = "WARN_FRAGILE_WALL"
 GATE_ACTION_CONFIRM_BREACH = "CONFIRM_BREACH"
 GATE_ACTION_TIGHTEN_RUNNER = "TIGHTEN_RUNNER"
+GATE_ACTION_CLAMP_TARGET = "CLAMP_TARGET"
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,7 @@ class WallGateDecision:
     directional_liquidity_ratio: float
     reason: str
     timestamp_ms: int
+    clamped_target_pts: Optional[float] = None
     read_only: bool = True
     is_order_action: bool = False
     broker_api_called: bool = False
@@ -307,6 +309,183 @@ class SentinelWallGate:
 
         return self._default_proceed(state, dir_clean, timestamp_ms, "RUNNER_SAFE_ZONE")
 
+    def clamp_target_to_wall(
+        self,
+        direction: str,
+        spot_price: float,
+        nominal_target_pts: float,
+        sl_pts: float,
+        timestamp_ms: int,
+        wall_buffer_pts: float = 1.0,
+        min_rr_ratio: float = 1.0,
+    ) -> WallGateDecision:
+        """Evaluates whether nominal Take Profit should be clamped before an opposing fortified wall.
+
+        Adversarial Boundary Invariants:
+        - Invariant 1 (Attacker 1: Dynamic Wall Shifting): Operates strictly on causal point-in-time
+          live wall snapshots. Once clamped at entry, the TP barrier is recorded into APM contract.
+        - Invariant 2 (Attacker 2: Target Truncation Fallacy): Clamping is rejected if
+          (clamped_tp / sl_pts) < min_rr_ratio (default 1.0). Trades with sub-1.0 R:R are never clamped.
+        - Invariant 3 (Attacker 3: Phantom Wall Noise): Candidate wall must be fortified:
+          either is_major_wall or secondary wall with vulnerability < 0.80 and OI >= 0.75 * max_oi.
+        - Invariant 4 (Attacker 4: False Breakout Trap): If wall vulnerability > 1.20 (fragile/absorbable),
+          clamping is suppressed so runners can punch through without premature truncation.
+        - Invariant 5 (Attacker 5: Race Condition / Freshness): Returns PROCEED (no clamping)
+          if observer state is not HEALTHY or feed is stale.
+        """
+        dir_clean = direction.upper().strip()
+        state = self.observer.compute_wall_state(force_recompute=False)
+
+        if not state.is_valid or state.status != "HEALTHY":
+            return self._default_proceed(state, dir_clean, timestamp_ms, f"BYPASS_UNHEALTHY_OBSERVER: {state.status}")
+
+        atr = max(state.atr_pts, 1.0)
+        target_pts = float(nominal_target_pts)
+        sl = max(float(sl_pts), 1.0)
+
+        if dir_clean == "CE":
+            # For CE, opposing barriers are Call strikes above spot
+            candidate_strikes = []
+            for s, prof in state.wall_density_map.items():
+                if s > spot_price:
+                    dist_pts = s - spot_price
+                    # Only consider walls that are closer than nominal target
+                    if dist_pts < target_pts:
+                        candidate_strikes.append((s, prof, dist_pts))
+
+            if not candidate_strikes:
+                return self._default_proceed(state, dir_clean, timestamp_ms, "NO_CALL_WALL_AHEAD_OF_TARGET")
+
+            # Sort by ascending distance (nearest obstacle first)
+            candidate_strikes.sort(key=lambda x: x[2])
+            wall_strike, wall_prof, dist_pts = candidate_strikes[0]
+
+            vuln = wall_prof.call_wall_vulnerability
+            ratio = wall_prof.directional_liquidity_ratio
+            is_fortified = (wall_prof.is_major_call_wall or wall_prof.is_secondary_call_wall) and (vuln < 0.80 or ratio < 0.90)
+
+            # Attacker 4: If fragile (vuln >= 0.80 and ratio >= 0.90), allow breakout to target
+            if not is_fortified:
+                return WallGateDecision(
+                    symbol=state.symbol,
+                    direction=dir_clean,
+                    action=GATE_ACTION_PROCEED,
+                    proximity_pts=dist_pts,
+                    proximity_atr=dist_pts / atr,
+                    major_wall_strike=wall_strike,
+                    wall_vulnerability=vuln,
+                    directional_liquidity_ratio=ratio,
+                    reason=f"PROCEED_FRAGILE_WALL_NO_CLAMP: Call wall at {wall_strike:,.0f} exhibits breakout vulnerability ({vuln:.2f})",
+                    timestamp_ms=timestamp_ms,
+                    clamped_target_pts=None,
+                )
+
+            # Propose clamped target = distance to wall - buffer
+            proposed_target = round(dist_pts - wall_buffer_pts, 2)
+
+            # Attacker 2: Target Truncation Fallacy check
+            # Clamping must not destroy Risk/Reward ratio below min_rr_ratio
+            if proposed_target < (min_rr_ratio * sl):
+                return WallGateDecision(
+                    symbol=state.symbol,
+                    direction=dir_clean,
+                    action=GATE_ACTION_PROCEED,
+                    proximity_pts=dist_pts,
+                    proximity_atr=dist_pts / atr,
+                    major_wall_strike=wall_strike,
+                    wall_vulnerability=vuln,
+                    directional_liquidity_ratio=ratio,
+                    reason=f"CLAMP_REJECTED_SUB_MIN_RR: Proposed target {proposed_target:.1f}pts yields R:R {proposed_target/sl:.2f} < {min_rr_ratio:.2f}",
+                    timestamp_ms=timestamp_ms,
+                    clamped_target_pts=None,
+                )
+
+            # Fortified wall closer than nominal target with acceptable R:R
+            return WallGateDecision(
+                symbol=state.symbol,
+                direction=dir_clean,
+                action=GATE_ACTION_CLAMP_TARGET,
+                proximity_pts=dist_pts,
+                proximity_atr=dist_pts / atr,
+                major_wall_strike=wall_strike,
+                wall_vulnerability=vuln,
+                directional_liquidity_ratio=ratio,
+                reason=f"CLAMP_TARGET_BEFORE_CALL_WALL: Clamped target from {target_pts:.1f}pts to {proposed_target:.1f}pts before fortified wall {wall_strike:,.0f} (Vuln={vuln:.2f})",
+                timestamp_ms=timestamp_ms,
+                clamped_target_pts=proposed_target,
+            )
+
+        elif dir_clean == "PE":
+            # For PE, opposing barriers are Put strikes below spot
+            candidate_strikes = []
+            for s, prof in state.wall_density_map.items():
+                if s < spot_price:
+                    dist_pts = spot_price - s
+                    # Only consider walls that are closer than nominal target
+                    if dist_pts < target_pts:
+                        candidate_strikes.append((s, prof, dist_pts))
+
+            if not candidate_strikes:
+                return self._default_proceed(state, dir_clean, timestamp_ms, "NO_PUT_WALL_AHEAD_OF_TARGET")
+
+            candidate_strikes.sort(key=lambda x: x[2])
+            wall_strike, wall_prof, dist_pts = candidate_strikes[0]
+
+            vuln = wall_prof.put_wall_vulnerability
+            ratio = wall_prof.directional_liquidity_ratio
+            is_fortified = (wall_prof.is_major_put_wall or wall_prof.is_secondary_put_wall) and (vuln > 1.20 or ratio < 0.90)
+
+            # Attacker 4: If floor fragile / breakable, allow expansion
+            if not is_fortified:
+                return WallGateDecision(
+                    symbol=state.symbol,
+                    direction=dir_clean,
+                    action=GATE_ACTION_PROCEED,
+                    proximity_pts=dist_pts,
+                    proximity_atr=dist_pts / atr,
+                    major_wall_strike=wall_strike,
+                    wall_vulnerability=vuln,
+                    directional_liquidity_ratio=ratio,
+                    reason=f"PROCEED_FRAGILE_FLOOR_NO_CLAMP: Put floor at {wall_strike:,.0f} exhibits breakdown vulnerability ({vuln:.2f})",
+                    timestamp_ms=timestamp_ms,
+                    clamped_target_pts=None,
+                )
+
+            # Propose clamped target = distance to floor - buffer
+            proposed_target = round(dist_pts - wall_buffer_pts, 2)
+
+            # Attacker 2: Target Truncation Fallacy check
+            if proposed_target < (min_rr_ratio * sl):
+                return WallGateDecision(
+                    symbol=state.symbol,
+                    direction=dir_clean,
+                    action=GATE_ACTION_PROCEED,
+                    proximity_pts=dist_pts,
+                    proximity_atr=dist_pts / atr,
+                    major_wall_strike=wall_strike,
+                    wall_vulnerability=vuln,
+                    directional_liquidity_ratio=ratio,
+                    reason=f"CLAMP_REJECTED_SUB_MIN_RR: Proposed target {proposed_target:.1f}pts yields R:R {proposed_target/sl:.2f} < {min_rr_ratio:.2f}",
+                    timestamp_ms=timestamp_ms,
+                    clamped_target_pts=None,
+                )
+
+            return WallGateDecision(
+                symbol=state.symbol,
+                direction=dir_clean,
+                action=GATE_ACTION_CLAMP_TARGET,
+                proximity_pts=dist_pts,
+                proximity_atr=dist_pts / atr,
+                major_wall_strike=wall_strike,
+                wall_vulnerability=vuln,
+                directional_liquidity_ratio=ratio,
+                reason=f"CLAMP_TARGET_BEFORE_PUT_WALL: Clamped target from {target_pts:.1f}pts to {proposed_target:.1f}pts before fortified floor {wall_strike:,.0f} (Vuln={vuln:.2f})",
+                timestamp_ms=timestamp_ms,
+                clamped_target_pts=proposed_target,
+            )
+
+        return self._default_proceed(state, dir_clean, timestamp_ms, f"UNKNOWN_DIRECTION_{dir_clean}")
+
     def _default_proceed(
         self,
         state: SentinelWallState,
@@ -325,4 +504,5 @@ class SentinelWallGate:
             directional_liquidity_ratio=1.0,
             reason=reason,
             timestamp_ms=timestamp_ms,
+            clamped_target_pts=None,
         )
