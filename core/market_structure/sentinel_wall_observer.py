@@ -24,9 +24,10 @@ import logging
 import re
 import threading
 import time
+from collections import deque
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Deque, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +135,28 @@ class StrikeWallProfile:
     call_wall_vulnerability: float = 0.0  # CE Ask Depth / (CE Bid Depth + 1e-6)
     put_wall_vulnerability: float = 0.0  # PE Bid Depth / (PE Ask Depth + 1e-6)
 
+    # Intraday Delta-OI Velocity Tracking (Rolling 5-min & 15-min)
+    call_oi_delta_5m: float = 0.0  # Change in Call OI over past 5 mins (negative = unwinding)
+    put_oi_delta_5m: float = 0.0   # Change in Put OI over past 5 mins (negative = unwinding)
+    call_oi_delta_15m: float = 0.0
+    put_oi_delta_15m: float = 0.0
+    is_call_unwinding: bool = False  # True if call_oi_delta_5m < -0.05 * call_oi (accelerated covering)
+    is_put_unwinding: bool = False   # True if put_oi_delta_5m < -0.05 * put_oi (accelerated covering)
+
+
+@dataclass(frozen=True)
+class StraddleBreakevenProfile:
+    """Atm Straddle positioning and pain band boundaries."""
+
+    atm_strike: float = 0.0
+    straddle_premium: float = 0.0
+    upper_breakeven: float = 0.0
+    lower_breakeven: float = 0.0
+    spot_position: str = "INSIDE_RANGE"  # "INSIDE_RANGE" | "ABOVE_UPPER" | "BELOW_LOWER"
+    distance_to_upper_pts: float = 0.0
+    distance_to_lower_pts: float = 0.0
+    is_pin_risk: bool = False  # True if spot is within 0.25 ATR of ATM strike (high theta pin)
+
 
 @dataclass(frozen=True)
 class SentinelWallState:
@@ -155,6 +178,13 @@ class SentinelWallState:
     atr_pts: float = 0.0
     distance_to_call_wall_atr: float = 0.0  # distance_to_call_wall_pts / atr_pts
     distance_to_put_wall_atr: float = 0.0  # distance_to_put_wall_pts / atr_pts
+
+    # Dynamic Straddle Breakeven Profile
+    straddle_profile: StraddleBreakevenProfile = StraddleBreakevenProfile()
+
+    # Net Market Maker Stress Score (-1.0 to +1.0)
+    # Positive = Call writers squeezed / Bullish panic; Negative = Put writers squeezed / Bearish panic
+    market_maker_stress_score: float = 0.0
 
     # Attacker 5 Hardening: Risk Governance & Fail-Closed Guard
     is_valid: bool = True
@@ -216,6 +246,14 @@ class SentinelWallObserver:
         self._is_dirty: bool = True
         self._last_compute_time_ms: int = 0
         self._cached_state: Optional[SentinelWallState] = None
+
+        # Intraday Historical Time-Series Deques for Delta-OI Velocity:
+        # strike -> {'CE': deque[(ts_ms, oi)], 'PE': deque[(ts_ms, oi)]}
+        self._oi_history: Dict[float, Dict[str, Deque[Tuple[int, float]]]] = {}
+
+        # Straddle Anchor:
+        # (atm_strike, call_ltp, put_ltp, timestamp_ms)
+        self._morning_straddle_anchor: Optional[Tuple[float, float, float, int]] = None
 
         # Atomic persistence rate limiting
         self._last_persist_wall_time: float = 0.0
@@ -324,12 +362,19 @@ class SentinelWallObserver:
                     "CE": {"oi": 0.0, "volume": 0.0, "bid_depth": 0.0, "ask_depth": 0.0, "ltp": 0.0},
                     "PE": {"oi": 0.0, "volume": 0.0, "bid_depth": 0.0, "ask_depth": 0.0, "ltp": 0.0},
                 }
+                self._oi_history[strike] = {
+                    "CE": deque(maxlen=360),  # Up to 360 snapshots (~30-60 mins of tick/snapshot updates)
+                    "PE": deque(maxlen=360),
+                }
 
             bucket = self._strike_data[strike][opt_type]
             changed = False
             if actual_oi > 0 and actual_oi != bucket["oi"]:
                 bucket["oi"] = actual_oi
                 changed = True
+                # Record in historical deque for causal rolling Delta-OI calculation
+                eff_ts = ts if ts > 0 else (self._last_timestamp_ms or int(time.time() * 1000))
+                self._oi_history[strike][opt_type].append((eff_ts, actual_oi))
             if actual_vol > 0 and actual_vol != bucket["volume"]:
                 bucket["volume"] = actual_vol
                 changed = True
@@ -474,6 +519,48 @@ class SentinelWallObserver:
             call_vuln = ce["ask_depth"] / (ce["bid_depth"] + 1e-6)
             put_vuln = pe["bid_depth"] / (pe["ask_depth"] + 1e-6)
 
+            # Causal Rolling Delta-OI Calculation (5m & 15m)
+            c_delta_5m = 0.0
+            p_delta_5m = 0.0
+            c_delta_15m = 0.0
+            p_delta_15m = 0.0
+
+            if strike in self._oi_history:
+                c_history = self._oi_history[strike]["CE"]
+                p_history = self._oi_history[strike]["PE"]
+
+                # 5-min lookback (300,000 ms)
+                cutoff_5m = now_ms - 300_000
+                cutoff_15m = now_ms - 900_000
+
+                # Find oldest entry in 5m window
+                for h_ts, h_oi in c_history:
+                    if h_ts >= cutoff_5m:
+                        c_delta_5m = c_oi - h_oi
+                        break
+                for h_ts, h_oi in p_history:
+                    if h_ts >= cutoff_5m:
+                        p_delta_5m = p_oi - h_oi
+                        break
+
+                # Find oldest entry in 15m window
+                for h_ts, h_oi in c_history:
+                    if h_ts >= cutoff_15m:
+                        c_delta_15m = c_oi - h_oi
+                        break
+                for h_ts, h_oi in p_history:
+                    if h_ts >= cutoff_15m:
+                        p_delta_15m = p_oi - h_oi
+                        break
+
+            # Unwinding criteria: >5% reduction in OI over 5 minutes with baseline OI >= 100 lots
+            # Uses dynamic index lot size (e.g. NIFTY 65*100=6500, SENSEX 20*100=2000, BANKNIFTY 40*100=4000)
+            from core.sentinel_dynamic_sizing import get_exchange_lot_size
+            min_baseline_oi = 100 * get_exchange_lot_size(self.underlying_symbol)
+
+            is_c_unwinding = bool(c_oi >= min_baseline_oi and c_delta_5m < -0.05 * c_oi)
+            is_p_unwinding = bool(p_oi >= min_baseline_oi and p_delta_5m < -0.05 * p_oi)
+
             profile = StrikeWallProfile(
                 strike=strike,
                 call_oi=c_oi,
@@ -495,6 +582,12 @@ class SentinelWallObserver:
                 directional_liquidity_ratio=round(dir_ratio, 4),
                 call_wall_vulnerability=round(call_vuln, 4),
                 put_wall_vulnerability=round(put_vuln, 4),
+                call_oi_delta_5m=round(c_delta_5m, 2),
+                put_oi_delta_5m=round(p_delta_5m, 2),
+                call_oi_delta_15m=round(c_delta_15m, 2),
+                put_oi_delta_15m=round(p_delta_15m, 2),
+                is_call_unwinding=is_c_unwinding,
+                is_put_unwinding=is_p_unwinding,
             )
             wall_density_map[strike] = profile
 
@@ -508,6 +601,48 @@ class SentinelWallObserver:
         atr = self.atr_pts if self.atr_pts > 0 else 50.0
         dist_call_atr = round(dist_call_pts / atr, 4) if atr > 0 else 0.0
         dist_put_atr = round(dist_put_pts / atr, 4) if atr > 0 else 0.0
+
+        # Straddle Breakeven Profile Computation
+        straddle_profile = StraddleBreakevenProfile()
+        mm_stress = 0.0
+
+        if sorted_strikes and spot > 0:
+            # Find closest ATM strike to spot
+            atm_strike = min(sorted_strikes, key=lambda s: abs(s - spot))
+            atm_ce_ltp = self._strike_data[atm_strike]["CE"]["ltp"]
+            atm_pe_ltp = self._strike_data[atm_strike]["PE"]["ltp"]
+
+            # If anchor exists, prefer anchor premium, else derive from current LTP
+            if atm_ce_ltp > 0 and atm_pe_ltp > 0:
+                combined_prem = atm_ce_ltp + atm_pe_ltp
+                upper_be = atm_strike + combined_prem
+                lower_be = atm_strike - combined_prem
+
+                # Position relative to breakeven
+                if spot > upper_be:
+                    pos = "ABOVE_UPPER"
+                    # Stress: Market makers short calls are hurting
+                    mm_stress = min(1.0, round((spot - upper_be) / (atr + 1e-6), 2))
+                elif spot < lower_be:
+                    pos = "BELOW_LOWER"
+                    # Stress: Market makers short puts are hurting
+                    mm_stress = max(-1.0, round((spot - lower_be) / (atr + 1e-6), 2))
+                else:
+                    pos = "INSIDE_RANGE"
+                    mm_stress = 0.0
+
+                is_pin = bool(abs(spot - atm_strike) <= (0.25 * atr))
+
+                straddle_profile = StraddleBreakevenProfile(
+                    atm_strike=atm_strike,
+                    straddle_premium=round(combined_prem, 2),
+                    upper_breakeven=round(upper_be, 2),
+                    lower_breakeven=round(lower_be, 2),
+                    spot_position=pos,
+                    distance_to_upper_pts=round(upper_be - spot, 2),
+                    distance_to_lower_pts=round(spot - lower_be, 2),
+                    is_pin_risk=is_pin,
+                )
 
         # Risk Governance Fail-Closed Guard (Attacker 5):
         # 1. Strike span guard
@@ -544,6 +679,8 @@ class SentinelWallObserver:
             atr_pts=round(atr, 2),
             distance_to_call_wall_atr=dist_call_atr,
             distance_to_put_wall_atr=dist_put_atr,
+            straddle_profile=straddle_profile,
+            market_maker_stress_score=mm_stress,
             is_valid=is_valid,
             status=status,
             last_spot_timestamp_ms=self._last_spot_timestamp_ms,

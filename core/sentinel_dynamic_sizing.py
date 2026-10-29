@@ -5,7 +5,7 @@ Implements Gate 1 (Capital Discretization & Integer Lot Math):
 - Invariant 1.2 (Floor-or-Reject): If computed_lots < 1, sizing MUST return lots = 0 and
   tier "REJECT_INSUFFICIENT_MARGIN" (or "ZERO_SUPPRESS"). Sizing must NEVER round up to 1.
 - Invariant 1.3: Support exchange lot sizes:
-  NIFTY: 65 (or SEBI standard), BANKNIFTY: 40, SENSEX: 20, FINNIFTY: 25, MIDCPNIFTY: 50.
+  NIFTY: 65 (or SEBI standard), BANKNIFTY: 30, SENSEX: 20, FINNIFTY: 25, MIDCPNIFTY: 50.
 
 Safety Invariants:
 - read_only = True
@@ -22,7 +22,7 @@ from typing import Dict, Tuple
 # Canonical Exchange Lot Sizes (per SEBI / Exchange rules)
 INDEX_LOT_SIZES: Dict[str, int] = {
     "NIFTY": 65,
-    "BANKNIFTY": 40,
+    "BANKNIFTY": 30,
     "SENSEX": 20,
     "FINNIFTY": 25,
     "MIDCPNIFTY": 50,

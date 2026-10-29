@@ -41,7 +41,7 @@ DEFAULT_SLIPPAGE_PTS = 0.50
 # Index lot sizes (Current SEBI / Exchange standard)
 LOT_SIZES = {
     "NIFTY": 65,  # Standard NIFTY lot size
-    "BANKNIFTY": 40,  # Standard BANKNIFTY lot size
+    "BANKNIFTY": 30,  # Standard BANKNIFTY lot size (SEBI revised)
     "SENSEX": 20,  # Standard BSE SENSEX lot size
 }
 

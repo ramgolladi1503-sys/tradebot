@@ -653,18 +653,24 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 or_bounds=self.or_bounds,
             )
 
-            # Factor 2: Macro Multi-Strike Option Writer Conviction (Decoupled from Factor 3 Depth)
+            # Factor 2: Macro Multi-Strike Option Writer Conviction & Market Maker Stress
             wall_obs = self.wall_observers.get(index_name)
             if wall_obs:
                 w_state = wall_obs.compute_wall_state()
                 # Derive writer conviction from multi-strike open interest asymmetry (PCR and Net OI)
                 pcr = w_state.pcr_oi
-                if required_option_type == "CE":
-                    # Bullish: Low call wall resistance or put buildup (pcr > 1.0)
-                    dyn_conviction = max(0.20, min(0.95, round(0.50 + 0.35 * (pcr - 1.0), 2)))
-                else:
-                    # Bearish: High call writing or put unwinding (pcr < 1.0)
-                    dyn_conviction = max(0.20, min(0.95, round(0.50 + 0.35 * (1.0 - pcr), 2)))
+                base_conviction = 0.50 + 0.35 * (pcr - 1.0) if required_option_type == "CE" else 0.50 + 0.35 * (1.0 - pcr)
+                
+                # Boost conviction when market makers are squeezed outside Straddle Breakeven (Gamma Squeeze)
+                mm_stress = w_state.market_maker_stress_score
+                if required_option_type == "CE" and mm_stress > 0:
+                    base_conviction += (0.15 * mm_stress)  # Bullish squeeze bonus
+                elif required_option_type == "PE" and mm_stress < 0:
+                    base_conviction += (0.15 * abs(mm_stress))  # Bearish squeeze bonus
+                elif w_state.straddle_profile.is_pin_risk:
+                    base_conviction -= 0.10  # Penalize inside ATM pin chop
+                    
+                dyn_conviction = max(0.20, min(0.95, round(base_conviction, 2)))
             else:
                 dyn_conviction = 0.50
 

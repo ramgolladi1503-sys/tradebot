@@ -32,7 +32,7 @@ from core.market_structure.sentinel_wall_gate import (
 def test_exchange_lot_sizes():
     """Verify statutory exchange lot size resolution."""
     assert get_exchange_lot_size("NIFTY") == 65
-    assert get_exchange_lot_size("BANKNIFTY") == 40
+    assert get_exchange_lot_size("BANKNIFTY") == 30
     assert get_exchange_lot_size("SENSEX") == 20
     assert get_exchange_lot_size("FINNIFTY") == 25
     assert get_exchange_lot_size("MIDCPNIFTY") == 50
