@@ -123,7 +123,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         min_strike_oi_other: int = 100000,
         min_nifty_frictional_hurdle_atr: float = 12.0,
         min_nifty_hurdle_ratio: float = 2.0,
-        skew_threshold_ms: float = 250.0,
+        skew_threshold_ms: float = 1500.0,
         enable_stdout: bool = True,
         wal_path: str = "runtime/sentinel_apm_wal.json",
     ) -> None:
