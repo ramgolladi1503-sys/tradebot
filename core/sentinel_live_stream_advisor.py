@@ -669,6 +669,14 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     base_conviction += (0.15 * abs(mm_stress))  # Bearish squeeze bonus
                 elif w_state.straddle_profile.is_pin_risk:
                     base_conviction -= 0.10  # Penalize inside ATM pin chop
+
+                # Factor 2B: Option Lead-Lag Aggression (Surges in ATM option buying volume)
+                atm_prof = w_state.wall_density_map.get(w_state.straddle_profile.atm_strike)
+                if atm_prof:
+                    if required_option_type == "CE" and atm_prof.is_call_aggressive_buy:
+                        base_conviction += 0.10  # Immediate ATM Call market buying surge
+                    elif required_option_type == "PE" and atm_prof.is_put_aggressive_buy:
+                        base_conviction += 0.10  # Immediate ATM Put market buying surge
                     
                 dyn_conviction = max(0.20, min(0.95, round(base_conviction, 2)))
             else:

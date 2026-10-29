@@ -143,6 +143,12 @@ class StrikeWallProfile:
     is_call_unwinding: bool = False  # True if call_oi_delta_5m < -0.05 * call_oi (accelerated covering)
     is_put_unwinding: bool = False   # True if put_oi_delta_5m < -0.05 * put_oi (accelerated covering)
 
+    # Option Lead-Lag Aggression (Surges in option buying volume vs average)
+    call_volume_surge_ratio: float = 1.0  # call_volume / (rolling_avg_volume + 1e-6)
+    put_volume_surge_ratio: float = 1.0   # put_volume / (rolling_avg_volume + 1e-6)
+    is_call_aggressive_buy: bool = False  # True if volume surges > 2.0x and bid-ask depth is bullish
+    is_put_aggressive_buy: bool = False   # True if volume surges > 2.0x and bid-ask depth is bearish
+
 
 @dataclass(frozen=True)
 class StraddleBreakevenProfile:
@@ -250,6 +256,10 @@ class SentinelWallObserver:
         # Intraday Historical Time-Series Deques for Delta-OI Velocity:
         # strike -> {'CE': deque[(ts_ms, oi)], 'PE': deque[(ts_ms, oi)]}
         self._oi_history: Dict[float, Dict[str, Deque[Tuple[int, float]]]] = {}
+
+        # Intraday Historical Volume Deques for Option Volume Surges (Lead-Lag Aggression):
+        # strike -> {'CE': deque[(ts_ms, volume)], 'PE': deque[(ts_ms, volume)]}
+        self._vol_history: Dict[float, Dict[str, Deque[Tuple[int, float]]]] = {}
 
         # Straddle Anchor:
         # (atm_strike, call_ltp, put_ltp, timestamp_ms)
@@ -366,18 +376,25 @@ class SentinelWallObserver:
                     "CE": deque(maxlen=360),  # Up to 360 snapshots (~30-60 mins of tick/snapshot updates)
                     "PE": deque(maxlen=360),
                 }
+                self._vol_history[strike] = {
+                    "CE": deque(maxlen=360),
+                    "PE": deque(maxlen=360),
+                }
 
             bucket = self._strike_data[strike][opt_type]
             changed = False
+            eff_ts = ts if ts > 0 else (self._last_timestamp_ms or int(time.time() * 1000))
+
             if actual_oi > 0 and actual_oi != bucket["oi"]:
                 bucket["oi"] = actual_oi
                 changed = True
                 # Record in historical deque for causal rolling Delta-OI calculation
-                eff_ts = ts if ts > 0 else (self._last_timestamp_ms or int(time.time() * 1000))
                 self._oi_history[strike][opt_type].append((eff_ts, actual_oi))
             if actual_vol > 0 and actual_vol != bucket["volume"]:
                 bucket["volume"] = actual_vol
                 changed = True
+                # Record in volume deque for rolling volume surge calculation
+                self._vol_history[strike][opt_type].append((eff_ts, actual_vol))
             if actual_bid_depth >= 0 and actual_bid_depth != bucket["bid_depth"]:
                 bucket["bid_depth"] = actual_bid_depth
                 changed = True
@@ -554,12 +571,36 @@ class SentinelWallObserver:
                         break
 
             # Unwinding criteria: >5% reduction in OI over 5 minutes with baseline OI >= 100 lots
-            # Uses dynamic index lot size (e.g. NIFTY 65*100=6500, SENSEX 20*100=2000, BANKNIFTY 40*100=4000)
+            # Uses dynamic index lot size (e.g. NIFTY 65*100=6500, SENSEX 20*100=2000, BANKNIFTY 30*100=3000)
             from core.sentinel_dynamic_sizing import get_exchange_lot_size
             min_baseline_oi = 100 * get_exchange_lot_size(self.underlying_symbol)
 
             is_c_unwinding = bool(c_oi >= min_baseline_oi and c_delta_5m < -0.05 * c_oi)
             is_p_unwinding = bool(p_oi >= min_baseline_oi and p_delta_5m < -0.05 * p_oi)
+
+            # Option Lead-Lag Aggression: Rolling 5-min volume surge (> 2.0x baseline)
+            c_vol_surge = 1.0
+            p_vol_surge = 1.0
+            if strike in self._vol_history:
+                c_vol_hist = self._vol_history[strike]["CE"]
+                p_vol_hist = self._vol_history[strike]["PE"]
+
+                cutoff_5m = now_ms - 300_000
+                c_vols_5m = [v for ts_v, v in c_vol_hist if ts_v >= cutoff_5m]
+                p_vols_5m = [v for ts_v, v in p_vol_hist if ts_v >= cutoff_5m]
+
+                if len(c_vols_5m) >= 2:
+                    c_recent_delta = c_vols_5m[-1] - c_vols_5m[0]
+                    c_prior_avg = (c_vols_5m[0] / max(1, len(c_vol_hist))) if c_vol_hist else 1.0
+                    c_vol_surge = round(c_recent_delta / (c_prior_avg + 1e-6), 2)
+
+                if len(p_vols_5m) >= 2:
+                    p_recent_delta = p_vols_5m[-1] - p_vols_5m[0]
+                    p_prior_avg = (p_vols_5m[0] / max(1, len(p_vol_hist))) if p_vol_hist else 1.0
+                    p_vol_surge = round(p_recent_delta / (p_prior_avg + 1e-6), 2)
+
+            is_c_aggr = bool(c_vol_surge >= 2.0 and net_dir_liq > 0)
+            is_p_aggr = bool(p_vol_surge >= 2.0 and net_dir_liq < 0)
 
             profile = StrikeWallProfile(
                 strike=strike,
@@ -588,6 +629,10 @@ class SentinelWallObserver:
                 put_oi_delta_15m=round(p_delta_15m, 2),
                 is_call_unwinding=is_c_unwinding,
                 is_put_unwinding=is_p_unwinding,
+                call_volume_surge_ratio=c_vol_surge,
+                put_volume_surge_ratio=p_vol_surge,
+                is_call_aggressive_buy=is_c_aggr,
+                is_put_aggressive_buy=is_p_aggr,
             )
             wall_density_map[strike] = profile
 

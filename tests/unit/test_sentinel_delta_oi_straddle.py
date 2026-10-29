@@ -72,3 +72,25 @@ def test_straddle_breakeven_and_market_maker_stress():
     assert sb2.spot_position == "ABOVE_UPPER"
     assert sb2.distance_to_upper_pts == -60.0  # 60 pts above upper breakeven
     assert state2.market_maker_stress_score == 1.0  # (24710 - 24650) / 60.0 ATR = 1.0 (Full Bullish MM Stress)
+
+
+def test_option_lead_lag_aggression():
+    """Verify detection of sudden ATM option buying volume surges."""
+    obs = SentinelWallObserver(underlying_symbol="NIFTY", min_strike_span=2)
+    obs.on_spot_tick(spot_price=24500.0, timestamp_ms=1000)
+
+    base_ts = 1_700_000_000_000
+    # Initial baseline volume: 10,000 contracts
+    obs.on_option_tick("NIFTY 24500 CE", ltp=80.0, volume=10_000.0, oi=50000.0, bid_depth=5000.0, ask_depth=2000.0, timestamp_ms=base_ts)
+    obs.on_option_tick("NIFTY 24500 PE", ltp=70.0, volume=10_000.0, oi=50000.0, bid_depth=2000.0, ask_depth=5000.0, timestamp_ms=base_ts)
+
+    # 2 minutes later: CE volume explodes to 35,000 contracts (+25,000 contracts surge) with net bullish depth
+    adv_ts = base_ts + 120_000
+    obs.on_option_tick("NIFTY 24500 CE", ltp=95.0, volume=35_000.0, oi=48000.0, bid_depth=8000.0, ask_depth=2000.0, timestamp_ms=adv_ts)
+
+    state = obs.compute_wall_state(force_recompute=True)
+    c_prof = state.wall_density_map[24500.0]
+    assert c_prof.call_volume == 35_000.0
+    assert c_prof.call_volume_surge_ratio >= 2.0
+    assert c_prof.is_call_aggressive_buy is True
+    assert c_prof.is_put_aggressive_buy is False
