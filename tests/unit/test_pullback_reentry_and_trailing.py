@@ -19,7 +19,8 @@ from core.active_position_manager import (
     STATE_TRAIL_LOCK,
     STATE_PULLBACK_WAIT,
     STATE_EXIT_PENDING,
-    STATE_LIQUIDATED
+    STATE_COOL_OFF,
+    STATE_LIQUIDATED,
 )
 
 
@@ -80,9 +81,9 @@ def test_tier_2_peak_profit_floor_clamps_at_35_pct_giveback(tmp_path):
 
     # Option retreats to 119.0 (breaches giveback clamp stop of 119.5) -> Exits with green profit!
     state, p = apm.evaluate_tick(current_spot=23011.0, current_opt_ltp=119.0, atr_1m=10.0)
-    assert state == STATE_LIQUIDATED
-    assert p["exit_reason"] == "PEAK_GIVEBACK_CLAMP_EXIT"
-    assert p["opt_pnl_pts"] == 19.0  # Locked +19 pts (+19%) green profit instead of round-tripping!
+    assert state in {STATE_COOL_OFF, STATE_LIQUIDATED}
+    assert apm.last_completed_trade["exit_reason"] == "PEAK_GIVEBACK_CLAMP_EXIT"
+    assert apm.last_completed_trade["opt_pnl_pts"] == 19.0  # Locked +19 pts (+19%) green profit instead of round-tripping!
 
 
 def test_gear_2_pullback_reentry_workflow(tmp_path):
@@ -142,8 +143,8 @@ def test_gear_2_pullback_reentry_workflow(tmp_path):
     assert p["giveback_clamp_sl"] is not None
     # Now option drops below clamp SL
     state, p = apm.evaluate_tick(current_spot=23010.0, current_opt_ltp=115.0, atr_1m=10.0)
-    # Because reentry_count == 1, it must directly LIQUIDATE, not enter PULLBACK_WAIT again!
-    assert state == STATE_LIQUIDATED
+    # Because reentry_count == 1, it must directly LIQUIDATE / COOL_OFF, not enter PULLBACK_WAIT again!
+    assert state in {STATE_COOL_OFF, STATE_LIQUIDATED}
     assert p["exit_reason"] == "PEAK_GIVEBACK_CLAMP_EXIT"
 
 

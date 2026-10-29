@@ -141,6 +141,9 @@ class PositionPayload:
     runner_exit_ltp: Optional[float] = None
     runner_pnl_pts: Optional[float] = None
     blended_opt_pnl_pts: Optional[float] = None
+    # Asymmetric Structural Runner Mode (15-Minute Swing Trailing)
+    structural_runner_enabled: bool = False
+    structural_swing_anchor_sl: Optional[float] = None  # 15m structural swing low (CE) or high (PE)
 
 
 class ActivePositionManager:
@@ -294,6 +297,8 @@ class ActivePositionManager:
         total_quantity: Optional[int] = None,
         is_expiry_day: bool = False,
         is_deep_itm: bool = False,
+        structural_runner_enabled: bool = False,
+        structural_swing_anchor_sl: Optional[float] = None,
     ) -> bool:
         """Arms and executes entry into IN_FLIGHT state with dynamic volatility-scaled targets.
         
@@ -430,11 +435,44 @@ class ActivePositionManager:
             runner_trailing_sl=None,
             session_gear=session_gear,
             opt_stop_loss_pct=opt_stop_loss_pct,
-            opt_initial_sl=opt_initial_sl
+            opt_initial_sl=opt_initial_sl,
+            structural_runner_enabled=structural_runner_enabled,
+            structural_swing_anchor_sl=structural_swing_anchor_sl,
         )
 
         self._transition_to(STATE_IN_FLIGHT)
         return True
+
+    def update_structural_swing_anchor(self, new_swing_anchor_sl: float) -> bool:
+        """Dynamically updates the 15-minute structural swing trailing anchor for active runners.
+        
+        Enforces monotonic protection:
+        - For CE (Long), the anchor can ONLY ratchet upward (protecting higher lows).
+        - For PE (Short), the anchor can ONLY ratchet downward (protecting lower highs).
+        """
+        if self.state not in {STATE_IN_FLIGHT, STATE_TRAIL_LOCK} or not self.payload:
+            return False
+
+        p = self.payload
+        is_ce = (p.direction == "CE")
+
+        if p.structural_swing_anchor_sl is None:
+            p.structural_swing_anchor_sl = new_swing_anchor_sl
+            p.structural_runner_enabled = True
+            self._persist_wal_atomic(force_sync=False)
+            return True
+
+        # Monotonic ratchet: Never widen stop
+        if is_ce and new_swing_anchor_sl > p.structural_swing_anchor_sl:
+            p.structural_swing_anchor_sl = round(new_swing_anchor_sl, 2)
+            self._persist_wal_atomic(force_sync=False)
+            return True
+        elif not is_ce and new_swing_anchor_sl < p.structural_swing_anchor_sl:
+            p.structural_swing_anchor_sl = round(new_swing_anchor_sl, 2)
+            self._persist_wal_atomic(force_sync=False)
+            return True
+
+        return False
 
     def evaluate_tick(
         self,
@@ -607,23 +645,31 @@ class ActivePositionManager:
                 self._persist_wal_atomic()
                 return self.state, asdict(p)
 
-        # 5. Chandelier Option Volatility Trailing Exit
-        if p.is_runner_mode and p.half_booked and p.runner_trailing_sl is not None:
-            opt_entry = p.opt_entry_ltp or 50.0
-            peak_hwm = p.opt_peak_hwm or opt_entry
-            friction_buffer = 5.0 if is_sensex else (3.0 if "BANKNIFTY" in p.strike_contract else 2.0)
-            monotonic_floor = opt_entry + friction_buffer
+        # 5. Chandelier Option Volatility Trailing Exit or Structural Swing Trailing Exit
+        if p.is_runner_mode and p.half_booked:
+            # Check Structural Swing Stop if enabled (15-minute Market Structure Higher Low / Lower High)
+            if p.structural_runner_enabled and p.structural_swing_anchor_sl is not None:
+                hit_struct = (current_spot <= p.structural_swing_anchor_sl) if is_ce else (current_spot >= p.structural_swing_anchor_sl)
+                if hit_struct:
+                    _record_tick_exit("STRUCTURAL_15M_SWING_EXIT", current_spot)
+                    return self.liquidate()
+            elif p.runner_trailing_sl is not None:
+                # Otherwise trail via Chandelier Volatility Floor (if structural runner is not active)
+                opt_entry = p.opt_entry_ltp or 50.0
+                peak_hwm = p.opt_peak_hwm or opt_entry
+                friction_buffer = 5.0 if is_sensex else (3.0 if "BANKNIFTY" in p.strike_contract else 2.0)
+                monotonic_floor = opt_entry + friction_buffer
 
-            peak_excursion = max(0.0, peak_hwm - opt_entry)
-            clamped_cushion = min(1.5 * eff_atr, max(12.0, 0.35 * peak_excursion))
-            proposed_sl = round(peak_hwm - clamped_cushion, 2)
-            new_opt_sl = max(monotonic_floor, proposed_sl)
+                peak_excursion = max(0.0, peak_hwm - opt_entry)
+                clamped_cushion = min(1.5 * eff_atr, max(12.0, 0.35 * peak_excursion))
+                proposed_sl = round(peak_hwm - clamped_cushion, 2)
+                new_opt_sl = max(monotonic_floor, proposed_sl)
 
-            if new_opt_sl > p.runner_trailing_sl:
-                p.runner_trailing_sl = round(new_opt_sl, 2)
-            if p.opt_current_ltp is not None and p.opt_current_ltp <= p.runner_trailing_sl:
-                _record_tick_exit("RUNNER_HWM_TRAILING_EXIT", current_spot)
-                return self.liquidate()
+                if new_opt_sl > p.runner_trailing_sl:
+                    p.runner_trailing_sl = round(new_opt_sl, 2)
+                if p.opt_current_ltp is not None and p.opt_current_ltp <= p.runner_trailing_sl:
+                    _record_tick_exit("RUNNER_HWM_TRAILING_EXIT", current_spot)
+                    return self.liquidate()
 
         # 6. Volatility-Scaled Breakeven Ratchet (Requires >= 1.2 ATR excursion to avoid noise stops)
         be_req_gain = 1.2 * eff_atr
