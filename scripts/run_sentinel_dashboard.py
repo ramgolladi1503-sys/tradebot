@@ -1836,7 +1836,7 @@ with tab_journal:
         st.markdown("#### Authoritative Genuine Execution Ledger")
         if j_executions:
             e_df = pd.DataFrame(j_executions)
-            e_cols = ["wall_time_str", "position_id", "index_name", "symbol", "direction", "fill_price", "lots", "total_quantity", "sizing_tier", "target_pts", "sl_pts", "confidence_score"]
+            e_cols = ["wall_time_str", "position_id", "index_name", "symbol", "direction", "setup_reason", "fill_price", "lots", "total_quantity", "sizing_tier", "target_pts", "sl_pts", "confidence_score"]
             show_e_cols = [c for c in e_cols if c in e_df.columns]
             st.dataframe(
                 e_df[show_e_cols].iloc[::-1].reset_index(drop=True),
@@ -1848,6 +1848,7 @@ with tab_journal:
                     "index_name": st.column_config.TextColumn("Index", width="small"),
                     "symbol": st.column_config.TextColumn("Option Contract", width="medium"),
                     "direction": st.column_config.TextColumn("Dir", width="small"),
+                    "setup_reason": st.column_config.TextColumn("Entry Reason / Trigger", width="large"),
                     "fill_price": st.column_config.NumberColumn("Fill Price", format="₹%.2f"),
                     "lots": st.column_config.NumberColumn("Lots"),
                     "total_quantity": st.column_config.NumberColumn("Qty"),
