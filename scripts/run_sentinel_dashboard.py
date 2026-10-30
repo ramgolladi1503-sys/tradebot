@@ -472,6 +472,18 @@ wal_payload = active_wal_data.get("payload")
 wal_last_trade = active_wal_data.get("last_completed_trade")
 wal_history = active_wal_data.get("trade_history", [])
 
+# Composite multi-index active state resolution (prevents masking in-flight positions under "All" or other indices)
+active_states_by_idx = {
+    "NIFTY": wal_data_nifty.get("state", "STANDBY"),
+    "BANKNIFTY": wal_data_banknifty.get("state", "STANDBY"),
+    "SENSEX": wal_data_sensex.get("state", "STANDBY"),
+}
+in_flight_indices = [idx for idx, st_name in active_states_by_idx.items() if st_name in {"IN_FLIGHT", "TRAIL_LOCK", "EXIT_PENDING"}]
+if in_flight_indices:
+    composite_wal_state = " • ".join(f"{idx}: {active_states_by_idx[idx]}" for idx in in_flight_indices)
+else:
+    composite_wal_state = "STANDBY"
+
 # Extract all executed trades today from authoritative APM WAL history
 def get_all_executed_trades_today() -> list:
     trades_dict = {}
@@ -734,7 +746,8 @@ with col4:
     gear_label = "GEAR 2 (Trend)" if ker_val and ker_val >= 0.35 else "GEAR 1 (Range)"
     st.metric("Regime Gear", gear_label)
 with col5:
-    st.metric("APM State", wal_state)
+    display_apm_state = wal_state if selected_index in {"NIFTY", "BANKNIFTY", "SENSEX"} else composite_wal_state
+    st.metric("APM State", display_apm_state)
 
 st.caption(f"Last Evaluated Feed: **{last_bar_time}** | Total Feed Alerts: **{len(rows)}**")
 
@@ -757,13 +770,15 @@ with tab_live:
         # 🎯 REAL-TIME OPTION STRIKE CONTRACT DISPLAY (Spotlight & Multi-Position APM)
         st.subheader("🎯 Active Option Strike Contract Entry & Risk Profile")
 
-        # Determine all candidate active positions
-        # Supports either multi-position schema `wal_data.get("active_positions")` or single `wal_payload`
+        # Determine all candidate active positions across all three index WALs
         raw_active_list = []
-        if isinstance(wal_data.get("active_positions"), list) and wal_data["active_positions"]:
-            raw_active_list = wal_data["active_positions"]
-        elif wal_payload and isinstance(wal_payload, dict) and wal_state in {"IN_FLIGHT", "TRAIL_LOCK", "EXIT_PENDING"}:
-            raw_active_list = [wal_payload]
+        for w_data in [wal_data_nifty, wal_data_sensex, wal_data_banknifty]:
+            st_name = w_data.get("state", "STANDBY")
+            w_pay = w_data.get("payload")
+            if isinstance(w_data.get("active_positions"), list) and w_data["active_positions"]:
+                raw_active_list.extend(w_data["active_positions"])
+            elif w_pay and isinstance(w_pay, dict) and st_name in {"IN_FLIGHT", "TRAIL_LOCK", "EXIT_PENDING"}:
+                raw_active_list.append(w_pay)
 
         # Filter active positions by selected index
         filtered_active_list = [
