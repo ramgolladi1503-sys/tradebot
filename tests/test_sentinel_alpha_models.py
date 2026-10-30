@@ -64,3 +64,35 @@ def test_wall_absorption_classifier():
     override, reason = wavi_clf.evaluate_override(wavi_high, remaining_depth_ratio=0.10)
     assert override is True
     assert "SHORT_COVERING_SQUEEZE_CONFIRMED" in reason
+
+
+from core.market_structure.sentinel_alpha_models import VolatilitySizingEngine
+
+def test_volatility_sizing_engine():
+    engine = VolatilitySizingEngine(exhaustion_ivr_threshold=80.0, normal_expansion_threshold=50.0)
+    
+    # 1. Normal cheap volatility expansion (IVR = 30) -> Full Size
+    ivr_cheap = engine.calculate_intraday_ivr(current_iv=0.14, min_iv_session=0.12, max_iv_session=0.20)
+    mult, is_veto, reason = engine.compute_size_multiplier(ivr_cheap, atr_exhausted=False)
+    assert is_veto is False
+    assert mult == 1.0
+    assert "Full Size" in reason
+
+    # 2. Elevated volatility / late impulse (IVR = 65) -> Half Size
+    ivr_elevated = engine.calculate_intraday_ivr(current_iv=0.175, min_iv_session=0.12, max_iv_session=0.20)
+    mult, is_veto, reason = engine.compute_size_multiplier(ivr_elevated, atr_exhausted=False)
+    assert is_veto is False
+    assert mult == 0.50
+    assert "Half Size" in reason
+
+    # 3. Exhausted volatility (IVR = 85) -> Hard Binary Veto
+    ivr_exhausted = engine.calculate_intraday_ivr(current_iv=0.19, min_iv_session=0.12, max_iv_session=0.20)
+    mult, is_veto, reason = engine.compute_size_multiplier(ivr_exhausted, atr_exhausted=False)
+    assert is_veto is True
+    assert mult == 0.0
+    assert "VOLATILITY_EXHAUSTED_HARD_VETO" in reason
+
+    # 4. ATR daily exhaustion flag -> Hard Binary Veto regardless of IV
+    mult, is_veto, reason = engine.compute_size_multiplier(ivr_cheap, atr_exhausted=True)
+    assert is_veto is True
+    assert mult == 0.0
