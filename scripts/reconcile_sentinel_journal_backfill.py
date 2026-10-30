@@ -131,7 +131,26 @@ def backfill_session(session_date_str: str, logs_dir: Path, wal_files: List[Path
             if t.get("exit_reason") or t.get("exit_price") or t.get("opt_exit_ltp"):
                 exit_t = str(t.get("exit_time", entry_t))
                 opt_pnl = float(t.get("opt_pnl_pts") or 0.0)
+                max_opt = float(t.get("max_opt_excursion") or 0.0)
                 tot_qty = int(t.get("total_quantity") or 65)
+                exit_rsn = str(t.get("exit_reason") or "COMPLETED")
+
+                # Generate human forensic narrative explaining the trade lifecycle
+                if opt_pnl > 0:
+                    if max_opt > 0 and (max_opt - opt_pnl) / max_opt > 0.50:
+                        giveback_pct = ((max_opt - opt_pnl) / max_opt) * 100.0
+                        narrative = f"WIN WITH GIVEBACK: Option peaked at +{max_opt:.1f}pts but gave back {giveback_pct:.0f}% of peak profit before {exit_rsn}. Tranche 1 secured gains, runner trailed."
+                    else:
+                        narrative = f"CLEAN SKILLFUL EXPANSION: Thesis worked immediately. Realized +{opt_pnl:.1f}pts ({exit_rsn}) with minimal adverse stress."
+                elif exit_rsn == "OPTION_NATIVE_STOP_LOSS_HIT":
+                    narrative = f"STOPPED OUT: Adverse wall held firmly. Spot reversed through invalidation level. Stop loss executed at {opt_pnl:.1f}pts to prevent catastrophic blowout."
+                elif exit_rsn == "NETWORK_DISCONNECT_FREEZE":
+                    narrative = f"DISCONNECT SQUAREOFF: Stream disconnected while trade in-flight. Fail-closed safety liquidated position at {opt_pnl:+.1f}pts."
+                elif exit_rsn == "PEAK_GIVEBACK_CLAMP_EXIT":
+                    narrative = f"GIVEBACK CLAMP TRIGGERED: Protected profit after reaching +{max_opt:.1f}pts. Dynamic clamp locked in +{opt_pnl:.1f}pts before deeper reversal."
+                else:
+                    narrative = f"{exit_rsn}: Exited with {opt_pnl:+.1f}pts option return."
+
                 exit_rec = TradeExitAttributionRecord(
                     record_id=f"EXIT_{pos_id}",
                     position_id=pos_id,
@@ -145,14 +164,15 @@ def backfill_session(session_date_str: str, logs_dir: Path, wal_files: List[Path
                     exit_price_opt=float(t.get("opt_exit_ltp") or 0.0),
                     opt_pnl_pts=opt_pnl,
                     spot_pnl_pts=float(t.get("pnl_pts") or 0.0),
-                    exit_reason=str(t.get("exit_reason") or "COMPLETED"),
+                    exit_reason=exit_rsn,
                     max_spot_excursion=float(t.get("max_spot_excursion") or 0.0),
-                    max_opt_excursion=float(t.get("max_opt_excursion") or 0.0),
+                    max_opt_excursion=max_opt,
                     target_1_hit=bool(t.get("target_1_hit")),
                     target_2_hit=bool(t.get("target_2_hit")),
                     half_booked=bool(t.get("half_booked")),
                     trail_locked=bool(t.get("trail_locked")),
                     realized_pnl_inr=round(opt_pnl * tot_qty, 2),
+                    forensic_narrative=narrative,
                 )
                 records_to_append.append(asdict(exit_rec))
 

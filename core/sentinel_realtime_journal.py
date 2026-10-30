@@ -117,6 +117,7 @@ class TradeExitAttributionRecord:
     half_booked: bool = False
     trail_locked: bool = False
     realized_pnl_inr: float = 0.0
+    forensic_narrative: str = ""
 
 
 @dataclass(slots=True)

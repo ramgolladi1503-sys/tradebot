@@ -1865,7 +1865,7 @@ with tab_journal:
         st.markdown("#### Granular Trade Exit Attribution")
         if j_exits:
             x_df = pd.DataFrame(j_exits)
-            x_cols = ["wall_time_str", "position_id", "symbol", "exit_reason", "entry_price_opt", "exit_price_opt", "opt_pnl_pts", "realized_pnl_inr", "target_1_hit", "target_2_hit", "max_opt_excursion"]
+            x_cols = ["wall_time_str", "position_id", "symbol", "forensic_narrative", "exit_reason", "entry_price_opt", "exit_price_opt", "opt_pnl_pts", "realized_pnl_inr", "target_1_hit", "target_2_hit", "max_opt_excursion"]
             show_x_cols = [c for c in x_cols if c in x_df.columns]
             st.dataframe(
                 x_df[show_x_cols].iloc[::-1].reset_index(drop=True),
@@ -1875,7 +1875,8 @@ with tab_journal:
                     "wall_time_str": st.column_config.TextColumn("Exit Time", width="small"),
                     "position_id": st.column_config.TextColumn("Position ID", width="medium"),
                     "symbol": st.column_config.TextColumn("Contract", width="medium"),
-                    "exit_reason": st.column_config.TextColumn("Attribution Reason", width="medium"),
+                    "forensic_narrative": st.column_config.TextColumn("Forensic Story / Why It Ended", width="large"),
+                    "exit_reason": st.column_config.TextColumn("Technical Reason", width="small"),
                     "entry_price_opt": st.column_config.NumberColumn("Entry LTP", format="₹%.2f"),
                     "exit_price_opt": st.column_config.NumberColumn("Exit LTP", format="₹%.2f"),
                     "opt_pnl_pts": st.column_config.NumberColumn("Option PnL (pts)", format="%+.2f"),
