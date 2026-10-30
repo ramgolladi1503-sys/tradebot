@@ -32,6 +32,8 @@ Before substantive work on any TradeBot task, load and invoke this workflow and 
 
 Separate agent instances produce separately attributed work; this does not prove independent cognition. Require distinct evidence and review questions, and describe the outputs as separately produced. Neither agents, PO, Hermes, QA, nor team consensus grant human authorization or permit forbidden broker, order, LIVE, or risk actions. Explicit human authorization remains required wherever repository rules require it.
 
+Pre-GitHub automation pilot: `python -m tools.pre_github_team` can launch eight distinct Codex CLI read-only role sessions against a committed work item and collect an audit ledger. See `docs/tradebot_delivery/AGENT_RUNTIME_PILOT.md`. An agent coordinator MAY use it when actual subagent delegation is unavailable, but it does not execute GSD patches, authenticate role identities, satisfy QA/UAT/release approvals, or replace the mandatory lifecycle. A collected review ledger is explicitly not permission to open or merge a PR. If executable agent delegation is unavailable or required role work is not performed, continue reporting `UNSATISFIED`.
+
 The mandatory role-separation rule is:
 
 `.agents/rules/tradebot-role-separation.md`
