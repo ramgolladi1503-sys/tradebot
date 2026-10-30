@@ -23,6 +23,7 @@ import math
 import os
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, time as dt_time
 from pathlib import Path
@@ -234,19 +235,26 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             "BANKNIFTY": SyntheticBarBucket(),
         }
 
+        # Rolling true ranges from 1-minute synthetic bars (maxlen=20) for dynamic ATR updates
+        self.bar_true_ranges: dict[str, deque[float]] = {
+            "NIFTY": deque(maxlen=20),
+            "SENSEX": deque(maxlen=20),
+            "BANKNIFTY": deque(maxlen=20),
+        }
+
         # FEAT-SENTINEL-WALL-OBSERVER-001: In-Memory Strike Wall Observers per index
         self.wall_observers: dict[str, SentinelWallObserver] = {
-            "NIFTY": SentinelWallObserver(underlying_symbol="NIFTY"),
-            "SENSEX": SentinelWallObserver(underlying_symbol="SENSEX"),
-            "BANKNIFTY": SentinelWallObserver(underlying_symbol="BANKNIFTY"),
+            "NIFTY": SentinelWallObserver(underlying_symbol="NIFTY", atr_pts=65.0),
+            "SENSEX": SentinelWallObserver(underlying_symbol="SENSEX", atr_pts=500.0),
+            "BANKNIFTY": SentinelWallObserver(underlying_symbol="BANKNIFTY", atr_pts=300.0),
         }
         self.wall_observer = self.wall_observers["NIFTY"]
 
         # Gate 2: SentinelWallGates for pre-entry barrier verification
         self.wall_gates: dict[str, SentinelWallGate] = {
-            "NIFTY": SentinelWallGate(observer=self.wall_observers["NIFTY"], proximity_veto_atr=0.50),
-            "SENSEX": SentinelWallGate(observer=self.wall_observers["SENSEX"], proximity_veto_atr=0.50),
-            "BANKNIFTY": SentinelWallGate(observer=self.wall_observers["BANKNIFTY"], proximity_veto_atr=0.50),
+            "NIFTY": SentinelWallGate(observer=self.wall_observers["NIFTY"], proximity_veto_atr=0.50, wall_buffer_pts=2.0),
+            "SENSEX": SentinelWallGate(observer=self.wall_observers["SENSEX"], proximity_veto_atr=0.50, wall_buffer_pts=15.0),
+            "BANKNIFTY": SentinelWallGate(observer=self.wall_observers["BANKNIFTY"], proximity_veto_atr=0.50, wall_buffer_pts=10.0),
         }
         self.wall_gate = self.wall_gates["NIFTY"]
 
@@ -402,6 +410,14 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         timestamp_ms=bucket.last_timestamp_ms,
                         bar_time=bar_time,
                     )
+                    # Wire dynamic 1-minute synthetic bar range updates into bar_true_ranges and observer ATR
+                    bar_tr = max(1.0, bucket.high - bucket.low)
+                    if idx_key in self.bar_true_ranges:
+                        self.bar_true_ranges[idx_key].append(bar_tr)
+                        obs = self.wall_observers.get(idx_key)
+                        if obs is not None:
+                            avg_tr = sum(self.bar_true_ranges[idx_key]) / len(self.bar_true_ranges[idx_key])
+                            obs.update_atr(max(1.0, round(avg_tr, 2)))
                     # Start new bucket for the new minute
                     bucket.bucket_epoch_min = epoch_min
                     bucket.open = tick.ltp

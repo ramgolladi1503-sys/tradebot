@@ -27,6 +27,17 @@ from core.market_structure.sentinel_wall_observer import (
 
 logger = logging.getLogger(__name__)
 
+# Default index-specific wall buffer calibrations (pts)
+DEFAULT_INDEX_WALL_BUFFER_PTS: dict[str, float] = {
+    "NIFTY": 2.0,
+    "BANKNIFTY": 10.0,
+    "SENSEX": 15.0,
+    "FINNIFTY": 4.0,
+    "MIDCPNIFTY": 3.0,
+    "BANKEX": 15.0,
+}
+FALLBACK_WALL_BUFFER_PTS: float = 2.0
+
 # Gate Decision Actions
 GATE_ACTION_PROCEED = "PROCEED"
 GATE_ACTION_VETO = "VETO_ADVERSE_WALL"
@@ -73,11 +84,61 @@ class SentinelWallGate:
         proximity_veto_atr: float = 0.75,
         runner_tighten_atr: float = 0.50,
         hysteresis_pct: float = 0.05,
+        wall_buffer_pts: Optional[float] = None,
     ) -> None:
         self.observer = observer
         self.proximity_veto_atr = float(proximity_veto_atr)
         self.runner_tighten_atr = float(runner_tighten_atr)
         self.hysteresis_pct = float(hysteresis_pct)
+        if wall_buffer_pts is None:
+            symbol = getattr(observer, "underlying_symbol", "NIFTY")
+            self.wall_buffer_pts = DEFAULT_INDEX_WALL_BUFFER_PTS.get(symbol, FALLBACK_WALL_BUFFER_PTS)
+        else:
+            self.wall_buffer_pts = max(0.1, float(wall_buffer_pts))
+
+    def _is_genuine_call_wall(
+        self,
+        prof: StrikeWallProfile,
+        state: SentinelWallState,
+    ) -> bool:
+        """Determines if a strike profile constitutes a genuine call wall barrier.
+
+        Criteria:
+        - Major call wall (is_major_call_wall), OR
+        - Secondary call wall (is_secondary_call_wall), OR
+        - Local concentration: call_oi >= 1.5 * chain_avg AND call_oi >= 0.50 * major_call_wall_oi.
+        """
+        if prof.is_major_call_wall or prof.is_secondary_call_wall:
+            return True
+
+        num_strikes = max(len(state.wall_density_map), 1)
+        chain_avg = state.total_call_oi / num_strikes
+        major_prof = state.wall_density_map.get(state.major_call_wall_strike)
+        major_oi = major_prof.call_oi if major_prof else 0.0
+
+        return (prof.call_oi >= 1.5 * chain_avg) and (prof.call_oi >= 0.50 * major_oi)
+
+    def _is_genuine_put_wall(
+        self,
+        prof: StrikeWallProfile,
+        state: SentinelWallState,
+    ) -> bool:
+        """Determines if a strike profile constitutes a genuine put wall barrier.
+
+        Criteria:
+        - Major put wall (is_major_put_wall), OR
+        - Secondary put wall (is_secondary_put_wall), OR
+        - Local concentration: put_oi >= 1.5 * chain_avg AND put_oi >= 0.50 * major_put_wall_oi.
+        """
+        if prof.is_major_put_wall or prof.is_secondary_put_wall:
+            return True
+
+        num_strikes = max(len(state.wall_density_map), 1)
+        chain_avg = state.total_put_oi / num_strikes
+        major_prof = state.wall_density_map.get(state.major_put_wall_strike)
+        major_oi = major_prof.put_oi if major_prof else 0.0
+
+        return (prof.put_oi >= 1.5 * chain_avg) and (prof.put_oi >= 0.50 * major_oi)
 
     def evaluate_entry_gate(
         self,
@@ -116,11 +177,11 @@ class SentinelWallGate:
         atr = max(state.atr_pts, 1.0)
 
         if dir_clean == "CE":
-            # Scan for any relevant Call Wall (Major, Secondary, or Local Concentration)
+            # Scan for any genuine Call Wall (Major, Secondary, or Local Concentration)
             # within proximity window [spot_price - 0.25*ATR, spot_price + (proximity_veto_atr + hysteresis)*ATR]
             candidate_strikes = []
             for s, prof in state.wall_density_map.items():
-                if prof.is_major_call_wall or prof.is_secondary_call_wall or prof.call_oi >= (0.60 * state.total_call_oi / max(len(state.wall_density_map), 1)):
+                if self._is_genuine_call_wall(prof, state):
                     dist_pts = s - spot_price
                     dist_atr = dist_pts / atr
                     # Consider strikes in local vicinity ahead of spot or recently breached
@@ -187,11 +248,11 @@ class SentinelWallGate:
             return self._default_proceed(state, dir_clean, timestamp_ms, "OUTSIDE_PROXIMITY_ZONE")
 
         elif dir_clean == "PE":
-            # Scan for any relevant Put Wall (Major, Secondary, or Local Concentration)
+            # Scan for any genuine Put Wall (Major, Secondary, or Local Concentration)
             # within proximity window [spot_price - (proximity_veto_atr + hysteresis)*ATR, spot_price + 0.25*ATR]
             candidate_strikes = []
             for s, prof in state.wall_density_map.items():
-                if prof.is_major_put_wall or prof.is_secondary_put_wall or prof.put_oi >= (0.60 * state.total_put_oi / max(len(state.wall_density_map), 1)):
+                if self._is_genuine_put_wall(prof, state):
                     dist_pts = spot_price - s
                     dist_atr = dist_pts / atr
                     # Consider strikes in local vicinity below spot or recently breached downwards
@@ -316,7 +377,7 @@ class SentinelWallGate:
         nominal_target_pts: float,
         sl_pts: float,
         timestamp_ms: int,
-        wall_buffer_pts: float = 1.0,
+        wall_buffer_pts: Optional[float] = None,
         min_rr_ratio: float = 1.0,
     ) -> WallGateDecision:
         """Evaluates whether nominal Take Profit should be clamped before an opposing fortified wall.
@@ -342,12 +403,13 @@ class SentinelWallGate:
         atr = max(state.atr_pts, 1.0)
         target_pts = float(nominal_target_pts)
         sl = max(float(sl_pts), 1.0)
+        eff_wall_buffer_pts = self.wall_buffer_pts if wall_buffer_pts is None else float(wall_buffer_pts)
 
         if dir_clean == "CE":
             # For CE, opposing barriers are Call strikes above spot
             candidate_strikes = []
             for s, prof in state.wall_density_map.items():
-                if s > spot_price:
+                if s > spot_price and self._is_genuine_call_wall(prof, state):
                     dist_pts = s - spot_price
                     # Only consider walls that are closer than nominal target
                     if dist_pts < target_pts:
@@ -362,7 +424,7 @@ class SentinelWallGate:
 
             vuln = wall_prof.call_wall_vulnerability
             ratio = wall_prof.directional_liquidity_ratio
-            is_fortified = (wall_prof.is_major_call_wall or wall_prof.is_secondary_call_wall) and (vuln < 0.80 or ratio < 0.90)
+            is_fortified = self._is_genuine_call_wall(wall_prof, state) and (vuln < 0.80 or ratio < 0.90)
 
             # Attacker 4: If fragile (vuln >= 0.80 and ratio >= 0.90), allow breakout to target
             if not is_fortified:
@@ -381,7 +443,7 @@ class SentinelWallGate:
                 )
 
             # Propose clamped target = distance to wall - buffer
-            proposed_target = round(dist_pts - wall_buffer_pts, 2)
+            proposed_target = round(dist_pts - eff_wall_buffer_pts, 2)
 
             # Attacker 2: Target Truncation Fallacy check
             # Clamping must not destroy Risk/Reward ratio below min_rr_ratio
@@ -419,7 +481,7 @@ class SentinelWallGate:
             # For PE, opposing barriers are Put strikes below spot
             candidate_strikes = []
             for s, prof in state.wall_density_map.items():
-                if s < spot_price:
+                if s < spot_price and self._is_genuine_put_wall(prof, state):
                     dist_pts = spot_price - s
                     # Only consider walls that are closer than nominal target
                     if dist_pts < target_pts:
@@ -433,7 +495,7 @@ class SentinelWallGate:
 
             vuln = wall_prof.put_wall_vulnerability
             ratio = wall_prof.directional_liquidity_ratio
-            is_fortified = (wall_prof.is_major_put_wall or wall_prof.is_secondary_put_wall) and (vuln > 1.20 or ratio < 0.90)
+            is_fortified = self._is_genuine_put_wall(wall_prof, state) and (vuln > 1.20 or ratio < 0.90)
 
             # Attacker 4: If floor fragile / breakable, allow expansion
             if not is_fortified:
@@ -452,7 +514,7 @@ class SentinelWallGate:
                 )
 
             # Propose clamped target = distance to floor - buffer
-            proposed_target = round(dist_pts - wall_buffer_pts, 2)
+            proposed_target = round(dist_pts - eff_wall_buffer_pts, 2)
 
             # Attacker 2: Target Truncation Fallacy check
             if proposed_target < (min_rr_ratio * sl):

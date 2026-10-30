@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 import threading
 import time
@@ -30,6 +31,17 @@ from pathlib import Path
 from typing import Deque, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
+
+# Default index-specific baseline ATR calibrations
+DEFAULT_INDEX_ATR: Dict[str, float] = {
+    "NIFTY": 65.0,
+    "BANKNIFTY": 300.0,
+    "SENSEX": 500.0,
+    "FINNIFTY": 120.0,
+    "MIDCPNIFTY": 100.0,
+    "BANKEX": 500.0,
+}
+FALLBACK_DEFAULT_ATR: float = 65.0
 
 # Standard Indian weekly/monthly regex:
 # Pattern 1: Spaced format e.g. "SENSEX 72700 CE 29 OCT 26", "NIFTY 22250 PE 27 OCT 26", "NIFTY 25000 CE"
@@ -218,13 +230,16 @@ class SentinelWallObserver:
     def __init__(
         self,
         underlying_symbol: str = "NIFTY",
-        atr_pts: float = 50.0,
+        atr_pts: Optional[float] = None,
         min_strike_span: int = 10,
         feed_freshness_max_skew_ms: int = 60_000,
         recompute_min_interval_ms: int = 100,
     ) -> None:
         self.underlying_symbol = underlying_symbol.strip().upper()
-        self.atr_pts = max(1.0, float(atr_pts))
+        if atr_pts is None:
+            self.atr_pts = DEFAULT_INDEX_ATR.get(self.underlying_symbol, FALLBACK_DEFAULT_ATR)
+        else:
+            self.atr_pts = max(1.0, float(atr_pts))
         self.min_strike_span = int(min_strike_span)
         self.feed_freshness_max_skew_ms = int(feed_freshness_max_skew_ms)
         self.recompute_min_interval_ms = int(recompute_min_interval_ms)
@@ -279,6 +294,21 @@ class SentinelWallObserver:
     def spot_price(self) -> float:
         with self._lock:
             return self._spot_price
+
+    def update_atr(self, atr_pts: float) -> None:
+        """Thread-safe update of observer ATR reference value.
+
+        Validates that atr_pts is a positive finite number.
+        Acquires _lock, updates self.atr_pts, and marks self._is_dirty = True.
+        """
+        if atr_pts is None:
+            raise ValueError("atr_pts cannot be None")
+        val = float(atr_pts)
+        if val <= 0.0 or not math.isfinite(val):
+            raise ValueError(f"atr_pts must be a positive finite number, got {atr_pts}")
+        with self._lock:
+            self.atr_pts = val
+            self._is_dirty = True
 
     def on_spot_tick(
         self,
@@ -643,7 +673,7 @@ class SentinelWallObserver:
         pcr_oi = (total_put_oi / total_call_oi) if total_call_oi > 0 else 0.0
 
         # Volatility normalization (Attacker 2 & 3)
-        atr = self.atr_pts if self.atr_pts > 0 else 50.0
+        atr = self.atr_pts if self.atr_pts > 0 else DEFAULT_INDEX_ATR.get(self.underlying_symbol, FALLBACK_DEFAULT_ATR)
         dist_call_atr = round(dist_call_pts / atr, 4) if atr > 0 else 0.0
         dist_put_atr = round(dist_put_pts / atr, 4) if atr > 0 else 0.0
 
@@ -787,7 +817,7 @@ class SentinelWallObserver:
         if threshold_atr is not None:
             return abs(state.distance_to_call_wall_atr) <= threshold_atr
 
-        t_pts = 50.0 if threshold_pts is None else threshold_pts
+        t_pts = (0.50 * self.atr_pts) if threshold_pts is None else float(threshold_pts)
         return abs(state.major_call_wall_strike - state.spot_price) <= t_pts
 
     def is_spot_near_put_wall(
@@ -803,7 +833,7 @@ class SentinelWallObserver:
         if threshold_atr is not None:
             return abs(state.distance_to_put_wall_atr) <= threshold_atr
 
-        t_pts = 50.0 if threshold_pts is None else threshold_pts
+        t_pts = (0.50 * self.atr_pts) if threshold_pts is None else float(threshold_pts)
         return abs(state.spot_price - state.major_put_wall_strike) <= t_pts
 
     def get_absorption_zones(self, min_depth_ratio: float = 2.0) -> List[float]:
