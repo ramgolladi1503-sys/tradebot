@@ -282,8 +282,8 @@ class ActivePositionManager:
         contract: str,
         entry_price: float,
         entry_time_str: str,
-        sl_pts: float = 12.0,
-        tp_pts: float = 18.0,
+        sl_pts: Optional[float] = None,
+        tp_pts: Optional[float] = None,
         friction_drag_pts: float = 0.80,
         opt_quote: Optional[Dict[str, Any]] = None,
         is_runner_mode: bool = False,
@@ -361,12 +361,19 @@ class ActivePositionManager:
         is_sensex = "SENSEX" in contract or entry_price > 50000.0
         is_banknifty = "BANKNIFTY" in contract or (entry_price > 35000.0 and not is_sensex)
         
-        index_scale = 3.5 if is_sensex else (2.5 if is_banknifty else 1.0)
-        eff_atr = max(atr_1m, 8.0) * index_scale
-
-        # Dynamic Targets: 1.5 ATR for Scalp TP1, 3.5 ATR for Macro Runner TP2
-        eff_tp = max(tp_pts * index_scale, 1.5 * eff_atr)
-        eff_sl = max(sl_pts * index_scale, 1.0 * eff_atr)
+        # If caller provides explicit tp_pts and sl_pts, they are authoritative native points.
+        # Otherwise fallback to unscaled defaults (tp=18.0, sl=12.0) scaled by index volatility.
+        if tp_pts is not None and sl_pts is not None:
+            eff_tp = float(tp_pts)
+            eff_sl = float(sl_pts)
+            eff_atr = float(atr_1m)
+        else:
+            index_scale = 3.5 if is_sensex else (2.5 if is_banknifty else 1.0)
+            eff_atr = max(atr_1m, 8.0) * index_scale
+            raw_tp = 18.0 if tp_pts is None else float(tp_pts)
+            raw_sl = 12.0 if sl_pts is None else float(sl_pts)
+            eff_tp = max(raw_tp * index_scale, 1.5 * eff_atr)
+            eff_sl = max(raw_sl * index_scale, 1.0 * eff_atr)
 
         if direction == "CE":
             target = entry_price + eff_tp
@@ -1004,12 +1011,9 @@ class ActivePositionManager:
         p.exit_time = None
         p.pnl_pts = None
 
-        is_sensex = "SENSEX" in p.strike_contract or current_spot > 50000.0
-        index_scale = 3.5 if is_sensex else 1.0
-        eff_atr = max(atr_1m, 8.0) * index_scale
-
-        eff_tp = 1.5 * eff_atr
-        eff_sl = 1.0 * eff_atr
+        eff_atr = max(atr_1m, 8.0)
+        eff_tp = round(1.5 * eff_atr, 2)
+        eff_sl = round(1.0 * eff_atr, 2)
 
         p.current_sl = (current_spot - eff_sl) if is_ce else (current_spot + eff_sl)
         p.initial_sl = p.current_sl

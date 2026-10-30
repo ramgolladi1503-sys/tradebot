@@ -451,13 +451,13 @@ class SentinelWallGate:
                 return WallGateDecision(
                     symbol=state.symbol,
                     direction=dir_clean,
-                    action=GATE_ACTION_PROCEED,
+                    action=GATE_ACTION_VETO,
                     proximity_pts=dist_pts,
                     proximity_atr=dist_pts / atr,
                     major_wall_strike=wall_strike,
                     wall_vulnerability=vuln,
                     directional_liquidity_ratio=ratio,
-                    reason=f"CLAMP_REJECTED_SUB_MIN_RR: Proposed target {proposed_target:.1f}pts yields R:R {proposed_target/sl:.2f} < {min_rr_ratio:.2f}",
+                    reason=f"VETO_WALL_COMPRESSION_UNECONOMIC_RR: Proposed target {proposed_target:.1f}pts yields R:R {proposed_target/sl:.2f} < {min_rr_ratio:.2f}",
                     timestamp_ms=timestamp_ms,
                     clamped_target_pts=None,
                 )
@@ -521,13 +521,13 @@ class SentinelWallGate:
                 return WallGateDecision(
                     symbol=state.symbol,
                     direction=dir_clean,
-                    action=GATE_ACTION_PROCEED,
+                    action=GATE_ACTION_VETO,
                     proximity_pts=dist_pts,
                     proximity_atr=dist_pts / atr,
                     major_wall_strike=wall_strike,
                     wall_vulnerability=vuln,
                     directional_liquidity_ratio=ratio,
-                    reason=f"CLAMP_REJECTED_SUB_MIN_RR: Proposed target {proposed_target:.1f}pts yields R:R {proposed_target/sl:.2f} < {min_rr_ratio:.2f}",
+                    reason=f"VETO_WALL_COMPRESSION_UNECONOMIC_RR: Proposed target {proposed_target:.1f}pts yields R:R {proposed_target/sl:.2f} < {min_rr_ratio:.2f}",
                     timestamp_ms=timestamp_ms,
                     clamped_target_pts=None,
                 )

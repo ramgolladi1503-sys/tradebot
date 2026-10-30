@@ -537,27 +537,36 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         if "SENSEX" in sym:
             index_name = "SENSEX"
             strike_interval = 100.0
-            target_pts = 60.0
-            sl_pts = 40.0
+            eff_atr_fallback = 500.0
+            min_target = 45.0
+            min_sl = 35.0
             eff_atr_15m = 100.0
             eff_atr_60m = 140.0
         elif "BANKNIFTY" in sym:
             index_name = "BANKNIFTY"
             strike_interval = 100.0
-            target_pts = 50.0
-            sl_pts = 35.0
+            eff_atr_fallback = 300.0
+            min_target = 30.0
+            min_sl = 25.0
             eff_atr_15m = 45.0
             eff_atr_60m = 65.0
         else:
             index_name = "NIFTY"
             strike_interval = 50.0
-            target_pts = 15.0
-            sl_pts = 12.0
+            eff_atr_fallback = 65.0
+            min_target = 12.0
+            min_sl = 12.0
             eff_atr_15m = 12.0
             eff_atr_60m = 16.0
 
         # Feed option depth tick to SentinelWallObserver
         wall_obs = self.wall_observers.get(index_name)
+        effective_atr = wall_obs.atr_pts if (wall_obs is not None and wall_obs.atr_pts > 0) else eff_atr_fallback
+
+        nominal_target = round(0.35 * effective_atr, 2)
+        nominal_sl = round(0.25 * effective_atr, 2)
+        target_pts = max(min_target, nominal_target)
+        sl_pts = max(min_sl, nominal_sl)
         if wall_obs is not None:
             bid_d = float(depth.bid_q1 + depth.bid_q2 + depth.bid_q3 + depth.bid_q4 + depth.bid_q5)
             ask_d = float(depth.ask_q1 + depth.ask_q2 + depth.ask_q3 + depth.ask_q4 + depth.ask_q5)
@@ -822,10 +831,13 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         nominal_target_pts=target_pts,
                         sl_pts=sl_pts,
                         timestamp_ms=depth.exchange_timestamp_ms,
-                        wall_buffer_pts=1.0,
+                        wall_buffer_pts=None,
                         min_rr_ratio=1.0,
                     )
-                    if clamp_decision.action == GATE_ACTION_CLAMP_TARGET and clamp_decision.clamped_target_pts is not None:
+                    if clamp_decision.action == GATE_ACTION_VETO:
+                        wall_vetoed = True
+                        wall_reason = clamp_decision.reason
+                    elif clamp_decision.action == GATE_ACTION_CLAMP_TARGET and clamp_decision.clamped_target_pts is not None:
                         logger.info(
                             f"[{index_name}] Option Wall Target Clamping: Clamped TP from {target_pts:.1f} to {clamp_decision.clamped_target_pts:.1f} pts ({clamp_decision.reason})"
                         )
@@ -1054,6 +1066,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                                 is_runner_mode=True,
                                 session_gear="GEAR_2_TREND",
                                 opt_stop_loss_pct=0.20,
+                                atr_1m=effective_atr,
                                 lots=computed_lots,
                                 sizing_tier=sizing_tier,
                                 lot_size=ex_lot_size,
