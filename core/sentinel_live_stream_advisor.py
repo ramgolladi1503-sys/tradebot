@@ -197,6 +197,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         self.vol_compression_gate = VolatilityCompressionGate()
         self.passive_midpoint_queue = PassiveMidpointQueueModel()
         self.strike_resolver = ITMStrikeResolver()
+        self.max_premium_cap = 250.0  # Stream 1 Invariant: Enforce strike premium cap to eliminate deep-ITM tail drawdowns
 
         # Strategy A & Hypothesis 2: Expiry Calendar and Liquidity Sweep Reversal Engine
         self.expiry_resolver = ExpiryCalendarResolver()
@@ -861,6 +862,28 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     direction=required_option_type,
                     setup_reason=setup_reason,
                     veto_reason="SPREAD_EXPANDED",
+                    spot_price=spot,
+                    option_ltp=ltp,
+                    bid=bid,
+                    ask=ask,
+                    spread_pts=spread,
+                    spread_ratio=spread_ratio,
+                    nominal_target_pts=target_pts,
+                    nominal_sl_pts=sl_pts,
+                    confidence_score=conf_eval.total_score if conf_eval else 0,
+                    confidence_grade=conf_eval.grade if conf_eval else "GRADE_C_SUPPRESSED",
+                    timestamp_ms=depth.exchange_timestamp_ms,
+                    wall_time_str=now_time.strftime("%H:%M:%S"),
+                )
+            elif ltp > self.max_premium_cap:
+                status_flag = "VETO_PREMIUM_OVER_CAP"
+                advisory = f"🚨 [PREMIUM VETO] BUY {depth.symbol} LTP ₹{ltp:.1f} > ₹{self.max_premium_cap:.1f} (Deep-ITM Gamma Collapse Risk)"
+                self.journal.record_veto(
+                    index_name=index_name,
+                    symbol=depth.symbol,
+                    direction=required_option_type,
+                    setup_reason=setup_reason,
+                    veto_reason="PREMIUM_OVER_CAP",
                     spot_price=spot,
                     option_ltp=ltp,
                     bid=bid,
