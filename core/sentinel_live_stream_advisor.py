@@ -106,6 +106,19 @@ class AdvisoryAlert:
     sizing_recommendation: str = "ZERO_SUPPRESS"
 
 
+@dataclass(slots=True)
+class SyntheticBarBucket:
+    """Aggregates spot ticks into discrete 1-minute OHLCV bars for supervisory regime evaluation."""
+    bucket_epoch_min: int = -1
+    open: float = 0.0
+    high: float = -math.inf
+    low: float = math.inf
+    close: float = 0.0
+    volume: float = 0.0
+    tick_count: int = 0
+    last_timestamp_ms: int = 0
+
+
 class SentinelLiveStreamAdvisor(StreamSubscriber):
     """Event-driven live paper advisory engine operating directly on in-memory
     Upstox ticks and Level-5 order book depth.
@@ -214,6 +227,13 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         }
         self.regime_router = self.regime_routers["NIFTY"]
 
+        # Synthetic 1-minute bar buckets per index for discrete regime discretization (Invariant 4.1)
+        self.bar_buckets: dict[str, SyntheticBarBucket] = {
+            "NIFTY": SyntheticBarBucket(),
+            "SENSEX": SyntheticBarBucket(),
+            "BANKNIFTY": SyntheticBarBucket(),
+        }
+
         # FEAT-SENTINEL-WALL-OBSERVER-001: In-Memory Strike Wall Observers per index
         self.wall_observers: dict[str, SentinelWallObserver] = {
             "NIFTY": SentinelWallObserver(underlying_symbol="NIFTY"),
@@ -312,6 +332,35 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
         return True, f"NIFTY_FRICTIONAL_HURDLE_CLEARED (ATR={atr_15m:.1f}, HurdleReq={hurdle_req:.1f}pts)"
 
+    def _evaluate_orb_regime_permission(self, router: Optional[SentinelRegimeRouter]) -> bool:
+        """Evaluates whether current regime state allows Mode 2 Opening Range Breakout (ORB).
+        
+        Hermes Invariant 4.1 Specification:
+        * If router is None or post is None: allow default.
+        * If post.is_trading_permitted is False: veto.
+        * If post.dominant_regime in ("ROTATIONAL_CHOP", "AMBIGUOUS_NO_TRADE", "EXHAUSTION_REVERSAL"): veto.
+        * If not post.permissions.get("ORB", False) and post.dominant_regime != "RUNAWAY_EXPANSION":
+            - allow if post.dominant_regime == "VOLATILITY_COMPRESSION" and post.normalized_entropy < 0.70, else veto.
+        """
+        if router is None:
+            return True
+        post = getattr(router, "current_state", None) or (router.get_posterior() if hasattr(router, "get_posterior") else None)
+        if post is None:
+            return True
+
+        if post.is_trading_permitted is False:
+            return False
+
+        if post.dominant_regime in ("ROTATIONAL_CHOP", "AMBIGUOUS_NO_TRADE", "EXHAUSTION_REVERSAL"):
+            return False
+
+        if not post.permissions.get("ORB", False) and post.dominant_regime != "RUNAWAY_EXPANSION":
+            if post.dominant_regime == "VOLATILITY_COMPRESSION" and post.normalized_entropy < 0.70:
+                return True
+            return False
+
+        return True
+
     def on_tick(self, tick: UpstoxTickRecord) -> None:
         """Handle incoming tick for NIFTY, SENSEX, and BANKNIFTY."""
         token = tick.token
@@ -325,17 +374,51 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
         if idx_key is not None:
             self._update_spot(idx_key, tick.ltp, tick.exchange_timestamp_ms)
-            # Update upstream regime router ring buffer and state
+            # Update upstream regime router ring buffer and state via discrete 1-minute SyntheticBarBucket
             router = self.regime_routers.get(idx_key)
-            if router is not None:
-                now_dt = datetime.fromtimestamp(tick.exchange_timestamp_ms / 1000.0) if tick.exchange_timestamp_ms > 0 else datetime.now()
-                router.on_bar_close(
-                    bar_close=tick.ltp,
-                    bar_volume=float(tick.volume),
-                    cvd_delta=0.0,
-                    timestamp_ms=tick.exchange_timestamp_ms,
-                    bar_time=now_dt.time(),
-                )
+            bucket = self.bar_buckets.get(idx_key)
+            if router is not None and bucket is not None:
+                ts_ms = tick.exchange_timestamp_ms
+                epoch_sec = (ts_ms / 1000.0) if ts_ms > 0 else time.time()
+                epoch_min = int(epoch_sec // 60)
+
+                if bucket.bucket_epoch_min == -1:
+                    # Initialize first bucket
+                    bucket.bucket_epoch_min = epoch_min
+                    bucket.open = tick.ltp
+                    bucket.high = tick.ltp
+                    bucket.low = tick.ltp
+                    bucket.close = tick.ltp
+                    bucket.volume = float(tick.volume)
+                    bucket.tick_count = 1
+                    bucket.last_timestamp_ms = ts_ms
+                elif epoch_min > bucket.bucket_epoch_min:
+                    # Minute boundary crossed: finalize completed bar into router
+                    bar_time = datetime.fromtimestamp(bucket.bucket_epoch_min * 60).time()
+                    router.on_bar_close(
+                        bar_close=bucket.close,
+                        bar_volume=bucket.volume,
+                        cvd_delta=0.0,
+                        timestamp_ms=bucket.last_timestamp_ms,
+                        bar_time=bar_time,
+                    )
+                    # Start new bucket for the new minute
+                    bucket.bucket_epoch_min = epoch_min
+                    bucket.open = tick.ltp
+                    bucket.high = tick.ltp
+                    bucket.low = tick.ltp
+                    bucket.close = tick.ltp
+                    bucket.volume = float(tick.volume)
+                    bucket.tick_count = 1
+                    bucket.last_timestamp_ms = ts_ms
+                else:
+                    # Accumulate within current minute
+                    bucket.high = max(bucket.high, tick.ltp)
+                    bucket.low = min(bucket.low, tick.ltp)
+                    bucket.close = tick.ltp
+                    bucket.volume += float(tick.volume)
+                    bucket.tick_count += 1
+                    bucket.last_timestamp_ms = ts_ms
 
     def on_depth(self, depth: UpstoxLevel5DepthRecord) -> None:
         """Handle incoming Level-5 depth snapshot."""
@@ -605,26 +688,19 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         # -------------------------------------------------------------
         # Mode 2: Existing Opening Range Breakout (ORB) Engine
         # Evaluates clean trend expansion when no sweep or reversal trap is active
-        # Invariant 4.1: Consult RegimeRouter to block blind ORB during ROTATIONAL_CHOP
+        # Invariant 4.1: Consult RegimeRouter to block blind ORB during ROTATIONAL_CHOP,
+        # unpermitted trading, AMBIGUOUS_NO_TRADE, EXHAUSTION_REVERSAL, and high entropy.
         # -------------------------------------------------------------
         elif or_high > -math.inf and spot > or_high:
             router = self.regime_routers.get(index_name)
-            regime_permits = True
-            if router:
-                post = getattr(router, "current_state", None) or (router.get_posterior() if hasattr(router, "get_posterior") else None)
-                if post is not None and (post.dominant_regime == "ROTATIONAL_CHOP" or not post.permissions.get("ORB", True)):
-                    regime_permits = False
+            regime_permits = self._evaluate_orb_regime_permission(router)
             if regime_permits:
                 trigger_active = True
                 required_option_type = "CE"
                 setup_reason = f"Breakout > {or_high:.1f}"
         elif or_low < math.inf and spot < or_low:
             router = self.regime_routers.get(index_name)
-            regime_permits = True
-            if router:
-                post = getattr(router, "current_state", None) or (router.get_posterior() if hasattr(router, "get_posterior") else None)
-                if post is not None and (post.dominant_regime == "ROTATIONAL_CHOP" or not post.permissions.get("ORB", True)):
-                    regime_permits = False
+            regime_permits = self._evaluate_orb_regime_permission(router)
             if regime_permits:
                 trigger_active = True
                 required_option_type = "PE"
