@@ -741,11 +741,12 @@ st.caption(f"Last Evaluated Feed: **{last_bar_time}** | Total Feed Alerts: **{le
 st.markdown("---")
 
 # Main Dashboard Navigation Tabs
-tab_live, tab_walls, tab_portal, tab_regimes = st.tabs([
+tab_live, tab_walls, tab_portal, tab_regimes, tab_journal = st.tabs([
     "🛰️ Real-Time Sidecar Telemetry", 
     "🧱 Strike Wall Heatmap",
     "📊 Multi-Session Quant Portal",
-    "🧭 Microstructure Regime Router"
+    "🧭 Microstructure Regime Router",
+    "🏛️ Forensic Decision Journal",
 ])
 
 with tab_live:
@@ -1666,5 +1667,225 @@ with tab_regimes:
                     st.plotly_chart(fig_pie, use_container_width=True)
     else:
         st.info("Run `python core/analytics/sentinel_multi_session_simulator.py` to generate the multi-session simulation report.")
+
+with tab_journal:
+    st.subheader("🏛️ Sentinel Real-Time Forensic Decision Journal & Post-Market Digest")
+    st.caption("Zero-Lookahead Counterfactual Ledger, Real-Time Veto Invariant Defense & Exit Attribution")
+
+    # Safety Invariant Banner
+    st.markdown("""
+    <div style="background: rgba(30, 41, 59, 0.7); border-left: 4px solid #10B981; padding: 10px 14px; border-radius: 6px; margin-bottom: 14px;">
+        <span style="font-size: 13px; color: #E2E8F0;">
+            🛡️ <strong>Safety Invariants Preserved</strong>: <code>read_only=True</code> | <code>is_order_action=False</code> | <code>broker_api_called=False</code>.
+            Asynchronous batched flush from streaming queue with zero disk latency on tick processing thread.
+        </span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Find all available decision journal dates
+    journal_files = sorted(glob.glob("logs/sentinel_decision_journal_*.jsonl"), reverse=True)
+    journal_dates = []
+    for jf in journal_files:
+        fn = Path(jf).stem
+        parts = fn.split("_")
+        if len(parts) >= 4 and len(parts[3]) == 8:
+            d_raw = parts[3]
+            journal_dates.append(f"{d_raw[:4]}-{d_raw[4:6]}-{d_raw[6:]}")
+
+    if not journal_dates:
+        journal_dates = [datetime.now().strftime("%Y-%m-%d")]
+
+    col_j1, col_j2 = st.columns([1, 3])
+    with col_j1:
+        selected_journal_date = st.selectbox("Select Journal Session Date", options=journal_dates, index=0)
+
+    # Load journal records for the selected date
+    selected_date_clean = selected_journal_date.replace("-", "")
+    target_journal_path = Path(f"logs/sentinel_decision_journal_{selected_date_clean}.jsonl")
+    
+    j_vetoes = []
+    j_executions = []
+    j_exits = []
+    j_shadows = []
+    j_summary = None
+
+    if target_journal_path.exists():
+        try:
+            with open(target_journal_path, "r", encoding="utf-8") as jf:
+                for line in jf:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                        rtype = obj.get("record_type")
+                        if rtype == "VETO":
+                            j_vetoes.append(obj)
+                        elif rtype == "EXECUTION":
+                            j_executions.append(obj)
+                        elif rtype == "EXIT":
+                            j_exits.append(obj)
+                        elif rtype == "SHADOW_OUTCOME":
+                            j_shadows.append(obj)
+                        elif rtype == "DAILY_SUMMARY":
+                            j_summary = obj
+                    except Exception:
+                        pass
+        except Exception as e:
+            st.error(f"Failed to read journal file {target_journal_path}: {e}")
+
+    # Top KPI Metrics for Forensic Decision Journal
+    jk1, jk2, jk3, jk4, jk5 = st.columns(5)
+    
+    # Calculate live stats if summary not written yet
+    cap_saved_inr = 0.0
+    missed_alpha_inr = 0.0
+    tp_count = 0
+    fp_count = 0
+    for s in j_shadows:
+        c_type = s.get("classification")
+        val = float(s.get("simulated_capital_saved_or_lost_inr") or 0.0)
+        if c_type == "TRUE_POSITIVE_SAVED_CAPITAL":
+            tp_count += 1
+            cap_saved_inr += val
+        elif c_type == "FALSE_POSITIVE_MISSED_ALPHA":
+            fp_count += 1
+            missed_alpha_inr += val
+
+    net_defense = cap_saved_inr - missed_alpha_inr
+    total_exec_pnl = sum(float(x.get("realized_pnl_inr") or 0.0) for x in j_exits)
+    win_exits = sum(1 for x in j_exits if float(x.get("opt_pnl_pts") or 0.0) > 0)
+    win_rate = (win_exits / len(j_exits) * 100.0) if j_exits else 0.0
+
+    with jk1:
+        st.metric("Total Invariant Vetoes", len(j_vetoes), f"{len(j_executions)} Executed")
+    with jk2:
+        st.metric("🛡️ True Positives (Saved)", tp_count, f"+₹{cap_saved_inr:,.0f} Preserved")
+    with jk3:
+        st.metric("⚠️ False Positives (Missed)", fp_count, f"-₹{missed_alpha_inr:,.0f} Forgone")
+    with jk4:
+        net_color = "normal" if net_defense >= 0 else "inverse"
+        st.metric("Net Veto Defense Benefit", f"₹{net_defense:+,.2f}")
+    with jk5:
+        st.metric("Executed Win Rate", f"{win_rate:.1f}%", f"PnL: ₹{total_exec_pnl:+,.2f}")
+
+    # Forensic Journal Tabs
+    j_tab_veto, j_tab_shadow, j_tab_exec, j_tab_exit = st.tabs([
+        "🚨 Invariant Veto Ledger",
+        "🔮 Shadow Barrier Path Evaluation",
+        "🎯 Execution Ledger",
+        "🚪 Exit Attribution & Efficiency",
+    ])
+
+    with j_tab_veto:
+        st.markdown("#### Real-Time Suppressed Candidate Setups")
+        if j_vetoes:
+            v_df = pd.DataFrame(j_vetoes)
+            # Reorder relevant columns
+            v_cols = ["wall_time_str", "index_name", "symbol", "direction", "veto_reason", "spot_price", "option_ltp", "spread_ratio", "confidence_score", "setup_reason"]
+            show_v_cols = [c for c in v_cols if c in v_df.columns]
+            st.dataframe(
+                v_df[show_v_cols].iloc[::-1].reset_index(drop=True),
+                use_container_width=True,
+                height=350,
+                column_config={
+                    "wall_time_str": st.column_config.TextColumn("Time", width="small"),
+                    "index_name": st.column_config.TextColumn("Index", width="small"),
+                    "symbol": st.column_config.TextColumn("Option Symbol", width="medium"),
+                    "direction": st.column_config.TextColumn("Dir", width="small"),
+                    "veto_reason": st.column_config.TextColumn("Veto Gate Reason", width="medium"),
+                    "spot_price": st.column_config.NumberColumn("Spot Price", format="₹%.2f"),
+                    "option_ltp": st.column_config.NumberColumn("Option LTP", format="₹%.2f"),
+                    "spread_ratio": st.column_config.NumberColumn("Spread %", format="%.2f%%"),
+                    "confidence_score": st.column_config.ProgressColumn("Confidence", min_value=0, max_value=100, format="%d/100"),
+                    "setup_reason": st.column_config.TextColumn("Setup Trigger", width="large"),
+                }
+            )
+        else:
+            st.info("No veto records logged yet for this session.")
+
+    with j_tab_shadow:
+        st.markdown("#### Counterfactual Path Verification (Zero Lookahead Forward Tick Path)")
+        st.caption("Steps forward tick-by-tick strictly after entry timestamp. Evaluates whether veto saved capital (SL hit) or missed alpha (TP hit).")
+        if j_shadows:
+            s_df = pd.DataFrame(j_shadows)
+            s_cols = ["entry_time_str", "resolution_time_str", "symbol", "direction", "veto_reason", "entry_opt_ltp", "target_barrier_opt", "sl_barrier_opt", "outcome", "classification", "simulated_capital_saved_or_lost_inr"]
+            show_s_cols = [c for c in s_cols if c in s_df.columns]
+            st.dataframe(
+                s_df[show_s_cols].iloc[::-1].reset_index(drop=True),
+                use_container_width=True,
+                height=350,
+                column_config={
+                    "entry_time_str": st.column_config.TextColumn("Entry Time", width="small"),
+                    "resolution_time_str": st.column_config.TextColumn("Resolved At", width="small"),
+                    "symbol": st.column_config.TextColumn("Contract", width="medium"),
+                    "direction": st.column_config.TextColumn("Dir", width="small"),
+                    "veto_reason": st.column_config.TextColumn("Veto Reason", width="medium"),
+                    "entry_opt_ltp": st.column_config.NumberColumn("Virtual Entry", format="₹%.2f"),
+                    "target_barrier_opt": st.column_config.NumberColumn("Target Barrier", format="₹%.2f"),
+                    "sl_barrier_opt": st.column_config.NumberColumn("SL Barrier", format="₹%.2f"),
+                    "outcome": st.column_config.TextColumn("Barrier Hit", width="small"),
+                    "classification": st.column_config.TextColumn("Classification", width="medium"),
+                    "simulated_capital_saved_or_lost_inr": st.column_config.NumberColumn("Cap Impact (₹)", format="₹%.2f"),
+                }
+            )
+        else:
+            st.info("No shadow barrier path outcomes evaluated yet for this session.")
+
+    with j_tab_exec:
+        st.markdown("#### Authoritative Genuine Execution Ledger")
+        if j_executions:
+            e_df = pd.DataFrame(j_executions)
+            e_cols = ["wall_time_str", "position_id", "index_name", "symbol", "direction", "fill_price", "lots", "total_quantity", "sizing_tier", "target_pts", "sl_pts", "confidence_score"]
+            show_e_cols = [c for c in e_cols if c in e_df.columns]
+            st.dataframe(
+                e_df[show_e_cols].iloc[::-1].reset_index(drop=True),
+                use_container_width=True,
+                height=350,
+                column_config={
+                    "wall_time_str": st.column_config.TextColumn("Time", width="small"),
+                    "position_id": st.column_config.TextColumn("Position ID", width="medium"),
+                    "index_name": st.column_config.TextColumn("Index", width="small"),
+                    "symbol": st.column_config.TextColumn("Option Contract", width="medium"),
+                    "direction": st.column_config.TextColumn("Dir", width="small"),
+                    "fill_price": st.column_config.NumberColumn("Fill Price", format="₹%.2f"),
+                    "lots": st.column_config.NumberColumn("Lots"),
+                    "total_quantity": st.column_config.NumberColumn("Qty"),
+                    "sizing_tier": st.column_config.TextColumn("Tier", width="small"),
+                    "target_pts": st.column_config.NumberColumn("Target (pts)", format="+%.1f"),
+                    "sl_pts": st.column_config.NumberColumn("SL (pts)", format="-%.1f"),
+                    "confidence_score": st.column_config.ProgressColumn("Score", min_value=0, max_value=100, format="%d/100"),
+                }
+            )
+        else:
+            st.info("No executions recorded for this session.")
+
+    with j_tab_exit:
+        st.markdown("#### Granular Trade Exit Attribution")
+        if j_exits:
+            x_df = pd.DataFrame(j_exits)
+            x_cols = ["wall_time_str", "position_id", "symbol", "exit_reason", "entry_price_opt", "exit_price_opt", "opt_pnl_pts", "realized_pnl_inr", "target_1_hit", "target_2_hit", "max_opt_excursion"]
+            show_x_cols = [c for c in x_cols if c in x_df.columns]
+            st.dataframe(
+                x_df[show_x_cols].iloc[::-1].reset_index(drop=True),
+                use_container_width=True,
+                height=350,
+                column_config={
+                    "wall_time_str": st.column_config.TextColumn("Exit Time", width="small"),
+                    "position_id": st.column_config.TextColumn("Position ID", width="medium"),
+                    "symbol": st.column_config.TextColumn("Contract", width="medium"),
+                    "exit_reason": st.column_config.TextColumn("Attribution Reason", width="medium"),
+                    "entry_price_opt": st.column_config.NumberColumn("Entry LTP", format="₹%.2f"),
+                    "exit_price_opt": st.column_config.NumberColumn("Exit LTP", format="₹%.2f"),
+                    "opt_pnl_pts": st.column_config.NumberColumn("Option PnL (pts)", format="%+.2f"),
+                    "realized_pnl_inr": st.column_config.NumberColumn("Realized (₹)", format="₹%+.2f"),
+                    "target_1_hit": st.column_config.CheckboxColumn("T1 (+15)", width="small"),
+                    "target_2_hit": st.column_config.CheckboxColumn("T2 (+35)", width="small"),
+                    "max_opt_excursion": st.column_config.NumberColumn("Peak Gain (pts)", format="+%.2f"),
+                }
+            )
+        else:
+            st.info("No trade exits recorded for this session.")
+
 
 

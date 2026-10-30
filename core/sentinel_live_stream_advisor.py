@@ -74,6 +74,7 @@ from core.sentinel_dynamic_sizing import (
     calculate_discrete_lots,
     get_exchange_lot_size,
 )
+from core.sentinel_realtime_journal import SentinelRealtimeJournal
 from core.upstox_stream_broadcaster import (
     StreamSubscriber,
     UpstoxLevel5DepthRecord,
@@ -126,6 +127,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         skew_threshold_ms: float = 1500.0,
         enable_stdout: bool = True,
         wal_path: str = "runtime/sentinel_apm_wal.json",
+        journal: Optional[SentinelRealtimeJournal] = None,
     ) -> None:
         self.adapter = adapter if adapter is not None else InMemorySentinelAdapter()
         self.spread_veto_threshold = float(spread_veto_threshold)
@@ -233,6 +235,9 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         self._last_alert_time = 0.0
         self._last_wall_persist_time = 0.0
         self.session_gear = "GEAR_1_RANGE"  # "GEAR_1_RANGE" or "GEAR_2_TREND"
+
+        # Forensic Decision Journal Engine (non-blocking in-memory queue & shadow barrier evaluator)
+        self.journal = journal if journal is not None else SentinelRealtimeJournal()
 
         # Non-negotiable Trading Safety Invariants
         self.read_only = True
@@ -746,21 +751,135 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             if is_vetoed:
                 status_flag = "VETO_SPREAD_EXPANDED"
                 advisory = f"🚨 [SPREAD VETO] BUY {depth.symbol} @ {setup_reason} -> SUPPRESSED (>4.0% spread)"
+                self.journal.record_veto(
+                    index_name=index_name,
+                    symbol=depth.symbol,
+                    direction=required_option_type,
+                    setup_reason=setup_reason,
+                    veto_reason="SPREAD_EXPANDED",
+                    spot_price=spot,
+                    option_ltp=ltp,
+                    bid=bid,
+                    ask=ask,
+                    spread_pts=spread,
+                    spread_ratio=spread_ratio,
+                    nominal_target_pts=target_pts,
+                    nominal_sl_pts=sl_pts,
+                    confidence_score=conf_eval.total_score if conf_eval else 0,
+                    confidence_grade=conf_eval.grade if conf_eval else "GRADE_C_SUPPRESSED",
+                    timestamp_ms=depth.exchange_timestamp_ms,
+                    wall_time_str=now_time.strftime("%H:%M:%S"),
+                )
             elif wall_vetoed:
                 status_flag = "VETO_ADVERSE_WALL"
                 advisory = f"🚨 [WALL VETO: {wall_reason}] BUY {depth.symbol} @ {setup_reason} -> SUPPRESSED (Within 0.5 ATR of fortified wall)"
+                self.journal.record_veto(
+                    index_name=index_name,
+                    symbol=depth.symbol,
+                    direction=required_option_type,
+                    setup_reason=setup_reason,
+                    veto_reason="ADVERSE_WALL",
+                    spot_price=spot,
+                    option_ltp=ltp,
+                    bid=bid,
+                    ask=ask,
+                    spread_pts=spread,
+                    spread_ratio=spread_ratio,
+                    nominal_target_pts=target_pts,
+                    nominal_sl_pts=sl_pts,
+                    confidence_score=conf_eval.total_score if conf_eval else 0,
+                    confidence_grade=conf_eval.grade if conf_eval else "GRADE_C_SUPPRESSED",
+                    timestamp_ms=depth.exchange_timestamp_ms,
+                    wall_time_str=now_time.strftime("%H:%M:%S"),
+                )
             elif not macro_ok:
                 status_flag = "VETO_MACRO_DIVERGENCE"
                 advisory = f"🚨 [{macro_reason}] BUY {depth.symbol} @ {setup_reason} -> SUPPRESSED"
+                self.journal.record_veto(
+                    index_name=index_name,
+                    symbol=depth.symbol,
+                    direction=required_option_type,
+                    setup_reason=setup_reason,
+                    veto_reason="MACRO_DIVERGENCE",
+                    spot_price=spot,
+                    option_ltp=ltp,
+                    bid=bid,
+                    ask=ask,
+                    spread_pts=spread,
+                    spread_ratio=spread_ratio,
+                    nominal_target_pts=target_pts,
+                    nominal_sl_pts=sl_pts,
+                    confidence_score=conf_eval.total_score if conf_eval else 0,
+                    confidence_grade=conf_eval.grade if conf_eval else "GRADE_C_SUPPRESSED",
+                    timestamp_ms=depth.exchange_timestamp_ms,
+                    wall_time_str=now_time.strftime("%H:%M:%S"),
+                )
             elif not vol_ok:
                 status_flag = "VETO_VOLATILITY_EXHAUSTED"
                 advisory = f"🚨 [{vol_reason}] BUY {depth.symbol} @ {setup_reason} -> SUPPRESSED"
+                self.journal.record_veto(
+                    index_name=index_name,
+                    symbol=depth.symbol,
+                    direction=required_option_type,
+                    setup_reason=setup_reason,
+                    veto_reason="VOLATILITY_EXHAUSTED",
+                    spot_price=spot,
+                    option_ltp=ltp,
+                    bid=bid,
+                    ask=ask,
+                    spread_pts=spread,
+                    spread_ratio=spread_ratio,
+                    nominal_target_pts=target_pts,
+                    nominal_sl_pts=sl_pts,
+                    confidence_score=conf_eval.total_score if conf_eval else 0,
+                    confidence_grade=conf_eval.grade if conf_eval else "GRADE_C_SUPPRESSED",
+                    timestamp_ms=depth.exchange_timestamp_ms,
+                    wall_time_str=now_time.strftime("%H:%M:%S"),
+                )
             elif not hurdle_ok:
                 status_flag = "VETO_NIFTY_FRICTIONAL_HURDLE"
                 advisory = f"🚨 [{hurdle_reason}] BUY {depth.symbol} @ {setup_reason} -> SUPPRESSED"
+                self.journal.record_veto(
+                    index_name=index_name,
+                    symbol=depth.symbol,
+                    direction=required_option_type,
+                    setup_reason=setup_reason,
+                    veto_reason="NIFTY_FRICTIONAL_HURDLE",
+                    spot_price=spot,
+                    option_ltp=ltp,
+                    bid=bid,
+                    ask=ask,
+                    spread_pts=spread,
+                    spread_ratio=spread_ratio,
+                    nominal_target_pts=target_pts,
+                    nominal_sl_pts=sl_pts,
+                    confidence_score=conf_eval.total_score if conf_eval else 0,
+                    confidence_grade=conf_eval.grade if conf_eval else "GRADE_C_SUPPRESSED",
+                    timestamp_ms=depth.exchange_timestamp_ms,
+                    wall_time_str=now_time.strftime("%H:%M:%S"),
+                )
             elif not conf_eval.is_actionable:
                 status_flag = "VETO_LOW_CONFIDENCE"
                 advisory = f"🚨 [LOW CONVICTION: {conf_eval.total_score}/100 {conf_eval.grade}] BUY {depth.symbol} @ {setup_reason} -> SUPPRESSED"
+                self.journal.record_veto(
+                    index_name=index_name,
+                    symbol=depth.symbol,
+                    direction=required_option_type,
+                    setup_reason=setup_reason,
+                    veto_reason="LOW_CONFIDENCE",
+                    spot_price=spot,
+                    option_ltp=ltp,
+                    bid=bid,
+                    ask=ask,
+                    spread_pts=spread,
+                    spread_ratio=spread_ratio,
+                    nominal_target_pts=target_pts,
+                    nominal_sl_pts=sl_pts,
+                    confidence_score=conf_eval.total_score if conf_eval else 0,
+                    confidence_grade=conf_eval.grade if conf_eval else "GRADE_C_SUPPRESSED",
+                    timestamp_ms=depth.exchange_timestamp_ms,
+                    wall_time_str=now_time.strftime("%H:%M:%S"),
+                )
             else:
                 # Gate 1: Capital Discretization & Integer Lot Math (Floor-or-Reject Model)
                 computed_lots, sizing_tier = calculate_discrete_lots(
@@ -777,6 +896,26 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 if computed_lots < 1 or sizing_tier == "ZERO_SUPPRESS":
                     status_flag = "VETO_INSUFFICIENT_MARGIN" if computed_lots < 1 else "VETO_SIZING_SUPPRESSED"
                     advisory = f"🚨 [SIZING VETO: {sizing_tier}] BUY {depth.symbol} @ {setup_reason} -> SUPPRESSED (Lots={computed_lots})"
+                    self.journal.record_veto(
+                        index_name=index_name,
+                        symbol=depth.symbol,
+                        direction=required_option_type,
+                        setup_reason=setup_reason,
+                        veto_reason=f"SIZING_{sizing_tier}",
+                        spot_price=spot,
+                        option_ltp=ltp,
+                        bid=bid,
+                        ask=ask,
+                        spread_pts=spread,
+                        spread_ratio=spread_ratio,
+                        nominal_target_pts=target_pts,
+                        nominal_sl_pts=sl_pts,
+                        confidence_score=conf_eval.total_score if conf_eval else 0,
+                        confidence_grade=conf_eval.grade if conf_eval else "GRADE_C_SUPPRESSED",
+                        sizing_tier=sizing_tier,
+                        timestamp_ms=depth.exchange_timestamp_ms,
+                        wall_time_str=now_time.strftime("%H:%M:%S"),
+                    )
                 else:
                     status_flag = "SIGNAL_TRIGGERED"
                     advisory = (
@@ -830,6 +969,29 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                                 is_expiry_day=is_exp,
                                 is_deep_itm=(itm_res.moneyness == "DEEP_ITM"),
                             )
+                            if entered:
+                                self.journal.record_execution(
+                                    position_id=pos_id,
+                                    index_name=index_name,
+                                    symbol=depth.symbol,
+                                    direction=required_option_type,
+                                    setup_reason=setup_reason,
+                                    spot_price=spot,
+                                    option_ltp=ltp,
+                                    fill_price=fill_price,
+                                    fill_mode=fill_mode,
+                                    spread_savings=savings,
+                                    target_pts=target_pts,
+                                    sl_pts=sl_pts,
+                                    confidence_score=conf_eval.total_score if conf_eval else 0,
+                                    confidence_grade=conf_eval.grade if conf_eval else "GRADE_C_SUPPRESSED",
+                                    lots=computed_lots,
+                                    lot_size=ex_lot_size,
+                                    total_quantity=total_qty,
+                                    sizing_tier=sizing_tier,
+                                    timestamp_ms=depth.exchange_timestamp_ms,
+                                    wall_time_str=now_time.strftime("%H:%M:%S"),
+                                )
                             if entered and self.enable_stdout:
                                 print(
                                     f"\n🚀 [APM IN_FLIGHT ENTRY ({index_name}) - {itm_res.moneyness}] {pos_id} | {depth.symbol} @ {spot:.1f} | "
@@ -851,12 +1013,49 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             idx_apm = self.apms.get(index_name, self.apm)
             if idx_apm.state in {STATE_IN_FLIGHT, "TRAIL_LOCK", "EXIT_PENDING"} and idx_apm.payload:
                 if idx_apm.payload.opt_symbol == depth.symbol:
+                    prev_state = idx_apm.state
                     idx_apm.evaluate_tick(
                         current_spot=spot,
                         current_opt_ltp=ltp,
                         tick_time_str=now_time.strftime("%H:%M:%S"),
                         atr_1m=12.0,
                     )
+                    # Check if position just liquidated
+                    if prev_state != idx_apm.state and idx_apm.state in {STATE_LIQUIDATED, STATE_COOL_OFF}:
+                        last_trade = idx_apm.last_completed_trade or (idx_apm.trade_history[-1] if idx_apm.trade_history else None)
+                        if last_trade:
+                            lt_dict = last_trade if isinstance(last_trade, dict) else asdict(last_trade)
+                            self.journal.record_exit(
+                                position_id=lt_dict.get("position_id", ""),
+                                index_name=index_name,
+                                symbol=depth.symbol,
+                                direction=lt_dict.get("direction", ""),
+                                entry_price_spot=float(lt_dict.get("entry_price") or 0.0),
+                                exit_price_spot=float(lt_dict.get("exit_price") or 0.0),
+                                entry_price_opt=float(lt_dict.get("opt_entry_ltp") or 0.0),
+                                exit_price_opt=float(lt_dict.get("opt_exit_ltp") or ltp),
+                                opt_pnl_pts=float(lt_dict.get("opt_pnl_pts") or 0.0),
+                                spot_pnl_pts=float(lt_dict.get("pnl_pts") or 0.0),
+                                exit_reason=str(lt_dict.get("exit_reason") or "LIQUIDATED"),
+                                max_spot_excursion=float(lt_dict.get("max_spot_excursion") or 0.0),
+                                max_opt_excursion=float(lt_dict.get("max_opt_excursion") or 0.0),
+                                target_1_hit=bool(lt_dict.get("target_1_hit")),
+                                target_2_hit=bool(lt_dict.get("target_2_hit")),
+                                half_booked=bool(lt_dict.get("half_booked")),
+                                trail_locked=bool(lt_dict.get("trail_locked")),
+                                total_quantity=int(lt_dict.get("total_quantity") or 65),
+                                timestamp_ms=depth.exchange_timestamp_ms,
+                                wall_time_str=now_time.strftime("%H:%M:%S"),
+                            )
+
+        # Feed option depth tick to Shadow Barrier Path Evaluator
+        self.journal.on_option_tick(
+            symbol=depth.symbol,
+            current_opt_ltp=ltp,
+            timestamp_ms=depth.exchange_timestamp_ms,
+            wall_time_str=now_time.strftime("%H:%M:%S"),
+            current_spot=spot,
+        )
 
         # Do not throttle genuine BUY signals
         if not ("🎯 [BUY" in advisory) and is_throttled:
