@@ -1,0 +1,91 @@
+{
+  "work_item_id": "TB-AGENT-PREGITHUB-20261030",
+  "type": "TASK",
+  "parent_epic": "TRADEBOT-GOVERNANCE",
+  "parent_feature": "AGENT-RUNTIME",
+  "title": "Pilot verifiable pre-GitHub role invocation without bypassing delivery approvals",
+  "schema_version": 1,
+  "current_state": "BACKLOG",
+  "priority": "P1",
+  "business_goal": "Turn existing eight-agent orchestration instructions into a real bounded read-only invocation path with explicit evidence and failure visibility.",
+  "current_behavior": "AGENTS.md describes mandatory separate agents, but no linked, universally enforced executable role launcher is available for all tasks.",
+  "expected_behavior": "An opt-in local launcher starts distinct constrained review processes, binds a committed work item, stops on failures, and never asserts release approval.",
+  "in_scope": [
+    "tools/pre_github_team.py",
+    "tests/test_pre_github_team.py",
+    "docs/tradebot_delivery/AGENT_RUNTIME_PILOT.md",
+    "AGENTS.md"
+  ],
+  "out_of_scope": [
+    "broker/order/live execution",
+    "automatic GitHub merge",
+    "production agent service",
+    "authenticated reviewer identity",
+    "organization-wide IDE hooks",
+    "paid third-party tool installation"
+  ],
+  "dependencies": [
+    "Codex CLI installed on operator machine for a live role run",
+    "existing TradeBot governance files"
+  ],
+  "acceptance_criteria": [
+    "Eight distinct role process requests are made in lifecycle order",
+    "Invalid or missing role evidence fails closed",
+    "A blocking reviewer halts downstream roles",
+    "Uncommitted or modified task records are rejected",
+    "No QA/UAT/release or human-approval completion is manufactured",
+    "Focused unit tests pass"
+  ],
+  "safety_constraints": [
+    "read-only agent sandbox",
+    "no broker or order calls",
+    "no direct main changes",
+    "no approval bypass"
+  ],
+  "architecture_impact": "Offline optional adapter; does not modify core.delivery, trading runtime, or release authority.",
+  "allowed_paths": [
+    "tools/pre_github_team.py",
+    "tests/test_pre_github_team.py",
+    "docs/tradebot_delivery/AGENT_RUNTIME_PILOT.md",
+    "AGENTS.md",
+    "governance/evidence/work_items/TB-AGENT-PREGITHUB-20261030.json"
+  ],
+  "forbidden_paths": [
+    "main.py",
+    "config/",
+    "core/broker/",
+    "core/order/",
+    "core/execution/",
+    "core/risk/",
+    "core/feed/",
+    "strategies/"
+  ],
+  "expected_tests": [
+    "python -m unittest discover -s tests -p test_pre_github_team.py -v"
+  ],
+  "qa_attack_plan": [
+    "missing CLI",
+    "timeout",
+    "fake PASS without evidence",
+    "role BLOCK",
+    "task record not committed",
+    "changed work item"
+  ],
+  "uat_criteria": [
+    "Operator can run read-only role review on a committed task and receives an unverified review ledger"
+  ],
+  "release_gates": [
+    "independent QA not yet performed",
+    "Product acceptance not yet performed",
+    "CI and release review required before merge"
+  ],
+  "rollback_plan": "Revert the pilot branch; production/runtime interfaces are unchanged.",
+  "evidence_refs": [],
+  "acting_role": "",
+  "state_history": [],
+  "defect_history": [],
+  "evidence": [],
+  "defects": [],
+  "required_ci_checks": [],
+  "extensions": {}
+}
