@@ -25,7 +25,7 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass
-from datetime import datetime, time as dt_time
+from datetime import date, datetime, time as dt_time
 from pathlib import Path
 from typing import Any, Optional, Dict
 
@@ -120,6 +120,32 @@ class SyntheticBarBucket:
     last_timestamp_ms: int = 0
 
 
+@dataclass(slots=True)
+class PriorDayReferenceLevels:
+    """Dynamic reference levels (PDH, PDL, PDC) with explicit verification and validation state."""
+    index_name: str
+    pdh: float = 0.0
+    pdl: float = 0.0
+    pdc: float = 0.0
+    session_date: Optional[date] = None
+    atr_20: Optional[float] = None
+    verified: bool = False
+
+    def validate(self) -> bool:
+        """Validates prior day levels: fail-closed if pdh <= pdl or pdl <= 0."""
+        return self.pdh > self.pdl and self.pdl > 0.0
+
+    def get(self, key: str, default: float = 0.0) -> float:
+        """Compatibility helper for dictionary-like access."""
+        if key == "pdh":
+            return self.pdh
+        elif key == "pdl":
+            return self.pdl
+        elif key == "pdc":
+            return self.pdc
+        return default
+
+
 class SentinelLiveStreamAdvisor(StreamSubscriber):
     """Event-driven live paper advisory engine operating directly on in-memory
     Upstox ticks and Level-5 order book depth.
@@ -211,12 +237,25 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             "BANKNIFTY": IntradayReversalEngine(index_name="BANKNIFTY"),
         }
         self.reversal_engine = self.reversal_engines["NIFTY"]
-        # Previous Day Reference Levels (PDH / PDL / PDC)
-        self.prior_day_levels: dict[str, dict[str, float]] = {
-            "NIFTY": {"pdh": 23149.80, "pdl": 22913.80, "pdc": 23146.20},
-            "SENSEX": {"pdh": 74849.75, "pdl": 74169.23, "pdc": 74800.00},
-            "BANKNIFTY": {"pdh": 55883.70, "pdl": 55331.10, "pdc": 55750.00},
+        # Previous Day Reference Levels (PDH / PDL / PDC) - Initialized unseeded with verified=False (Zero Hardcoding)
+        self.prior_day_levels: dict[str, PriorDayReferenceLevels] = {
+            "NIFTY": PriorDayReferenceLevels(index_name="NIFTY", verified=False),
+            "SENSEX": PriorDayReferenceLevels(index_name="SENSEX", verified=False),
+            "BANKNIFTY": PriorDayReferenceLevels(index_name="BANKNIFTY", verified=False),
         }
+
+        # Index-specific baseline ATR floors
+        self.index_atr_floors: dict[str, float] = {
+            "NIFTY": 25.0,
+            "BANKNIFTY": 100.0,
+            "SENSEX": 150.0,
+        }
+
+        # Midday Liquidity Slump Guard configuration (11:30 - 12:30 IST)
+        self.midday_slump_start = dt_time(11, 30, 0)
+        self.midday_slump_end = dt_time(12, 30, 0)
+        self.current_ker = 0.50
+        self.current_rvol = 1.00
 
         # Multi-Factor Option Confidence Scorer
         self.confidence_scorer = OptionConfidenceScorer(min_actionable_score=60)
@@ -284,6 +323,47 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         t = check_time or datetime.now().time()
         return t >= self.eod_entry_freeze_time
 
+    def seed_prior_day_levels(
+        self,
+        index_name: str,
+        pdh: float,
+        pdl: float,
+        pdc: float,
+        session_date: Optional[date] = None,
+        atr_20: Optional[float] = None,
+    ) -> bool:
+        """Seeds and validates previous day reference levels for an index.
+        
+        Fail-closed: if pdh <= pdl or pdl <= 0, verified is False and levels are rejected.
+        """
+        levels = PriorDayReferenceLevels(
+            index_name=index_name,
+            pdh=float(pdh),
+            pdl=float(pdl),
+            pdc=float(pdc),
+            session_date=session_date,
+            atr_20=float(atr_20) if atr_20 is not None else None,
+            verified=False,
+        )
+        if not levels.validate():
+            logger.warning(
+                f"[{index_name}] Invalid prior-day levels: pdh={pdh:.2f}, pdl={pdl:.2f}, pdc={pdc:.2f} (fail-closed, verified=False)"
+            )
+            self.prior_day_levels[index_name] = levels
+            return False
+
+        levels.verified = True
+        self.prior_day_levels[index_name] = levels
+        logger.info(
+            f"[{index_name}] Successfully seeded verified prior-day levels: PDH={pdh:.2f}, PDL={pdl:.2f}, PDC={pdc:.2f}"
+        )
+        return True
+
+    def clamp_atr(self, index_name: str, raw_atr: float) -> float:
+        """Clamps ATR to index-specific floor (NIFTY: 25.0, BANKNIFTY: 100.0, SENSEX: 150.0)."""
+        floor = self.index_atr_floors.get(index_name, 25.0)
+        return max(floor, float(raw_atr))
+
     def evaluate_strike_oi(self, index_name: str, effective_oi: float) -> bool:
         """Enforces institutional Open Interest floor (250k NIFTY, 100k BANKNIFTY/SENSEX)."""
         min_oi = self.min_strike_oi_nifty if index_name == "NIFTY" else self.min_strike_oi_other
@@ -340,6 +420,31 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 )
 
         return True, f"NIFTY_FRICTIONAL_HURDLE_CLEARED (ATR={atr_15m:.1f}, HurdleReq={hurdle_req:.1f}pts)"
+
+    def is_midday_slump_active(
+        self,
+        check_time: Optional[dt_time] = None,
+        ker: Optional[float] = None,
+        rvol: Optional[float] = None,
+    ) -> bool:
+        """Evaluates whether Midday Slump Guard (11:30 - 12:30 IST) is active.
+        
+        Returns True if within [11:30:00, 12:30:00] IST unless trend override is active:
+        (ker >= 0.70 and rvol >= 1.50).
+        """
+        t = check_time or datetime.now().time()
+        # Strictly between 11:30:00 and 12:30:00 inclusive
+        in_window = (self.midday_slump_start <= t <= self.midday_slump_end)
+        if not in_window:
+            return False
+
+        # Trend override active if KER >= 0.70 and RVOL >= 1.50
+        eff_ker = self.current_ker if ker is None else float(ker)
+        eff_rvol = self.current_rvol if rvol is None else float(rvol)
+        if eff_ker >= 0.70 and eff_rvol >= 1.50:
+            return False
+
+        return True
 
     def _evaluate_orb_regime_permission(self, router: Optional[SentinelRegimeRouter]) -> bool:
         """Evaluates whether current regime state allows Mode 2 Opening Range Breakout (ORB).
@@ -655,6 +760,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         atm_strike = round(spot / strike_interval) * strike_interval
 
         trigger_active = False
+        is_mode_2_breakout = False
         setup_reason = ""
         required_option_type = None
 
@@ -663,26 +769,27 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         # Evaluates 09:30 - 12:00. Strictly gated to GEAR_1_RANGE (Chop/Expiry Pinning).
         # Fading breakouts in Gear 2 Trend is strictly suppressed fail-closed.
         # -------------------------------------------------------------
-        pd_bounds = self.prior_day_levels.get(index_name, {"pdh": 0.0, "pdl": 0.0})
-        pdh = pd_bounds.get("pdh", 0.0)
-        pdl = pd_bounds.get("pdl", 0.0)
+        pd_bounds = self.prior_day_levels.get(index_name)
+        pd_verified = getattr(pd_bounds, "verified", False) if pd_bounds else False
+        pdh = pd_bounds.get("pdh", 0.0) if pd_bounds else 0.0
+        pdl = pd_bounds.get("pdl", 0.0) if pd_bounds else 0.0
         is_exp = (self.expiry_info.active_expiry_index == index_name)
 
         sweep_sig = None
-        # Regime Gate: Only allow sweep reversal when market is in Gear 1 Chop or Expiry Straddle Pinning
-        if self.session_gear == "GEAR_1_RANGE" or is_exp:
+        # Regime Gate: Strictly require pd_bounds.verified is True and GEAR_1_RANGE (remove or is_exp trend bypass)
+        if pd_verified and self.session_gear == "GEAR_1_RANGE":
             sweep_sig = self.sweep_engine.evaluate_bar(
-            index_name=index_name,
-            bar_open=spot,
-            bar_high=spot,
-            bar_low=spot,
-            bar_close=spot,
-            pdh=pdh,
-            pdl=pdl,
-            timestamp_ms=depth.exchange_timestamp_ms,
-            is_expiry_session=is_exp,
-            bar_time=now_time,
-        )
+                index_name=index_name,
+                bar_open=spot,
+                bar_high=spot,
+                bar_low=spot,
+                bar_close=spot,
+                pdh=pdh,
+                pdl=pdl,
+                timestamp_ms=depth.exchange_timestamp_ms,
+                is_expiry_session=is_exp,
+                bar_time=now_time,
+            )
 
         if sweep_sig is not None:
             trigger_active = True
@@ -722,6 +829,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             regime_permits = self._evaluate_orb_regime_permission(router)
             if regime_permits:
                 trigger_active = True
+                is_mode_2_breakout = True
                 required_option_type = "CE"
                 setup_reason = f"Breakout > {or_high:.1f}"
         elif or_low < math.inf and spot < or_low:
@@ -729,6 +837,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             regime_permits = self._evaluate_orb_regime_permission(router)
             if regime_permits:
                 trigger_active = True
+                is_mode_2_breakout = True
                 required_option_type = "PE"
                 setup_reason = f"Breakdown < {or_low:.1f}"
 
@@ -853,6 +962,11 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 spot_price=spot,
             )
 
+            # Gate 4: Midday Liquidity Slump Guard (11:30 - 12:30 IST) for Mode 2 Breakouts
+            midday_slump_vetoed = False
+            if is_mode_2_breakout and self.is_midday_slump_active(now_time):
+                midday_slump_vetoed = True
+
             if is_vetoed:
                 status_flag = "VETO_SPREAD_EXPANDED"
                 advisory = f"🚨 [SPREAD VETO] BUY {depth.symbol} @ {setup_reason} -> SUPPRESSED (>4.0% spread)"
@@ -862,6 +976,28 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     direction=required_option_type,
                     setup_reason=setup_reason,
                     veto_reason="SPREAD_EXPANDED",
+                    spot_price=spot,
+                    option_ltp=ltp,
+                    bid=bid,
+                    ask=ask,
+                    spread_pts=spread,
+                    spread_ratio=spread_ratio,
+                    nominal_target_pts=target_pts,
+                    nominal_sl_pts=sl_pts,
+                    confidence_score=conf_eval.total_score if conf_eval else 0,
+                    confidence_grade=conf_eval.grade if conf_eval else "GRADE_C_SUPPRESSED",
+                    timestamp_ms=depth.exchange_timestamp_ms,
+                    wall_time_str=now_time.strftime("%H:%M:%S"),
+                )
+            elif midday_slump_vetoed:
+                status_flag = "VETO_MIDDAY_LIQUIDITY_SLUMP"
+                advisory = f"🚨 [MIDDAY_LIQUIDITY_SLUMP_VETO (11:30-12:30 IST)] BUY {depth.symbol} @ {setup_reason} -> SUPPRESSED"
+                self.journal.record_veto(
+                    index_name=index_name,
+                    symbol=depth.symbol,
+                    direction=required_option_type,
+                    setup_reason=setup_reason,
+                    veto_reason="MIDDAY_LIQUIDITY_SLUMP_VETO (11:30-12:30 IST)",
                     spot_price=spot,
                     option_ltp=ltp,
                     bid=bid,
