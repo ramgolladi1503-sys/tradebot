@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "project_name": "tradebot",
+  "project_type": "trading",
+  "tech_stack": [
+    "python"
+  ],
+  "agent_os_repository": "ramgolladi1503-sys/aixion-agent-os",
+  "lifecycle_profile": "production_software",
+  "governance_mode": "strict",
+  "evidence_dir": ".aixion/evidence"
+}
