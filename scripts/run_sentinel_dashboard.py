@@ -544,6 +544,7 @@ def get_all_executed_trades_today() -> list:
                 trades_dict[pid] = {
                     "trade_time": time_str,
                     "position_id": pid,
+                    "strategy": item.get("strategy_name") or ("ORB_BREAKDOWN" if "PE" in str(item.get("direction")) else "ORB_BREAKOUT"),
                     "strike_contract": item.get("strike_contract", "N/A"),
                     "entry_price": item.get("entry_price"),
                     "exit_price": item.get("exit_price"),
@@ -585,6 +586,7 @@ def get_all_executed_trades_today() -> list:
         trades_dict[cur_pid] = {
             "trade_time": time_str,
             "position_id": cur_pid,
+            "strategy": wal_payload.get("strategy_name") or ("ORB_BREAKDOWN" if "PE" in str(wal_payload.get("direction")) else "ORB_BREAKOUT"),
             "strike_contract": wal_payload.get("strike_contract", "N/A"),
             "entry_price": wal_payload.get("entry_price"),
             "exit_price": None,
@@ -894,6 +896,7 @@ with tab_live:
                     column_config={
                         "trade_time": st.column_config.TextColumn("Date & Time (IST)", width="medium"),
                         "position_id": st.column_config.TextColumn("Trade ID", width="small"),
+                        "strategy": st.column_config.TextColumn("Strategy Trigger", width="medium"),
                         "strike_contract": st.column_config.TextColumn("Contract", width="medium"),
                         "entry_price": st.column_config.NumberColumn("Spot Entry", format="₹%.2f"),
                         "exit_price": st.column_config.NumberColumn("Spot Exit", format="₹%.2f"),

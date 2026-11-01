@@ -147,9 +147,9 @@ def test_clamping_rejected_by_min_rr_ratio():
         min_rr_ratio=1.0,
     )
 
-    assert decision.action == GATE_ACTION_PROCEED
+    assert decision.action == GATE_ACTION_VETO
     assert decision.clamped_target_pts is None
-    assert "CLAMP_REJECTED_SUB_MIN_RR" in decision.reason
+    assert "VETO_WALL_COMPRESSION_UNECONOMIC_RR" in decision.reason
 
 
 def test_fragile_call_wall_bypasses_clamping_for_breakout():

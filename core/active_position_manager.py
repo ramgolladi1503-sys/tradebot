@@ -144,6 +144,8 @@ class PositionPayload:
     # Asymmetric Structural Runner Mode (15-Minute Swing Trailing)
     structural_runner_enabled: bool = False
     structural_swing_anchor_sl: Optional[float] = None  # 15m structural swing low (CE) or high (PE)
+    # Strategy Attribution Tracking
+    strategy_name: Optional[str] = None
 
 
 class ActivePositionManager:
@@ -299,6 +301,7 @@ class ActivePositionManager:
         is_deep_itm: bool = False,
         structural_runner_enabled: bool = False,
         structural_swing_anchor_sl: Optional[float] = None,
+        strategy_name: Optional[str] = None,
     ) -> bool:
         """Arms and executes entry into IN_FLIGHT state with dynamic volatility-scaled targets.
         
@@ -445,6 +448,7 @@ class ActivePositionManager:
             opt_initial_sl=opt_initial_sl,
             structural_runner_enabled=structural_runner_enabled,
             structural_swing_anchor_sl=structural_swing_anchor_sl,
+            strategy_name=strategy_name,
         )
 
         self._transition_to(STATE_IN_FLIGHT)

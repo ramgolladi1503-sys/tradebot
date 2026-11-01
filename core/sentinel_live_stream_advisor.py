@@ -41,6 +41,11 @@ from core.active_position_manager import (
 )
 from core.expiry_calendar_resolver import ExpiryCalendarResolver
 from core.liquidity_sweep_engine import LiquiditySweepEngine
+from core.market_structure.sentinel_four_vectors import (
+    DerivativeBasisLeadLagEngine,
+    DerivativeBasisResult,
+    LeadLagSignal,
+)
 from core.intraday_reversal_engine import (
     IntradayReversalEngine,
     ReversalDirection,
@@ -237,6 +242,25 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             "BANKNIFTY": IntradayReversalEngine(index_name="BANKNIFTY"),
         }
         self.reversal_engine = self.reversal_engines["NIFTY"]
+
+        # Mode 3: Derivative Basis Lead-Lag Dislocation Mean-Reversion Engines
+        self.basis_engines: dict[str, DerivativeBasisLeadLagEngine] = {
+            "NIFTY": DerivativeBasisLeadLagEngine(lookback_bars=60, z_threshold=2.0),
+            "SENSEX": DerivativeBasisLeadLagEngine(lookback_bars=60, z_threshold=2.0),
+            "BANKNIFTY": DerivativeBasisLeadLagEngine(lookback_bars=60, z_threshold=2.0),
+        }
+        self.basis_engine = self.basis_engines["NIFTY"]
+        # History buffers for spot and futures per index
+        self.spot_history: dict[str, deque[float]] = {
+            "NIFTY": deque(maxlen=120),
+            "SENSEX": deque(maxlen=120),
+            "BANKNIFTY": deque(maxlen=120),
+        }
+        self.futures_history: dict[str, deque[float]] = {
+            "NIFTY": deque(maxlen=120),
+            "SENSEX": deque(maxlen=120),
+            "BANKNIFTY": deque(maxlen=120),
+        }
         # Previous Day Reference Levels (PDH / PDL / PDC) - Initialized unseeded with verified=False (Zero Hardcoding)
         self.prior_day_levels: dict[str, PriorDayReferenceLevels] = {
             "NIFTY": PriorDayReferenceLevels(index_name="NIFTY", verified=False),
@@ -486,6 +510,15 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         elif "Nifty Bank" in token:
             idx_key = "BANKNIFTY"
 
+        # Check for Front-Month Futures ticks
+        if "FUT" in token or "FUTIDX" in token:
+            if "NIFTY" in token and "BANK" not in token:
+                self.futures_history["NIFTY"].append(tick.ltp)
+            elif "BANKNIFTY" in token or "Nifty Bank" in token:
+                self.futures_history["BANKNIFTY"].append(tick.ltp)
+            elif "SENSEX" in token:
+                self.futures_history["SENSEX"].append(tick.ltp)
+
         if idx_key is not None:
             self._update_spot(idx_key, tick.ltp, tick.exchange_timestamp_ms)
             # Update upstream regime router ring buffer and state via discrete 1-minute SyntheticBarBucket
@@ -608,6 +641,8 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         with self._lock:
             self.spots[index_name] = spot
             self.spots_ts_ms[index_name] = ts_ms
+            if index_name in self.spot_history:
+                self.spot_history[index_name].append(spot)
 
             now_t = datetime.now().time()
             if now_t < self.opening_shock_end_time:
@@ -762,6 +797,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         trigger_active = False
         is_mode_2_breakout = False
         setup_reason = ""
+        strategy_name = "SENTINEL_ORB"
         required_option_type = None
 
         # -------------------------------------------------------------
@@ -793,6 +829,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
         if sweep_sig is not None:
             trigger_active = True
+            strategy_name = f"LIQUIDITY_SWEEP_{sweep_sig.sweep_type}"
             required_option_type = sweep_sig.direction
             setup_reason = f"[{sweep_sig.sweep_type}] {sweep_sig.setup_reason}"
             target_pts = sweep_sig.target_pts
@@ -813,10 +850,38 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             )
         ) is not None:
             trigger_active = True
+            strategy_name = f"INTRADAY_REVERSAL_{rev_sig.setup_type.value}"
             required_option_type = rev_sig.direction.value
             setup_reason = f"[{rev_sig.setup_type.value}] {rev_sig.setup_reason}"
             target_pts = rev_sig.reward_pts
             sl_pts = rev_sig.risk_pts
+
+        # -------------------------------------------------------------
+        # Mode 3: FEAT-SENTINEL-DERIVATIVE-BASIS-001 - Derivative Basis Lead-Lag Reversion
+        # Evaluates futures-to-spot basis dislocation (|Z_basis| >= 2.0).
+        # Requires GEAR_1_RANGE (or rotational chop) to avoid fading strong macro trending drives.
+        # -------------------------------------------------------------
+        elif (
+            self.session_gear == "GEAR_1_RANGE"
+            and (b_engine := self.basis_engines.get(index_name)) is not None
+            and len(self.spot_history.get(index_name, ())) >= 20
+            and len(self.futures_history.get(index_name, ())) >= 20
+        ):
+            b_res = b_engine.compute_basis_dislocation(
+                futures_series=list(self.futures_history[index_name]),
+                spot_series=list(self.spot_history[index_name]),
+                instrument_name=index_name,
+            )
+            if b_res.is_statistically_significant and b_res.signal != LeadLagSignal.EQUILIBRIUM:
+                trigger_active = True
+                strategy_name = "DERIVATIVE_BASIS_REVERSION"
+                # If futures premium is extended (Z > 2.0), spot snaps up -> CE
+                # If futures discount is extended (Z < -2.0), spot snaps down -> PE
+                required_option_type = "CE" if b_res.signal == LeadLagSignal.LEAD_EXPANSION else "PE"
+                setup_reason = f"[BASIS_DISLOCATION] Z={b_res.basis_z:+.2f} ({b_res.basis_pts:+.1f}pts)"
+                # Set dynamic ATR-scaled mean-reversion target and protective stop
+                target_pts = max(15.0, 0.75 * effective_atr)
+                sl_pts = max(12.0, 0.50 * effective_atr)
 
         # -------------------------------------------------------------
         # Mode 2: Existing Opening Range Breakout (ORB) Engine
@@ -830,6 +895,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             if regime_permits:
                 trigger_active = True
                 is_mode_2_breakout = True
+                strategy_name = "OPENING_RANGE_BREAKOUT"
                 required_option_type = "CE"
                 setup_reason = f"Breakout > {or_high:.1f}"
         elif or_low < math.inf and spot < or_low:
@@ -838,6 +904,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             if regime_permits:
                 trigger_active = True
                 is_mode_2_breakout = True
+                strategy_name = "OPENING_RANGE_BREAKDOWN"
                 required_option_type = "PE"
                 setup_reason = f"Breakdown < {or_low:.1f}"
 
@@ -1232,6 +1299,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                                 total_quantity=total_qty,
                                 is_expiry_day=is_exp,
                                 is_deep_itm=(itm_res.moneyness == "DEEP_ITM"),
+                                strategy_name=strategy_name,
                             )
                             if entered:
                                 self.journal.record_execution(
