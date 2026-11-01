@@ -1,7 +1,6 @@
 name: Aixion Agent OS governance
 on:
   pull_request:
-  workflow_dispatch:
 permissions:
   contents: read
 jobs:
