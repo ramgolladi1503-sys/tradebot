@@ -3,23 +3,23 @@
 ## Agent Work Contract
 
 - Work item: `OPTIONMATE-RBFN-RE-001` (`EPIC`, remains `BACKLOG`). Its claim remains `UNVERIFIED`.
-- This correction: `source_agent=gsd`, `action=UPDATE_DOCS`, one file only.
-- The CI evidence remediation changed two files: `governance/evidence/work_items/OPTIONMATE-RBFN-RE-001.json` (allowlist/scope/evidence fields) and `docs/agent_reviews/OPTIONMATE-RBFN-RE-001.md` (review artifact). The later roster correction changed only this review artifact.
-- The eight required core seats and additional UAT/Release roles are listed below with wave, source/action, and outcomes. Distinct assignments establish separate attribution, not independent cognition.
-- The user authorized a separate research PR and prior commit/push to PR #994 occurred. This correction makes no new commit or push; no merge is authorized.
+- This refresh: `source_agent=gsd`, `action=UPDATE_DOCS`, one file only.
+- The CI evidence remediation changed two files: `governance/evidence/work_items/OPTIONMATE-RBFN-RE-001.json` (allowlist/scope/evidence fields) and this review artifact. The later roster correction changed only this review artifact.
+- Role outcomes below apply to the documented local candidate `a703`. The remote PR exact-head CI remains outstanding.
+- The user authorized the separate research PR and prior commit/push to PR #994. This refresh makes no new commit or push; no merge is authorized.
 
-| Core role / agent | Contract `source_agent` / `action` | Dispatch | Actual output / outcome |
+| Core role / agent | Contract `source_agent` / `action` | Dispatch | Actual output / outcome on documented local candidate `a703` |
 |---|---|---|---|
 | Business Analyst `/root/rbfn_ba` | `codex` / `PLAN_PR` | W1 | Identified mismatch: NIFTY Epic covers 2024–25 and different 28/48/68 anchors; it cannot govern this OptionMate/2026 request. Flagged contaminated 2026 evaluation and missing exact OptionMate outputs. |
-| Product Owner `/root/rbfn_po` | `codex` / `PLAN_PR` | W1 | `ACCEPTED` docs-only outcome at candidate `ceef`; not readiness acceptance. |
+| Product Owner `/root/rbfn_po` | `codex` / `PLAN_PR` | W1 | `ACCEPTED` docs-only at `a703`; not readiness acceptance. |
 | Grill Me `/root/rbfn_grill` | `grill_me` / `AUDIT_RISK` | W1 | Flagged translation/anchor ambiguity, data rights, lineage, fills, and untouched-OOS blockers; challenged exact-fidelity inference from public calls, code, or backtests. |
 | Hermes `/root/rbfn_hermes` | `hermes` / `DEFINE_CONTRACT` | W2 | Defined docs-only contract and evidence gates; answered TQ-01 by distinguishing premium-RBFN replay from the unselected five-level video analogue. |
 | GSD `/root/rbfn_gsd` | `gsd` / `UPDATE_DOCS` | W2 | Implemented scoped documentation and corrections; no code changes. |
-| QA `/root/rbfn_qa` | `codex` / `REVIEW_PR` | W2 creation failed at thread limit; W3 after capacity freed | First evidence-record review `BLOCK`; at candidate `ceef`, artifact and local structural-gate review `PASS`. Underlying research suite: 49 tests passed. Current factual/status correction still needs QA retest. |
-| Senior QA `/root/rbfn_senior_qa` | `codex` / `REVIEW_PR` | W4 | Current review outcome `BLOCK` due status/artifact re-review state; a prior PASS predates this evidence-record version and is not current. |
-| Technical & Quant Analyst `/root/rbfn_tqa` | `codex` / `REVIEW_PR` | W4 | TQ-01 and P&L/rights findings `RESOLVED_WITH_EVIDENCE`; no fidelity or profitability conclusion. |
+| QA `/root/rbfn_qa` | `codex` / `REVIEW_PR` | W2 creation failed at thread limit; W3 after capacity freed | `PASS` at `a703`: 49 research tests had passed previously, plus exact structural gate, work-item, and diff checks. The earlier artifact `BLOCK` findings were corrected. |
+| Senior QA `/root/rbfn_senior_qa` | `codex` / `REVIEW_PR` | W4 | `PASS` at `a703` for the docs-only evidence scope. |
+| Technical & Quant Analyst `/root/rbfn_tqa` | `codex` / `REVIEW_PR` | W4 | Both findings `RESOLVED_WITH_EVIDENCE`, verified at `ceef`; no quantitative code or data changed through `a703`. This is not a fidelity or profitability conclusion. |
 
-Additional separately produced roles (reactivated prior assignments): UAT `/root/uat_transcript_correction`, `codex`/`REVIEW_PR`; Release Manager `/root/release_transcript_correction`, `codex`/`REVIEW_PR`.
+Additional roles (separately produced, reactivated prior assignments): UAT `/root/uat_transcript_correction`, `codex`/`REVIEW_PR`, `PASS` at `a703`; Release Manager `/root/release_transcript_correction`, `codex`/`REVIEW_PR`, `BLOCK` due remote CI.
 
 ## Scope Guard
 
@@ -39,13 +39,13 @@ The CI evidence remediation changed the work item and this evidence record. The 
 
 ## QA / Safety Review
 
-At candidate `ceef`, QA reported the artifact plus local structural gate `PASS`; the underlying research suite had 49 tests pass. QA's initial evidence-record review had blocked for missing BA roster/waves, unverified role outcomes, stale CI, and no candidate. UAT at `ceef` found the user-facing research docs `PASS` but the evidence artifact overall `BLOCK` for an inaccurate factual scope sentence and stale pending UAT status. The correction here records the two-file CI remediation versus one-file later roster correction and updates the UAT state. QA must retest this correction; do not claim current QA pass for the corrected artifact.
+On the local `a703` candidate, QA `/root/rbfn_qa` returned `PASS` for the artifact and local structural gate; the research suite had 49 tests pass previously, and work-item/diff checks passed. Senior QA `/root/rbfn_senior_qa` returned `PASS`. TQA `/root/rbfn_tqa` marked both findings `RESOLVED_WITH_EVIDENCE`. UAT `/root/uat_transcript_correction` returned `PASS` for the user-facing documentation and review artifact. PO `/root/rbfn_po` accepted the docs-only deliverable. These outcomes apply to local `a703`; they do not establish remote exact-head CI.
 
-PO accepted docs-only at `ceef`; that is not research readiness. TQA findings remain `RESOLVED_WITH_EVIDENCE`. Senior QA is `BLOCK` pending artifact/status re-review. Release Manager remains `BLOCK` due CI. PO/Senior QA/UAT approvals before the corrected artifact version must not be treated as approvals of the current version; required re-reviews remain outstanding.
+Release Manager `/root/release_transcript_correction` remains `BLOCK` due the remote PR's CI status. No role outcome certifies exact OptionMate fidelity, profitability, source rights, or runtime readiness.
 
 ## Acceptance Proof
 
-The remote PR #994 head remains `9855afeb7ac370bee67e4128bb1df10d7c897ac4`. Its observed CI snapshot at `2026-11-02 17:47:56 UTC` is not green:
+The remote PR #994 head remains `9855afeb7ac370bee67e4128bb1df10d7c897ac4`. Its GitHub CI snapshot observed `2026-11-02 17:47:56 UTC` is historical and not green:
 
 - `agent-review-evidence`: **FAIL**.
 - `unit_tests`: **PENDING**.
@@ -53,7 +53,7 @@ The remote PR #994 head remains `9855afeb7ac370bee67e4128bb1df10d7c897ac4`. Its 
 - **SKIPPED:** Trusted base evidence coverage; runtime-authority-base-authority; Candidate-code evidence diagnostics; agent-review-base-authority; code-excellence-base-authority; additional pr818 target; additional repo-forensics.
 - GitHub `reviewDecision` was empty.
 
-The above is a timestamped prior-head snapshot. Although local candidate `ceef` had artifact/structural checks, it has not become the remote PR head; no exact-head CI run containing this latest correction is available. Current release status remains blocked/unverified, with the remote PR's last observed fail/pending CI unchanged. The work-item validator is structural only. No claim that the final candidate is accepted or that CI passed.
+Local candidate `a703` passed its local artifact/structural checks and received the role outcomes above. No GitHub CI has run on `a703`; it is not the remote PR head. The remote `9855` failure/pending snapshot remains the last observed GitHub status. Final remote exact-head CI is outstanding, so Release remains `BLOCK`; do not claim the final remote candidate is accepted or CI passed. Work-item validation is structural only.
 
 ## Runtime Proof Required After Merge
 
@@ -61,8 +61,8 @@ The above is a timestamped prior-head snapshot. Although local candidate `ceef` 
 
 ## What This PR Does Not Prove
 
-No exact OptionMate algorithm, parameters, level-to-contract mapping, rights-cleared complete lineage, untouched-OOS fidelity, realized profitability, fill quality, or paper/live readiness is proved. Premium anchors are user hypotheses and are distinct from spot levels and strike IDs. No P&L is published here.
+No exact OptionMate algorithm, parameters, level-to-contract mapping, rights-cleared complete lineage, untouched-OOS fidelity, realized profitability, fill quality, or paper/live readiness is proved. Premium anchors are user hypotheses and distinct from spot levels and strike IDs. No P&L is published here.
 
 ## Human Approval
 
-The user authorized a separate research PR and forbade touching PR #992. The prior separate-PR commit/push was authorized. No merge approval exists. PR #992 remains untouched; no release or live-trading authority is implied.
+The user authorized a separate research PR and forbade touching PR #992. Prior separate-PR commit/push was authorized. No merge approval exists. PR #992 remains untouched; no release or live-trading authority is implied.
