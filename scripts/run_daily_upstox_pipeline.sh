@@ -47,7 +47,24 @@ fi
 # 4. Remove any stale lock files
 rm -f /tmp/upstox_daily_pipeline.lock
 
-# 5. Execute unified capture and post-market stitching pipeline
+# 5. Launch Sentinel Dashboard on port 8503 if not already running
+STREAMLIT_BIN="/opt/anaconda3/bin/streamlit"
+if [ ! -f "$STREAMLIT_BIN" ]; then
+    STREAMLIT_BIN="$(which streamlit)"
+fi
+DASHBOARD_LOG="$REPO_DIR/logs/sentinel_dashboard_$(date +%Y%m%d).log"
+
+if ! lsof -i :8503 > /dev/null 2>&1; then
+    echo "[*] Starting Sentinel Dashboard on http://localhost:8503..." >> "$LOG_FILE"
+    nohup "$STREAMLIT_BIN" run "$REPO_DIR/scripts/run_sentinel_dashboard.py" \
+        --server.headless true \
+        --server.port 8503 > "$DASHBOARD_LOG" 2>&1 &
+    echo "[✓] Dashboard started in background with PID: $!" >> "$LOG_FILE"
+else
+    echo "[✓] Dashboard is already active on port 8503." >> "$LOG_FILE"
+fi
+
+# 6. Execute unified capture and post-market stitching pipeline
 echo "[*] Launching scripts/upstox_daily_live_capture_and_stitch.py..." >> "$LOG_FILE"
 "$PYTHON_BIN" "$REPO_DIR/scripts/upstox_daily_live_capture_and_stitch.py" >> "$LOG_FILE" 2>&1
 

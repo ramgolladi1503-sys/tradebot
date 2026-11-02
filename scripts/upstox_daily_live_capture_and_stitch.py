@@ -340,6 +340,36 @@ def main():
         enable_stdout=True,
     )
 
+    # 3b. Automatic Prior-Day Reference Level Seeding (Dynamic fail-closed reference bounds)
+    try:
+        primary_dir = next((p for p in PRIMARY_BASE_DIRS if p.exists()), None)
+        search_dir = primary_dir if primary_dir is not None else FALLBACK_BASE_DIR
+        if search_dir.exists():
+            date_dirs = sorted([d for d in search_dir.iterdir() if d.is_dir() and d.name.startswith("2026-") and d.name < today_str])
+            if date_dirs:
+                last_session_dir = date_dirs[-1]
+                compact_date = last_session_dir.name.replace("-", "")
+                idx_file = last_session_dir / f"indices_1m_{compact_date}.parquet"
+                if idx_file.exists():
+                    import pandas as pd
+                    df_idx = pd.read_parquet(idx_file)
+                    sym_map = {"NIFTY": "NIFTY 50", "BANKNIFTY": "BANKNIFTY", "SENSEX": "SENSEX"}
+                    for target, src_sym in sym_map.items():
+                        sub = df_idx[df_idx["symbol"] == src_sym]
+                        if not sub.empty:
+                            pdh = float(sub["high"].max())
+                            pdl = float(sub["low"].min())
+                            pdc = float(sub.iloc[-1]["close"])
+                            sentinel_advisor.seed_prior_day_levels(
+                                index_name=target,
+                                pdh=pdh,
+                                pdl=pdl,
+                                pdc=pdc,
+                                session_date=datetime.strptime(last_session_dir.name, "%Y-%m-%d").date(),
+                            )
+    except Exception as e:
+        logger.warning(f"Failed to auto-seed prior-day levels: {e}")
+
     # 4. Stream Broadcaster (Fan-out to Sentinel in-memory + Async Parquet recorder)
     broadcaster = UpstoxStreamBroadcaster([
         recorder,
