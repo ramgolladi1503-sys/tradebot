@@ -6,7 +6,8 @@
     "Any proposed RBFN equations, inputs, outputs, anchors, signal mapping, and exits are labeled generic or independent hypotheses, never OptionMate internals.",
     "Exact OptionMate fidelity remains NOT_MEASURABLE and verdict NO-GO / RESEARCH-ONLY.",
     "The standalone work item does not change the scope or path limits of NIFTY-OPT-EDGE-001.",
-    "Only the eight enumerated paths are modified; PR #992 is not changed, commented on, pushed, or merged."
+    "Only the nine enumerated paths are included in the research PR; PR #992 is not changed, commented on, pushed, or merged.",
+    "The PR agent-review evidence document contains all ten mandatory headings, accurately records role outputs and remediation, and reports CI failures/pending checks without claiming a pass."
   ],
   "acting_role": "",
   "allowed_paths": [
@@ -17,7 +18,8 @@
     "research/rbfn_options/docs/VIDEO_STRATEGY_INDEPENDENT_ANALOGUE_SPEC.md",
     "research/rbfn_options/docs/PR992_OPTIONMATE_RECONSTRUCTION_AUDIT.md",
     "research/rbfn_options/docs/OPTIONMATE_TRANSCRIPT_EVIDENCE_REGISTER_20261102.md",
-    "research/rbfn_options/docs/OPTIONMATE_RBFN_REVERSE_ENGINEERING_SYNTHESIS_20261102.md"
+    "research/rbfn_options/docs/OPTIONMATE_RBFN_REVERSE_ENGINEERING_SYNTHESIS_20261102.md",
+    "docs/agent_reviews/OPTIONMATE-RBFN-RE-001.md"
   ],
   "architecture_impact": "Documentation and evidence governance only. No runtime, model, strategy, data pipeline, or execution behavior changes.",
   "business_goal": "Create a traceable, conservative reverse-engineering synthesis of public OptionMate RBFN/level/premium-strike evidence without claiming exact algorithm recovery or trading readiness.",
@@ -35,7 +37,9 @@
   "expected_tests": [
     "python3 -m core.delivery.cli validate governance/evidence/work_items/OPTIONMATE-RBFN-RE-001.json",
     "Check document links and key epistemic assertions across the seven research documents.",
-    "git diff --check"
+    "git diff --check",
+    "python scripts/validate_agent_review_evidence.py --base-ref origin/main --candidate-ref HEAD",
+    "Check the review record contains all ten required headings and truthful CI/role statuses."
   ],
   "extensions": {
     "evidence_standard": {
@@ -49,7 +53,8 @@
       ],
       "assessed_paths": [
         "research/rbfn_options/docs/",
-        "governance/evidence/work_items/OPTIONMATE-RBFN-RE-001.json"
+        "governance/evidence/work_items/OPTIONMATE-RBFN-RE-001.json",
+        "docs/agent_reviews/OPTIONMATE-RBFN-RE-001.md"
       ],
       "claims": [
         {
@@ -90,7 +95,8 @@
   "in_scope": [
     "Create this separate docs-only work item.",
     "Register temporary transcript-export provenance and timestamped paraphrases without copying raw transcript/media.",
-    "Correct the five named OptionMate research documents and add a synthesis."
+    "Correct the five named OptionMate research documents and add a synthesis.",
+    "Create the required PR agent-review evidence record for the completed docs-only research work and include its path in this work item."
   ],
   "out_of_scope": [
     "Changing or broadening NIFTY-OPT-EDGE-001.",
@@ -107,7 +113,10 @@
     "Check 128/138 ambiguity and that 28/158 are not presented as video-confirmed.",
     "Check spot levels, option premiums, and strike identifiers remain distinct.",
     "Check no source-derived row-level data/raw caption/media, exact-fidelity claim, realized P&L claim, or live authorization was introduced.",
-    "Verify no path outside this work item allowed_paths changed."
+    "Verify no path outside this work item allowed_paths changed.",
+    "Verify the agent-review document contains the required headings and describes the gate as structural evidence only.",
+    "Verify FAIL/PENDING/SKIPPED/PASS CI states are recorded faithfully and do not imply all checks passed.",
+    "Verify the work-item allowlist and evidence assessed_paths include the authorized review artifact path."
   ],
   "release_gates": [
     "Documentation-only research PR may be prepared only after the scoped work item, checks, and independent reviews are complete.",
@@ -115,7 +124,7 @@
     "Exact fidelity and profitability remain unverified."
   ],
   "required_ci_checks": [],
-  "rollback_plan": "Revert only the seven scoped research documents and this work item if correction defects are found; preserve all unrelated dirty artifacts and PR #992.",
+  "rollback_plan": "Revert only the agent-review record and its corresponding work-item allowlist, acceptance, test, QA-plan, rollback, and assessed-path changes; preserve the prior research documents, local research artifacts, and PR #992.",
   "safety_constraints": [
     "read_only=true for market data and external platform sources",
     "is_order_action=false",
