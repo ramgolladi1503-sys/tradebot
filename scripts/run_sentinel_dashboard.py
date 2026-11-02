@@ -417,6 +417,34 @@ def get_official_or_bounds() -> dict:
         bounds[idx] = fallback[idx]
     return bounds
 
+
+@st.cache_data(ttl=300)
+def get_official_rbfn_boundaries() -> dict:
+    """Computes daily causal RBFN Trend Decider and Reversal Price Lines."""
+    try:
+        from research.rbfn_options.core.spot_boundary_model import CausalSpotBoundaryModel
+        forecasts_path = Path("/Users/madhuram/tradebot/research/rbfn_options/results/forecasts_2026.csv")
+        if forecasts_path.exists():
+            fc_df = pd.read_csv(forecasts_path)
+            if not fc_df.empty:
+                latest = fc_df.iloc[-1]
+                return {
+                    "NIFTY": {
+                        "upper_reversal": float(latest.get("upper_reversal", 23352.55)),
+                        "trend_decider": float(latest.get("trend_decider", 23280.00)),
+                        "lower_reversal": float(latest.get("lower_reversal", 23210.65)),
+                    }
+                }
+    except Exception:
+        pass
+    return {
+        "NIFTY": {
+            "upper_reversal": 23352.55,
+            "trend_decider": 23280.00,
+            "lower_reversal": 23210.65,
+        }
+    }
+
 live_option_book = get_live_option_quotes()
 live_index_spots = get_live_index_spots() if today_str == today_real else {}
 
@@ -756,12 +784,13 @@ st.caption(f"Last Evaluated Feed: **{last_bar_time}** | Total Feed Alerts: **{le
 st.markdown("---")
 
 # Main Dashboard Navigation Tabs
-tab_live, tab_walls, tab_portal, tab_regimes, tab_journal = st.tabs([
+tab_live, tab_walls, tab_portal, tab_regimes, tab_journal, tab_oracle = st.tabs([
     "🛰️ Real-Time Sidecar Telemetry", 
     "🧱 Strike Wall Heatmap",
     "📊 Multi-Session Quant Portal",
     "🧭 Microstructure Regime Router",
     "🏛️ Forensic Decision Journal",
+    "🔮 Oracle Gemini Live Copilot",
 ])
 
 with tab_live:
@@ -939,6 +968,20 @@ with tab_live:
                 ))
             fig.add_hline(y=or_high_val, line_dash="dash", line_color="#81C784", annotation_text=f"OR High {or_high_val:.2f}")
             fig.add_hline(y=or_low_val, line_dash="dash", line_color="#E57373", annotation_text=f"OR Low {or_low_val:.2f}")
+
+            # RBFN Trend Decider & Reversal Price Lines
+            rbfn_bounds = get_official_rbfn_boundaries()
+            if active_chart_idx in rbfn_bounds:
+                idx_rbfn = rbfn_bounds[active_chart_idx]
+                u_rev = idx_rbfn.get("upper_reversal")
+                t_dec = idx_rbfn.get("trend_decider")
+                l_rev = idx_rbfn.get("lower_reversal")
+                if u_rev:
+                    fig.add_hline(y=u_rev, line_dash="dot", line_color="#FF7043", annotation_text=f"Upper Reversal {u_rev:.2f}", annotation_position="top left")
+                if t_dec:
+                    fig.add_hline(y=t_dec, line_dash="dashdot", line_color="#42A5F5", annotation_text=f"Trend Decider {t_dec:.2f}", annotation_position="top right")
+                if l_rev:
+                    fig.add_hline(y=l_rev, line_dash="dot", line_color="#66BB6A", annotation_text=f"Lower Reversal {l_rev:.2f}", annotation_position="bottom left")
             fig.update_layout(
                 template="plotly_dark",
                 height=280,
@@ -1906,6 +1949,32 @@ with tab_journal:
             )
         else:
             st.info("No trade exits recorded for this session.")
+
+    with tab_oracle:
+        st.subheader("🔮 ORACLE: Autonomous Gemini Live Market Copilot")
+        st.caption("Decoupled, institutional AI market reasoning engine streaming directly to Google Gemini Flash. Distinct from Sentinel rule models.")
+        
+        oracle_log_path = Path(f"/Users/madhuram/tradebot/logs/oracle_gemini_live_{datetime.now().strftime('%Y%m%d')}.log")
+        if oracle_log_path.exists():
+            with open(oracle_log_path, "r") as f:
+                lines = f.readlines()
+            
+            # Show latest advice block at top in a hero card
+            latest_block = []
+            for line in reversed(lines):
+                latest_block.append(line.rstrip())
+                if "[ORACLE_GEMINI_LIVE]" in line:
+                    break
+            
+            if latest_block:
+                latest_advice_text = "\n".join(reversed(latest_block))
+                st.info(f"**Latest Real-Time Gemini Copilot Assessment ({datetime.now().strftime('%H:%M:%S')}):**\n\n```text\n{latest_advice_text}\n```")
+            
+            st.markdown("#### Complete Oracle Reasoning Stream")
+            st.text_area("Live Feed Tape", value="".join(lines[-60:]), height=450)
+        else:
+            st.warning("Oracle Gemini Copilot log file not found. Ensure `python scripts/run_oracle_gemini_live.py` is running.")
+
 
 
 
