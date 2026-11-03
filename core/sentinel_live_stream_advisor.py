@@ -699,12 +699,17 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             eff_atr_fallback = 65.0
             min_target = 12.0
             min_sl = 12.0
-            eff_atr_15m = 12.0
-            eff_atr_60m = 16.0
+            eff_atr_15m = 32.5
+            eff_atr_60m = 65.0
 
         # Feed option depth tick to SentinelWallObserver
         wall_obs = self.wall_observers.get(index_name)
         effective_atr = wall_obs.atr_pts if (wall_obs is not None and wall_obs.atr_pts > 0) else eff_atr_fallback
+
+        # Dynamically align multi-timeframe ATRs with live observer ATR
+        if effective_atr > 0:
+            eff_atr_60m = max(eff_atr_60m, round(effective_atr, 1))
+            eff_atr_15m = max(eff_atr_15m, round(0.50 * eff_atr_60m, 1))
 
         nominal_target = round(0.35 * effective_atr, 2)
         nominal_sl = round(0.25 * effective_atr, 2)
