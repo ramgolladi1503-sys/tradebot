@@ -1,0 +1,34 @@
+{
+  "total_sessions": 153,
+  "total_trades": 159,
+  "win_rate": 33.33333333333333,
+  "net_rupee_pnl": -121961.86686200135,
+  "wfa": [
+    {
+      "fold": "Fold 1: Dec 2025 - Jan 2026",
+      "trades": 43,
+      "win_rate": 44.18604651162791,
+      "net_pnl": -9666.647955147317
+    },
+    {
+      "fold": "Fold 2: Feb 2026 - Mar 2026",
+      "trades": 42,
+      "win_rate": 30.952380952380953,
+      "net_pnl": -42524.895391465005
+    },
+    {
+      "fold": "Fold 3: Apr 2026 - May 2026",
+      "trades": 41,
+      "win_rate": 21.951219512195124,
+      "net_pnl": -52292.683438448454
+    },
+    {
+      "fold": "Fold 4: Jun 2026 - Jul 2026",
+      "trades": 33,
+      "win_rate": 36.36363636363637,
+      "net_pnl": -17477.640076940574
+    }
+  ],
+  "in_sample_pnl": -52191.54334661232,
+  "out_of_sample_pnl": -69770.32351538903
+}
