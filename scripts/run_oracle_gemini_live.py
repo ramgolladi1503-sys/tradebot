@@ -64,10 +64,13 @@ def run_oracle_daemon():
 
     while True:
         try:
-            chunks = sorted(glob.glob(os.path.join(capture_dir, "*.parquet")))
-            if not chunks:
+            raw_chunks = glob.glob(os.path.join(capture_dir, "*.parquet"))
+            if not raw_chunks:
                 time.sleep(2)
                 continue
+
+            # Sort by file modification time so newly written chunks are read first
+            chunks = sorted(raw_chunks, key=os.path.getmtime)
             
             # Read latest chunk
             latest_chunk = chunks[-1]
