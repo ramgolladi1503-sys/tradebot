@@ -93,15 +93,15 @@ class OracleGeminiLiveAdapter:
     def __init__(
         self,
         api_key: Optional[str] = None,
-        poll_interval_sec: float = 5.0,
-        signal_cooldown_sec: float = 60.0,
+        poll_interval_sec: float = 30.0,
+        signal_cooldown_sec: float = 120.0,
     ):
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
         if not self.api_key:
             raise ValueError("GEMINI_API_KEY is not set in environment or .env")
 
         self.client = genai.Client(api_key=self.api_key)
-        self.model_name = "gemini-2.5-flash"
+        self.model_name = "gemini-3.1-flash-lite"
         self.poll_interval_sec = poll_interval_sec
         self.signal_cooldown_sec = signal_cooldown_sec
         self.last_eval_time = 0.0

@@ -33,7 +33,7 @@ def run_oracle_daemon():
     print("Attribution Prefix: [ORACLE_GEMINI_LIVE]")
     print("=================================================================")
 
-    adapter = OracleGeminiLiveAdapter(poll_interval_sec=10.0)
+    adapter = OracleGeminiLiveAdapter(poll_interval_sec=30.0, signal_cooldown_sec=120.0)
     today_str = datetime.now().strftime("%Y-%m-%d")
     
     # Dynamic capture directory lookup across external volumes and local fallback
@@ -121,7 +121,7 @@ def run_oracle_daemon():
                 candidate_pe_symbol=pe_symbol,
                 candidate_pe_ltp=atm_pe,
             )
-            time.sleep(10)
+            time.sleep(30)
         except Exception as e:
             print(f"Daemon cycle error: {e}")
             time.sleep(5)
