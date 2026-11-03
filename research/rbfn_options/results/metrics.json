@@ -1,0 +1,13 @@
+{
+  "training_residual_q75_high": 0.6458401633484069,
+  "training_residual_q75_low": 0.317170054767655,
+  "train_contract_sessions": 614,
+  "test_contract_sessions": 364,
+  "test_contract_sessions_with_complete_labels": 356,
+  "rbf_mean_target_abs_error": 0.41959260243040697,
+  "train_average_mean_target_abs_error": 0.4482342236800359,
+  "trades": 101,
+  "net_inr_under_supplied_cost_scenarios": -8083.59,
+  "costs_complete": true,
+  "note": "This is independent premium high/low RBFN, not OptionMate. No bid/ask means net is scenario-based."
+}
