@@ -420,30 +420,53 @@ def get_official_or_bounds() -> dict:
 
 @st.cache_data(ttl=60)
 def get_official_rbfn_boundaries() -> dict:
-    """Computes daily causal RBFN Trend Decider and Reversal Price Lines."""
+    """Computes daily causal RBFN Trend Decider and Reversal Price Lines (RP1, RP2) using OptionMate strategy engine."""
     try:
-        forecasts_path = Path("/Users/madhuram/tradebot/research/rbfn_options/results/forecasts_2026.csv")
-        if forecasts_path.exists():
-            fc_df = pd.read_csv(forecasts_path)
-            if not fc_df.empty:
-                # Find today's forecast or fallback to latest
-                today_str = datetime.now().strftime("%Y-%m-%d")
-                match_df = fc_df[fc_df["date"] == today_str]
-                row = match_df.iloc[-1] if not match_df.empty else fc_df.iloc[-1]
-                return {
-                    "NIFTY": {
-                        "upper_reversal": float(row.get("upper_reversal", 23725.00)),
-                        "trend_decider": float(row.get("trend_decider", 23600.00)),
-                        "lower_reversal": float(row.get("lower_reversal", 23480.00)),
-                    }
-                }
+        from strategies.optionmate_rbfn_strategy import OptionMateRBFNStrategy
+        
+        # Load latest spot prices if available
+        spots = get_live_index_spots()
+        today_s = datetime.now().strftime("%Y-%m-%d")
+        
+        # In-memory dynamic grid computation with fallback defaults
+        strat = OptionMateRBFNStrategy(step_size=50)
+        
+        # Default baseline values for NIFTY if live fetch is offline
+        nifty_spot = spots.get("NIFTY", 23570.0)
+        nifty_grid = strat.compute_daily_grid(
+            date=today_s,
+            spot_open=nifty_spot,
+            prev_close=nifty_spot - 20.0,
+            atr_14=165.0,
+            vix=14.2,
+        )
+        
+        return {
+            "NIFTY": {
+                "trend_decider": nifty_grid.trend_decider,
+                "rp1_upper": nifty_grid.rp1_upper,
+                "rp2_upper": nifty_grid.rp2_upper,
+                "rp1_lower": nifty_grid.rp1_lower,
+                "rp2_lower": nifty_grid.rp2_lower,
+                "call_strike": nifty_grid.call_strike,
+                "put_strike": nifty_grid.put_strike,
+                "target_strike": nifty_grid.target_strike,
+                "bias": nifty_grid.recommended_bias,
+            }
+        }
     except Exception:
         pass
     return {
         "NIFTY": {
-            "upper_reversal": 23725.00,
             "trend_decider": 23600.00,
-            "lower_reversal": 23480.00,
+            "rp1_upper": 23665.00,
+            "rp2_upper": 23725.00,
+            "rp1_lower": 23535.00,
+            "rp2_lower": 23480.00,
+            "call_strike": 23650.00,
+            "put_strike": 23550.00,
+            "target_strike": 23650.00,
+            "bias": "BULL",
         }
     }
 
@@ -996,19 +1019,27 @@ with tab_live:
         fig.add_hline(y=or_high_val, line_dash="dash", line_color="#81C784", annotation_text=f"OR High {or_high_val:.2f}")
         fig.add_hline(y=or_low_val, line_dash="dash", line_color="#E57373", annotation_text=f"OR Low {or_low_val:.2f}")
 
-        # RBFN Trend Decider & Reversal Price Lines
+        # RBFN Trend Decider & Reversal Price Lines (Option Mate Dynamic Grid)
         rbfn_bounds = get_official_rbfn_boundaries()
         if active_chart_idx in rbfn_bounds:
             idx_rbfn = rbfn_bounds[active_chart_idx]
-            u_rev = idx_rbfn.get("upper_reversal")
             t_dec = idx_rbfn.get("trend_decider")
-            l_rev = idx_rbfn.get("lower_reversal")
-            if u_rev:
-                fig.add_hline(y=u_rev, line_dash="dot", line_color="#FF7043", annotation_text=f"Upper Reversal {u_rev:.2f}", annotation_position="top left")
+            rp1_u = idx_rbfn.get("rp1_upper")
+            rp2_u = idx_rbfn.get("rp2_upper")
+            rp1_l = idx_rbfn.get("rp1_lower")
+            rp2_l = idx_rbfn.get("rp2_lower")
+            tgt_k = idx_rbfn.get("target_strike")
+
             if t_dec:
-                fig.add_hline(y=t_dec, line_dash="dashdot", line_color="#42A5F5", annotation_text=f"Trend Decider {t_dec:.2f}", annotation_position="top right")
-            if l_rev:
-                fig.add_hline(y=l_rev, line_dash="dot", line_color="#66BB6A", annotation_text=f"Lower Reversal {l_rev:.2f}", annotation_position="bottom left")
+                fig.add_hline(y=t_dec, line_dash="dashdot", line_color="#42A5F5", annotation_text=f"Trend Decider (TD) {t_dec:.2f}", annotation_position="top right")
+            if rp1_u:
+                fig.add_hline(y=rp1_u, line_dash="dot", line_color="#FF7043", annotation_text=f"RP1 Upper {rp1_u:.2f}", annotation_position="top left")
+            if rp2_u:
+                fig.add_hline(y=rp2_u, line_dash="dot", line_color="#D32F2F", annotation_text=f"RP2 Upper {rp2_u:.2f}", annotation_position="top left")
+            if rp1_l:
+                fig.add_hline(y=rp1_l, line_dash="dot", line_color="#66BB6A", annotation_text=f"RP1 Lower {rp1_l:.2f}", annotation_position="bottom left")
+            if rp2_l:
+                fig.add_hline(y=rp2_l, line_dash="dot", line_color="#388E3C", annotation_text=f"RP2 Lower {rp2_l:.2f}", annotation_position="bottom left")
         fig.update_layout(
             template="plotly_dark",
             height=320,

@@ -51,6 +51,11 @@ from core.intraday_reversal_engine import (
     ReversalDirection,
     ReversalSetupType,
 )
+from core.midday_momentum_extension_engine import (
+    MiddayMomentumExtensionEngine,
+    MiddayDirection,
+    MiddayMomentumSignal,
+)
 from core.sentinel_inmem_adapter import InMemorySentinelAdapter
 from core.structural_alpha_gates import (
     CrossIndexMacroGate,
@@ -244,6 +249,14 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             "BANKNIFTY": IntradayReversalEngine(index_name="BANKNIFTY"),
         }
         self.reversal_engine = self.reversal_engines["NIFTY"]
+
+        # FEAT-SENTINEL-MIDDAY-MOMENTUM-001: Midday Momentum Extension Engines per index (12:30 IST)
+        self.midday_engines: dict[str, MiddayMomentumExtensionEngine] = {
+            "NIFTY": MiddayMomentumExtensionEngine(index_name="NIFTY", drift_threshold=0.0060, target_pts=40.0, stop_pts=40.0),
+            "SENSEX": MiddayMomentumExtensionEngine(index_name="SENSEX", drift_threshold=0.0060, target_pts=150.0, stop_pts=150.0),
+            "BANKNIFTY": MiddayMomentumExtensionEngine(index_name="BANKNIFTY", drift_threshold=0.0060, target_pts=100.0, stop_pts=100.0),
+        }
+        self.midday_engine = self.midday_engines["NIFTY"]
 
         # Mode 3: Derivative Basis Lead-Lag Dislocation Mean-Reversion Engines
         self.basis_engines: dict[str, DerivativeBasisLeadLagEngine] = {
@@ -692,6 +705,9 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     b = self.or_bounds[index_name]
                     b["high"] = max(b["high"], spot)
                     b["low"] = min(b["low"], spot)
+                    # Feed session open to midday momentum extension engine
+                    if (m_engine := self.midday_engines.get(index_name)) is not None:
+                        m_engine.set_session_open(spot)
                     if index_name == "NIFTY":
                         self.active_range_high = b["high"]
                         self.active_range_low = b["low"]
@@ -929,6 +945,31 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 sl_pts = max(12.0, 0.50 * effective_atr)
 
         # -------------------------------------------------------------
+        # Mode 4: FEAT-SENTINEL-MIDDAY-MOMENTUM-001 - Causal Midday Momentum Extension
+        # Evaluates morning drift strictly at 12:30:00 IST on completed 12:29 bar
+        # 1:1 Fixed Symmetrical Payoff (40.0 pts target / 40.0 pts stop)
+        # -------------------------------------------------------------
+        elif (
+            (m_engine := self.midday_engines.get(index_name)) is not None
+            and (
+                midday_sig := m_engine.evaluate_at_1230(
+                    current_spot=spot,
+                    timestamp_ms=depth.exchange_timestamp_ms,
+                    wall_time=now_time,
+                    date_str=now_dt.strftime("%Y-%m-%d"),
+                )
+            ) is not None
+            and midday_sig.direction != MiddayDirection.ABSTAIN
+        ):
+            trigger_active = True
+            self._last_midday_sig = midday_sig
+            strategy_name = "MIDDAY_MOMENTUM_EXTENSION"
+            required_option_type = midday_sig.recommended_option_type
+            setup_reason = f"[MIDDAY_1230] {midday_sig.setup_reason}"
+            target_pts = midday_sig.target_pts
+            sl_pts = midday_sig.stop_pts
+
+        # -------------------------------------------------------------
         # Mode 2: Existing Opening Range Breakout (ORB) Engine
         # Evaluates clean trend expansion when no sweep or reversal trap is active
         # Invariant 4.1: Consult RegimeRouter to block blind ORB during ROTATIONAL_CHOP,
@@ -960,15 +1001,20 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             depth_asks = depth.ask_q1 + depth.ask_q2 + depth.ask_q3 + depth.ask_q4 + depth.ask_q5
             displacement = (spot - or_high) if required_option_type == "CE" else (spot - or_low)
             
-            # Strike matching check for ITM
-            itm_res = self.strike_resolver.resolve_target_strike(
-                spot=spot,
-                direction=required_option_type,
-                index_name=index_name,
-            )
+            # Strike matching check for ITM or Strategy Target Strike
+            if strategy_name == "MIDDAY_MOMENTUM_EXTENSION" and (m_sig := getattr(self, "_last_midday_sig", None)) is not None:
+                target_strike_to_match = m_sig.recommended_strike
+            else:
+                itm_res = self.strike_resolver.resolve_target_strike(
+                    spot=spot,
+                    direction=required_option_type,
+                    index_name=index_name,
+                )
+                target_strike_to_match = itm_res.target_strike
+
             is_target_strike = self.strike_resolver.is_contract_matching(
                 symbol=sym,
-                target_strike=itm_res.target_strike,
+                target_strike=target_strike_to_match,
                 option_type=required_option_type,
                 tolerance_strikes=1,
                 strike_interval=strike_interval,

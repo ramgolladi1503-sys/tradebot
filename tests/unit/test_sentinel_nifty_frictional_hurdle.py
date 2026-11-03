@@ -123,8 +123,8 @@ def test_end_to_end_veto_nifty_frictional_hurdle_in_depth_tick(advisor):
     from datetime import datetime, time as dt_time
     from core.upstox_stream_broadcaster import UpstoxStreamBroadcaster, UpstoxLevel5DepthRecord
 
-    # Configure advisor to require higher ATR hurdle (e.g. 18.0) and allow immediate execution
-    advisor.min_nifty_frictional_hurdle_atr = 18.0
+    # Configure advisor to require higher ATR hurdle (e.g. 40.0) so eff_atr_15m (32.5) fails the hurdle
+    advisor.min_nifty_frictional_hurdle_atr = 40.0
     advisor.trade_lock_active = False
     advisor.market_open_time = dt_time(0, 0)
     advisor.opening_shock_end_time = dt_time(0, 0)
@@ -132,10 +132,14 @@ def test_end_to_end_veto_nifty_frictional_hurdle_in_depth_tick(advisor):
 
     now_ms = int(datetime.now().timestamp() * 1000)
 
-    # Establish NIFTY spot tick above Opening Range High (22550.0) with moderate displacement (< 2.5 * ATR60)
+    # Establish NIFTY and companion SENSEX spot ticks to satisfy CrossIndexMacroGate
     advisor.or_bounds["NIFTY"] = {"high": 22550.0, "low": 22450.0}
     advisor.spots["NIFTY"] = 22560.0
     advisor.spots_ts_ms["NIFTY"] = now_ms
+
+    advisor.or_bounds["SENSEX"] = {"high": 75000.0, "low": 74000.0}
+    advisor.spots["SENSEX"] = 74500.0
+    advisor.spots_ts_ms["SENSEX"] = now_ms
 
     depth = UpstoxLevel5DepthRecord(
         token="NSE_FO|NIFTY26OCT22550CE",

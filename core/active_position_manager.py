@@ -217,6 +217,8 @@ class ActivePositionManager:
                         saved_state = STATE_STANDBY
                     else:
                         self.cool_off_until = parsed_cool
+                        self.cool_off_ref_spot = data.get("cool_off_ref_spot")
+                        self.cool_off_direction = data.get("cool_off_direction")
                 except Exception:
                     self.cool_off_until = None
                     self.cool_off_ref_spot = None
