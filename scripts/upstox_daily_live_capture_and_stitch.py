@@ -39,17 +39,34 @@ import upstox_client
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 load_dotenv(ROOT / ".env")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("upstox_daily_pipeline")
 
-PRIMARY_BASE_DIR = Path("/Volumes/TradeBotData/live market capture")
+from core.upstox_stream_broadcaster import (
+    UpstoxStreamBroadcaster,
+    UpstoxAsyncParquetRecorder,
+    UpstoxLevel5DepthRecord,
+    UpstoxTickRecord,
+)
+from core.sentinel_inmem_adapter import InMemorySentinelAdapter
+from core.sentinel_live_stream_advisor import SentinelLiveStreamAdvisor
+
+PRIMARY_BASE_DIRS = [
+    Path("/Volumes/TradeBot/live market capture"),
+    Path("/Volumes/TradeBotData/live market capture"),
+    Path("/Volumes/TradeBotFast/live market capture"),
+]
 FALLBACK_BASE_DIR = ROOT / ".runtime" / "market_data"
 
 def get_today_data_dir() -> Path:
     today_str = datetime.now().strftime("%Y-%m-%d")
-    d = (PRIMARY_BASE_DIR if PRIMARY_BASE_DIR.exists() else FALLBACK_BASE_DIR) / today_str
+    primary_dir = next((p for p in PRIMARY_BASE_DIRS if p.exists()), None)
+    base_dir = primary_dir if primary_dir is not None else FALLBACK_BASE_DIR
+    d = base_dir / today_str
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -205,9 +222,13 @@ def execute_post_market_stitching(date_str: str, date_compact: str, data_dir: Pa
             logger.warning(f"Error reading chunk {cf}: {e}")
 
     if dfs:
-        df_all = pd.concat(dfs, ignore_index=True).sort_values("ts").reset_index(drop=True)
+        df_all = pd.concat(dfs, ignore_index=True)
+        ts_col = "exchange_timestamp_ms" if "exchange_timestamp_ms" in df_all.columns else ("ts" if "ts" in df_all.columns else None)
+        if ts_col:
+            df_all = df_all.sort_values(ts_col).reset_index(drop=True)
+            subset_cols = [ts_col, "token"] if "token" in df_all.columns else [ts_col]
+            df_all = df_all.drop_duplicates(subset=subset_cols).reset_index(drop=True)
         initial_count = len(df_all)
-        df_all = df_all.drop_duplicates(subset=["ts", "token"]).reset_index(drop=True)
         final_count = len(df_all)
 
         out_file = data_dir / f"upstox_full_ticks_{date_compact}_stitched.parquet"
@@ -291,54 +312,41 @@ def main():
     subscriptions = get_options_subscriptions(df_inst, prices)
     logger.info(f"Subscribing to {len(subscriptions)} tokens (ATM +- 10 options + indices).")
 
-    tick_buffer = []
-    buffer_lock = threading.Lock()
-
-    schema = pa.schema([
-        ("ts", pa.float64()),
-        ("token", pa.string()),
-        ("symbol", pa.string()),
-        ("ltp", pa.float64()),
-        ("bid", pa.float64()),
-        ("ask", pa.float64()),
-        ("vol", pa.float64()),
-        ("oi", pa.float64()),
-        ("depth", pa.string())
-    ])
-
     today_str = datetime.now().strftime("%Y-%m-%d")
     today_compact = datetime.now().strftime("%Y%m%d")
     data_dir = get_today_data_dir()
     chunks_dir = data_dir / "chunks"
     chunks_dir.mkdir(parents=True, exist_ok=True)
 
-    def flush_buffer():
-        nonlocal tick_buffer
-        with buffer_lock:
-            if not tick_buffer:
-                return
-            to_flush = tick_buffer
-            tick_buffer = []
+    # 1. Asynchronous Level-5 Parquet Recorder (Non-blocking Research Tape Writer)
+    recorder = UpstoxAsyncParquetRecorder(
+        output_dir=chunks_dir,
+        chunk_size=5000,
+        flush_interval_sec=30.0,
+        max_queue_size=10000,
+        watermark_ratio=0.8,
+    )
 
-        now_dt = datetime.now()
-        chunk_file = chunks_dir / f"chunk_{today_compact}_{int(now_dt.timestamp() * 1000)}.parquet"
-        df = pd.DataFrame(to_flush)
-        df["ts"] = df["ts"].astype(float)
-        df["token"] = df["token"].astype(str)
-        df["symbol"] = df["symbol"].astype(str)
-        df["ltp"] = df["ltp"].astype(float)
-        df["bid"] = df["bid"].astype(float)
-        df["ask"] = df["ask"].astype(float)
-        df["vol"] = df["vol"].astype(float)
-        df["oi"] = df["oi"].astype(float)
-        df["depth"] = df["depth"].astype(str)
+    # 2. In-Memory Sentinel Adapter (O(1) latest state coalescing & cross-strike skew gate)
+    sentinel_adapter = InMemorySentinelAdapter(
+        skew_threshold_ms=250.0,
+        staleness_timeout_ms=1000.0,
+    )
 
-        try:
-            table = pa.Table.from_pandas(df, schema=schema)
-            pq.write_table(table, chunk_file, compression="snappy")
-            logger.info(f"Flushed {len(df)} ticks to {chunk_file.name}")
-        except Exception as e:
-            logger.error(f"Failed to write parquet chunk: {e}")
+    # 3. Embedded Sentinel Live Advisory Engine (< 1ms live paper evaluation)
+    sentinel_advisor = SentinelLiveStreamAdvisor(
+        adapter=sentinel_adapter,
+        spread_veto_threshold=0.04,
+        enable_stdout=True,
+    )
+
+    # 4. Stream Broadcaster (Fan-out to Sentinel in-memory + Async Parquet recorder)
+    broadcaster = UpstoxStreamBroadcaster([
+        recorder,
+        sentinel_adapter,
+        sentinel_advisor,
+    ])
+    logger.info("🛰️ Initialized UpstoxStreamBroadcaster with Async Recorder and Embedded Sentinel Advisor.")
 
     last_msg_time = time.time()
     streamer = None
@@ -349,6 +357,9 @@ def main():
         if not isinstance(message, dict) or "feeds" not in message:
             return
 
+        now_mono = time.monotonic_ns()
+        now_utc = datetime.now(timezone.utc).isoformat()
+
         for key, feed in message["feeds"].items():
             ff = feed.get("fullFeed") or feed.get("ff")
             if not ff:
@@ -356,39 +367,59 @@ def main():
             market_ff = ff.get("marketFF") or ff.get("marketFf")
             index_ff = ff.get("indexFF") or ff.get("indexFf")
 
-            ltp, bid, ask, vol, oi = 0.0, 0.0, 0.0, 0.0, 0.0
-            depth_str = '{"bids": [], "asks": []}'
+            sym_name = subscriptions.get(key, key)
 
             if market_ff:
                 ltpc = market_ff.get("ltpc", {})
                 ltp = float(ltpc.get("ltp", 0.0))
                 market_level = market_ff.get("marketLevel", {})
-                depth_str = format_depth(market_level)
+                vol = int(float(market_ff.get("vtt", 0.0)))
+                oi = int(float(market_ff.get("oi", 0.0)))
                 quotes = market_level.get("bidAskQuote", [])
-                if quotes:
-                    bid = float(quotes[0].get("bidP", 0.0))
-                    ask = float(quotes[0].get("askP", 0.0))
-                vol = float(market_ff.get("vtt", 0.0))
-                oi = float(market_ff.get("oi", 0.0))
+
+                depth_list = []
+                for item in quotes[:5]:
+                    depth_list.append({
+                        "bid_price": float(item.get("bidP", 0.0)),
+                        "bid_quantity": int(item.get("bidQ", 0)),
+                        "bid_orders": int(item.get("bqo", 0)),
+                        "ask_price": float(item.get("askP", 0.0)),
+                        "ask_quantity": int(item.get("askQ", 0)),
+                        "ask_orders": int(item.get("aqo", 0)),
+                    })
+
+                raw_depth = {
+                    "token": key,
+                    "symbol": sym_name,
+                    "exchange_timestamp_ms": int(float(ltpc.get("ltt", 0) or time.time() * 1000)),
+                    "ltp": ltp,
+                    "volume": vol,
+                    "open_interest": oi,
+                    "depth": depth_list,
+                }
+                broadcaster.dispatch_depth(raw_depth, now_ns=now_mono, now_utc=now_utc)
+
             elif index_ff:
                 ltpc = index_ff.get("ltpc", {})
                 ltp = float(ltpc.get("ltp", 0.0))
-            else:
-                continue
-
-            record = {
-                "ts": time.time(),
-                "token": key,
-                "symbol": subscriptions.get(key, key),
-                "ltp": ltp,
-                "bid": bid,
-                "ask": ask,
-                "vol": vol,
-                "oi": oi,
-                "depth": depth_str
-            }
-            with buffer_lock:
-                tick_buffer.append(record)
+                raw_tick = {
+                    "token": key,
+                    "symbol": sym_name,
+                    "exchange_timestamp_ms": int(float(ltpc.get("ltt", 0) or time.time() * 1000)),
+                    "ltp": ltp,
+                    "volume": 0,
+                    "open_interest": 0,
+                    "best_bid": ltp,
+                    "best_ask": ltp,
+                }
+                broadcaster.dispatch_tick(raw_tick, now_ns=now_mono, now_utc=now_utc)
+                if ltp > 0:
+                    if key in ("NSE_INDEX|Nifty 50", "NSE_INDEX:Nifty 50"):
+                        prices["NIFTY"] = ltp
+                    elif key in ("NSE_INDEX|Nifty Bank", "NSE_INDEX:Nifty Bank"):
+                        prices["BANKNIFTY"] = ltp
+                    elif key in ("BSE_INDEX|SENSEX", "BSE_INDEX:SENSEX"):
+                        prices["SENSEX"] = ltp
 
     def on_open():
         logger.info("Connected to Upstox WebSocket (Full Mode). Subscribing...")
@@ -446,14 +477,7 @@ def main():
         # Dynamic late-day option refresh at 15:23:00 - 15:24:00 IST
         # Subscribes ATM and ATM +/- 100 strikes around current spot to ensure 15:26 depth availability
         if not late_day_refresh_done and dt_time(15, 23) <= now.time() <= dt_time(15, 24):
-            latest_spot = 0.0
-            with buffer_lock:
-                for t in reversed(tick_buffer):
-                    if t.get("token") == "NSE_INDEX|Nifty 50":
-                        latest_spot = float(t.get("ltp", 0.0))
-                        break
-            if not latest_spot:
-                latest_spot = underlying_prices.get("NIFTY", 0.0)
+            latest_spot = sentinel_advisor.latest_spot or underlying_prices.get("NIFTY", 0.0)
 
             if latest_spot > 0:
                 try:
@@ -464,10 +488,7 @@ def main():
                 except Exception as e:
                     logger.error(f"[Late-Day Refresh Error] {e}")
 
-        if now_ts - last_flush_time >= 60:
-            flush_buffer()
-            last_flush_time = now_ts
-
+        # Flush recorder chunks every 30s is handled internally by UpstoxAsyncParquetRecorder background worker thread
         if now_ts - last_msg_time > 35:
             logger.warning("Watchdog alert: No tick received for 35s. Reconnecting streamer...")
             start_streamer()
@@ -475,8 +496,10 @@ def main():
 
         time.sleep(1)
 
-    # 1. Final Flush
-    flush_buffer()
+    # 1. Final Flush & Stop Async Recorder
+    logger.info("Stopping UpstoxAsyncParquetRecorder and flushing remaining depth records...")
+    recorder.flush_and_stop()
+
     if streamer:
         try:
             streamer.disconnect()
