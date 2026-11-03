@@ -432,18 +432,18 @@ def get_official_rbfn_boundaries() -> dict:
                 row = match_df.iloc[-1] if not match_df.empty else fc_df.iloc[-1]
                 return {
                     "NIFTY": {
-                        "upper_reversal": float(row.get("upper_reversal", 23556.15)),
-                        "trend_decider": float(row.get("trend_decider", 23424.90)),
-                        "lower_reversal": float(row.get("lower_reversal", 23310.92)),
+                        "upper_reversal": float(row.get("upper_reversal", 23725.00)),
+                        "trend_decider": float(row.get("trend_decider", 23600.00)),
+                        "lower_reversal": float(row.get("lower_reversal", 23480.00)),
                     }
                 }
     except Exception:
         pass
     return {
         "NIFTY": {
-            "upper_reversal": 23556.15,
-            "trend_decider": 23424.90,
-            "lower_reversal": 23310.92,
+            "upper_reversal": 23725.00,
+            "trend_decider": 23600.00,
+            "lower_reversal": 23480.00,
         }
     }
 
