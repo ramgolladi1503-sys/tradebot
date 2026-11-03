@@ -208,11 +208,25 @@ class ActivePositionManager:
             saved_cool_until = data.get("cool_off_until")
             if saved_cool_until:
                 try:
-                    self.cool_off_until = datetime.fromisoformat(saved_cool_until)
+                    parsed_cool = datetime.fromisoformat(saved_cool_until)
+                    # If cool-off timestamp is from a previous calendar day or already elapsed, clear it to STANDBY
+                    if parsed_cool < datetime.now() or parsed_cool.date() < datetime.now().date():
+                        self.cool_off_until = None
+                        self.cool_off_ref_spot = None
+                        self.cool_off_direction = None
+                        saved_state = STATE_STANDBY
+                    else:
+                        self.cool_off_until = parsed_cool
                 except Exception:
                     self.cool_off_until = None
-            self.cool_off_ref_spot = data.get("cool_off_ref_spot")
-            self.cool_off_direction = data.get("cool_off_direction")
+                    self.cool_off_ref_spot = None
+                    self.cool_off_direction = None
+                    saved_state = STATE_STANDBY
+            else:
+                self.cool_off_ref_spot = data.get("cool_off_ref_spot")
+                self.cool_off_direction = data.get("cool_off_direction")
+                if saved_state == STATE_COOL_OFF:
+                    saved_state = STATE_STANDBY
 
             if saved_payload:
                 self.payload = PositionPayload(**saved_payload)
