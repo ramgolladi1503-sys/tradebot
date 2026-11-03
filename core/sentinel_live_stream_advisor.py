@@ -173,9 +173,11 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         enable_stdout: bool = True,
         wal_path: str = "runtime/sentinel_apm_wal.json",
         journal: Optional[SentinelRealtimeJournal] = None,
+        advisory_capital: float = 200000.0,
     ) -> None:
         self.adapter = adapter if adapter is not None else InMemorySentinelAdapter()
         self.spread_veto_threshold = float(spread_veto_threshold)
+        self.advisory_capital = float(advisory_capital)
         self.market_open_time = market_open_time
         self.opening_shock_end_time = opening_shock_end_time
         self.eod_entry_freeze_time = eod_entry_freeze_time
@@ -1213,7 +1215,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             else:
                 # Gate 1: Capital Discretization & Integer Lot Math (Floor-or-Reject Model)
                 computed_lots, sizing_tier = calculate_discrete_lots(
-                    total_capital=100000.0,
+                    total_capital=self.advisory_capital,
                     risk_budget_pct=0.02,
                     opt_premium=ltp,
                     sl_points=sl_pts,
