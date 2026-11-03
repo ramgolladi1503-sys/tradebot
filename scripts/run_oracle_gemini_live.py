@@ -34,7 +34,17 @@ def run_oracle_daemon():
     print("=================================================================")
 
     adapter = OracleGeminiLiveAdapter(poll_interval_sec=10.0)
-    capture_dir = "/Volumes/TradeBot/live market capture/2026-11-02/chunks"
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    
+    # Dynamic capture directory lookup across external volumes and local fallback
+    potential_dirs = [
+        Path(f"/Volumes/TradeBot/live market capture/{today_str}/chunks"),
+        Path(f"/Volumes/TradeBotData/live market capture/{today_str}/chunks"),
+        Path(f"/Volumes/TradeBotFast/live market capture/{today_str}/chunks"),
+        REPO_ROOT / ".runtime" / "market_data" / today_str / "chunks",
+    ]
+    capture_dir = next((p for p in potential_dirs if p.exists()), potential_dirs[-1])
+    print(f"Tracking capture directory: {capture_dir}")
 
     # Known morning range seeded from exchange
     or_high = 23317.0
