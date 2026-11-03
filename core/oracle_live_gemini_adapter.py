@@ -101,7 +101,7 @@ class OracleGeminiLiveAdapter:
             raise ValueError("GEMINI_API_KEY is not set in environment or .env")
 
         self.client = genai.Client(api_key=self.api_key)
-        self.model_name = "gemini-3.1-flash-lite"
+        self.model_name = "gemini-3.5-flash-lite"
         self.poll_interval_sec = poll_interval_sec
         self.signal_cooldown_sec = signal_cooldown_sec
         self.last_eval_time = 0.0
@@ -204,6 +204,15 @@ class OracleGeminiLiveAdapter:
 
             advice: OracleAdviceSchema = resp.parsed
             
+            # Distinct Oracle attribution log
+            log_msg = (
+                f"[ORACLE_GEMINI_LIVE] Spot: {spot:.1f} | Action: {advice.action} | Strike: {advice.strike} | "
+                f"Entry: ₹{advice.entry_limit_price:.2f} | SL: ₹{advice.stop_loss_price:.2f} | "
+                f"Tgt: ₹{advice.target_price:.2f} | Reason: {advice.rationale}"
+            )
+            logger.info(log_msg)
+            print(f"\n🔮 {log_msg}\n")
+
             # --- State Machine Transitions & Anti-Flapping Hysteresis ---
             if self.active_position is not None:
                 # While in an active trade, ignore conflicting BUY signals or premature WAIT
@@ -222,8 +231,8 @@ class OracleGeminiLiveAdapter:
                 if advice.action in ("BUY_CE", "BUY_PE"):
                     # Cooldown check: prevent rapid re-entry churn
                     if (now - self.last_signal_time) < self.signal_cooldown_sec:
-                        logger.info(f"Signal {advice.action} suppressed by cooldown ({self.signal_cooldown_sec}s).")
-                        return None
+                        logger.info(f"Signal {advice.action} suppressed by cooldown ({self.signal_cooldown_sec}s). Waiting for setup confirmation.")
+                        return advice
 
                     # Establish active position
                     entry_px = advice.entry_limit_price if advice.entry_limit_price > 0 else (
@@ -245,15 +254,6 @@ class OracleGeminiLiveAdapter:
                     self.last_signal_time = now
 
             self.last_advice = advice
-
-            # Distinct Oracle attribution log
-            log_msg = (
-                f"[ORACLE_GEMINI_LIVE] Spot: {spot:.1f} | Action: {advice.action} | Strike: {advice.strike} | "
-                f"Entry: ₹{advice.entry_limit_price:.2f} | SL: ₹{advice.stop_loss_price:.2f} | "
-                f"Tgt: ₹{advice.target_price:.2f} | Reason: {advice.rationale}"
-            )
-            logger.info(log_msg)
-            print(f"\n🔮 {log_msg}\n")
             return advice
 
         except Exception as e:
