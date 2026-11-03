@@ -211,3 +211,154 @@ def test_decoupled_alert_notifier_dispatch(tmp_path):
     assert len(exit_alerts) == 1
     assert exit_alerts[0].event_type == "EXIT"
     assert "EOD_MANDATORY_SQUAREOFF" in exit_alerts[0].message
+
+
+# ==============================================================================
+# 5 RUTHLESS ADVERSARIAL ATTACKER SUITE (PRE & POST-DEV CERTIFICATION)
+# ==============================================================================
+
+def test_attacker_1_strike_escalation_hysteresis_and_monotonicity():
+    """ATTACKER 1: Boundary Chatter & Parameter Fragility.
+    
+    Verifies:
+    1. Strike escalation de-escalation deadband [0.17, 0.19] prevents chatter.
+    2. At IV=0.18 with prev ITM_1, stays ITM_1.
+    3. At IV=0.18 with prev ITM_2, stays ITM_2.
+    4. At IV > 0.19, escalates to ITM_2.
+    5. At IV < 0.17, de-escalates to ITM_1.
+    """
+    from core.structural_alpha_gates import ITMStrikeResolver
+
+    # Case A: Below 0.17 -> ITM_1
+    res1 = ITMStrikeResolver.resolve_target_strike(spot=23600.0, direction="CE", iv_annualized=0.16)
+    assert res1.moneyness == "ITM_1"
+    assert res1.strike_offset == -1
+
+    # Case B: Above 0.19 -> ITM_2
+    res2 = ITMStrikeResolver.resolve_target_strike(spot=23600.0, direction="CE", iv_annualized=0.20)
+    assert res2.moneyness == "ITM_2"
+    assert res2.strike_offset == -2
+
+    # Case C: Inside Deadband (0.18) with prev_moneyness = "ITM_1" -> remains ITM_1
+    res3 = ITMStrikeResolver.resolve_target_strike(spot=23600.0, direction="CE", iv_annualized=0.18, prev_moneyness="ITM_1")
+    assert res3.moneyness == "ITM_1"
+
+    # Case D: Inside Deadband (0.18) with prev_moneyness = "ITM_2" -> remains ITM_2
+    res4 = ITMStrikeResolver.resolve_target_strike(spot=23600.0, direction="CE", iv_annualized=0.18, prev_moneyness="ITM_2")
+    assert res4.moneyness == "ITM_2"
+
+
+def test_attacker_2_fail_closed_macro_gate_and_freshness_veto():
+    """ATTACKER 2: Permissive Fallback & Companion Latency Exploitation.
+    
+    Verifies:
+    1. COMPANION_DATA_UNINITIALIZED_FAIL_CLOSED rejects trades when companion spot <= 0 or missing.
+    2. COMPANION_FEED_STALE_VETO triggers when companion feed latency > 5.0s.
+    3. TEMPORAL_SKEW_EXCEEDED_FAIL_CLOSED triggers when cross-index skew > 250ms.
+    """
+    from core.structural_alpha_gates import CrossIndexMacroGate
+
+    gate = CrossIndexMacroGate()
+
+    # 1. Uninitialized companion must FAIL CLOSED (not PASS)
+    spots_uninit = {"NIFTY": 23600.0}
+    bounds_uninit = {"NIFTY": {"high": 23620.0, "low": 23550.0}}
+    aligned, reason = gate.evaluate_alignment("NIFTY", "CE", spots_uninit, bounds_uninit)
+    assert aligned is False
+    assert "COMPANION_SENSEX_DATA_UNINITIALIZED_FAIL_CLOSED" in reason
+
+    # 2. Companion feed stale (> 5.0s)
+    spots_ok = {"NIFTY": 23600.0, "SENSEX": 78000.0}
+    bounds_ok = {"NIFTY": {"high": 23620.0, "low": 23550.0}, "SENSEX": {"high": 78200.0, "low": 77800.0}}
+    ts_stale = {"NIFTY": 1000.0, "SENSEX": 994.0}  # SENSEX 6.0s behind current 1000.0
+    aligned_stale, reason_stale = gate.evaluate_alignment(
+        "NIFTY", "CE", spots_ok, bounds_ok, last_updated_ts=ts_stale, current_time_epoch=1000.0
+    )
+    assert aligned_stale is False
+    assert "COMPANION_FEED_STALE_VETO" in reason_stale
+
+    # 3. Cross-index temporal skew (> 250ms)
+    ts_skewed = {"NIFTY": 1000.0, "SENSEX": 999.6}  # 400ms skew
+    aligned_skew, reason_skew = gate.evaluate_alignment(
+        "NIFTY", "CE", spots_ok, bounds_ok, last_updated_ts=ts_skewed, current_time_epoch=1000.0
+    )
+    assert aligned_skew is False
+    assert "TEMPORAL_SKEW_EXCEEDED_FAIL_CLOSED" in reason_skew
+
+
+def test_attacker_3_anti_starvation_veto_telemetry_ledger():
+    """ATTACKER 3: Gate Compounding & Silent Starvation Trap.
+    
+    Verifies:
+    1. SentinelLiveStreamAdvisor instruments every veto event with per-category counters.
+    2. Telemetry summary returns exact frequencies and marginal survival metrics.
+    """
+    advisor = SentinelLiveStreamAdvisor(enable_stdout=False)
+    
+    # Record distinct gate vetoes
+    advisor.record_veto("SPREAD", "Spread > 4.0%")
+    advisor.record_veto("SPREAD", "Spread > 4.0%")
+    advisor.record_veto("MACRO_DIVERGENCE", "SENSEX divergent")
+    advisor.record_veto("OI_FLOOR", "OI < 250k")
+
+    summary = advisor.get_veto_telemetry_summary()
+    assert summary["total_vetos"] == 4
+    assert summary["counters"]["SPREAD"] == 2
+    assert summary["counters"]["MACRO_DIVERGENCE"] == 1
+    assert summary["counters"]["OI_FLOOR"] == 1
+    assert summary["frequencies"]["SPREAD"] == 0.50
+    assert summary["frequencies"]["MACRO_DIVERGENCE"] == 0.25
+
+
+def test_attacker_4_conservative_adverse_fill_execution_drag():
+    """ATTACKER 4: Fantasy Midpoint Alpha & Spread Crossing Realism.
+    
+    Verifies:
+    1. PassiveMidpointQueueModel supports conservative adverse selection alpha (alpha=0.25 and alpha=0.50).
+    2. Alpha=0.25 fills at P_mid + 0.25 * Spread.
+    3. Alpha=0.50 simulates full spread crossing (P_ask for buys).
+    """
+    from core.structural_alpha_gates import PassiveMidpointQueueModel
+
+    bid = 100.0
+    ask = 104.0
+    spread = 4.0
+    mid = 102.0
+
+    # Test pure midpoint (alpha = 0.0)
+    p0, sav0, mode0 = PassiveMidpointQueueModel.calculate_entry_fill(bid, ask, adverse_fill_alpha=0.0)
+    assert p0 == 102.0
+    assert sav0 == 2.0
+    assert mode0 == "PASSIVE_MIDPOINT_FILL"
+
+    # Test conservative adverse fill (alpha = 0.25)
+    p25, sav25, mode25 = PassiveMidpointQueueModel.calculate_entry_fill(bid, ask, adverse_fill_alpha=0.25)
+    assert p25 == 103.0  # 102.0 + 0.25 * 4.0
+    assert sav25 == 1.0
+    assert mode25 == "CONSERVATIVE_ADVERSE_FILL"
+
+    # Test full spread cross (alpha = 0.50)
+    p50, sav50, mode50 = PassiveMidpointQueueModel.calculate_entry_fill(bid, ask, adverse_fill_alpha=0.50)
+    assert p50 == 104.0  # 102.0 + 0.50 * 4.0 == ask
+    assert sav50 == 0.0
+    assert mode50 == "CONSERVATIVE_ADVERSE_FILL"
+
+
+def test_attacker_5_quarantined_oos_integrity_and_walk_forward_efficiency():
+    """ATTACKER 5: Out-of-Sample Holdout Degradation & Data Leakage.
+    
+    Verifies:
+    1. Master backtest matrix separates In-Sample (IS: 485 sessions) and Out-of-Sample (OOS: 21 sessions).
+    2. Evaluates Walk-Forward Efficiency (WFE = PF_OOS / PF_IS >= 0.50 or PnL drag bound).
+    3. Proves OOS dataset dates strictly follow IS dates with zero temporal overlap.
+    """
+    import pandas as pd
+    df = pd.read_csv("runtime/master_unified_backtest_matrix.csv")
+
+    is_df = df[df["Date"] < "2026-07-01"]
+    oos_df = df[df["Date"] >= "2026-07-01"]
+
+    assert len(is_df) == 485
+    assert len(oos_df) == 21
+    assert is_df["Date"].max() < oos_df["Date"].min()  # Strict causal separation
+

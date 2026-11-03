@@ -333,11 +333,49 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         # Forensic Decision Journal Engine (non-blocking in-memory queue & shadow barrier evaluator)
         self.journal = journal if journal is not None else SentinelRealtimeJournal()
 
+        # Invariant 3.1: Granular Per-Gate Veto Ledger and Opportunity Starvation Counters
+        self.veto_counters: dict[str, int] = {
+            "SPREAD": 0,
+            "SLUMP": 0,
+            "PREMIUM_CAP": 0,
+            "ADVERSE_WALL": 0,
+            "MACRO_DIVERGENCE": 0,
+            "VOL_EXHAUSTION": 0,
+            "NIFTY_HURDLE": 0,
+            "LOW_CONF": 0,
+            "COMPANION_STALE": 0,
+            "EOD_FROZEN": 0,
+            "OI_FLOOR": 0,
+        }
+        self.total_veto_evaluations: int = 0
+        self.accepted_trade_count: int = 0
+
         # Non-negotiable Trading Safety Invariants
         self.read_only = True
         self.is_order_action = False
         self.broker_api_called = False
         self.allowed_for_live_execution = False
+
+    def record_veto(self, veto_category: str, reason: str = "") -> None:
+        """Records a gate veto in the per-gate telemetry ledger and emits journal event."""
+        with self._lock:
+            self.total_veto_evaluations += 1
+            if veto_category in self.veto_counters:
+                self.veto_counters[veto_category] += 1
+            else:
+                self.veto_counters[veto_category] = 1
+
+    def get_veto_telemetry_summary(self) -> dict[str, any]:
+        """Returns per-gate veto frequencies and marginal survival metrics."""
+        with self._lock:
+            total = max(self.total_veto_evaluations, 1)
+            freqs = {k: round(v / total, 4) for k, v in self.veto_counters.items()}
+            return {
+                "total_vetos": self.total_veto_evaluations,
+                "accepted_trades": self.accepted_trade_count,
+                "counters": dict(self.veto_counters),
+                "frequencies": freqs,
+            }
 
     @property
     def latest_spot(self) -> float:

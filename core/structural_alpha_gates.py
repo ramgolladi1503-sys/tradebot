@@ -43,6 +43,7 @@ class ITMStrikeResolver:
         target_delta: float = 0.70,
         iv_annualized: float = 0.14,
         dte_days: float = 3.0,
+        prev_moneyness: Optional[str] = None,
     ) -> StrikeSelectionResult:
         if index_name == "SENSEX":
             interval = 100.0
@@ -59,8 +60,19 @@ class ITMStrikeResolver:
         safe_iv = max(abs(iv_annualized) if not math.isnan(iv_annualized) else 0.14, 0.01)
         safe_dte = max(dte_days if not math.isnan(dte_days) else 0.5, 0.5)
 
-        # Dynamic Strike Escalation: If IV > 18.0%, escalate to ITM-2 to preserve Delta >= 0.65
-        step_multiplier = 2 if safe_iv > 0.18 else 1
+        # Dynamic Strike Escalation with dual-threshold Hysteresis Deadband (Contract 1.1)
+        # Escalate to ITM_2 if IV > 0.19 (19.0%), de-escalate to ITM_1 if IV < 0.17 (17.0%).
+        # In deadband [0.17, 0.19], retain prev_moneyness tier if provided; otherwise default to ITM_1.
+        if safe_iv > 0.190:
+            step_multiplier = 2
+        elif safe_iv < 0.170:
+            step_multiplier = 1
+        else:
+            if prev_moneyness == "ITM_2":
+                step_multiplier = 2
+            else:
+                step_multiplier = 1
+
         effective_offset_val = interval * step_multiplier
 
         # Robust BSM delta approximation with bounded 0.50 - 0.90 clamping
@@ -113,10 +125,10 @@ class ITMStrikeResolver:
 
 
 class PassiveMidpointQueueModel:
-    """Evaluates passive limit fills at the midpoint (bid + ask)/2 instead of crossing the spread.
+    """Evaluates passive limit fills vs conservative adverse selection crossing.
     
     In Indian Index Options, crossing a 3-5 pt spread on both entry and exit bleeds 6-10 pts.
-    Passive limit placement at the midpoint or joining top queue captures edge without penalty.
+    Supports conservative penalty-adjusted fills: P_fill = P_mid + alpha_adverse * spread.
     """
 
     @staticmethod
@@ -124,8 +136,15 @@ class PassiveMidpointQueueModel:
         bid: float,
         ask: float,
         passive_fill_enabled: bool = True,
+        adverse_fill_alpha: float = 0.25,
     ) -> Tuple[float, float, str]:
-        """Calculates simulated entry price, realized spread savings, and fill mode."""
+        """Calculates simulated entry price, realized spread savings, and fill mode.
+        
+        adverse_fill_alpha:
+            0.0: Pure midpoint (P_mid)
+            0.25: Conservative passive execution with adverse selection (P_mid + 0.25 * spread)
+            0.50: Full spread crossing (P_ask for buys)
+        """
         if bid <= 0 or ask <= 0 or ask < bid:
             return max(ask, bid, 0.0), 0.0, "INVALID_QUOTE"
 
@@ -136,9 +155,12 @@ class PassiveMidpointQueueModel:
             # Narrow spread: market crossing is acceptable
             return ask, 0.0, "MARKET_CROSS_ASK"
 
-        # Passive midpoint queue execution
-        savings = round(ask - midpoint, 2)
-        return midpoint, savings, "PASSIVE_MIDPOINT_FILL"
+        # Conservative fill calculation: P_fill = P_mid + alpha * spread
+        safe_alpha = max(0.0, min(0.50, adverse_fill_alpha))
+        fill_price = round(midpoint + (safe_alpha * spread), 2)
+        savings = round(ask - fill_price, 2)
+        fill_mode = "CONSERVATIVE_ADVERSE_FILL" if safe_alpha > 0.0 else "PASSIVE_MIDPOINT_FILL"
+        return fill_price, savings, fill_mode
 
 
 class VolatilityCompressionGate:
@@ -198,8 +220,14 @@ class CrossIndexMacroGate:
         spots: Dict[str, float],
         or_bounds: Dict[str, Dict[str, float]],
         last_updated_ts: Optional[Dict[str, float]] = None,
+        current_time_epoch: Optional[float] = None,
     ) -> Tuple[bool, str]:
         """Verifies if companion index confirms the directional breakout/breakdown.
+        
+        Enforces Vector 2 Defenses:
+        1. Fail-closed rejection if companion feed is uninitialized or missing.
+        2. Freshness assertion: VETO if companion feed latency > 5.0s.
+        3. Temporal skew bound: VETO if cross-instrument skew > 250ms (0.25s).
         
         Returns:
             (is_aligned, reason)
@@ -211,9 +239,23 @@ class CrossIndexMacroGate:
         comp_high = comp_bounds.get("high", -math.inf)
         comp_low = comp_bounds.get("low", math.inf)
 
+        # 1. Fail-closed assertion on uninitialized / missing companion feed
         if comp_spot <= 0 or comp_high <= -math.inf or comp_low >= math.inf:
-            # Companion data missing or uninitialized; allow fail-safe entry with warning
-            return True, f"COMPANION_{companion}_DATA_UNINITIALIZED_PASS"
+            return False, f"COMPANION_{companion}_DATA_UNINITIALIZED_FAIL_CLOSED"
+
+        # 2. Freshness & Skew assertion if timestamps provided
+        if last_updated_ts is not None and companion in last_updated_ts:
+            comp_ts = last_updated_ts[companion]
+            if current_time_epoch is not None:
+                latency = current_time_epoch - comp_ts
+                if latency > 5.0:
+                    return False, f"COMPANION_FEED_STALE_VETO (Latency {latency:.2f}s > 5.0s)"
+            
+            target_ts = last_updated_ts.get(target_index)
+            if target_ts is not None:
+                skew = abs(target_ts - comp_ts)
+                if skew > 0.250:  # 250 ms bound
+                    return False, f"TEMPORAL_SKEW_EXCEEDED_FAIL_CLOSED (Skew {skew*1000:.1f}ms > 250ms)"
 
         # Check directional stance of companion index
         if setup_direction == "PE":
