@@ -948,19 +948,20 @@ with tab_live:
             st.caption("No completed trades recorded yet today.")
 
         st.subheader(f"📈 Live Market Track & Opening Range Bounds ({selected_index})")
-        if not df_rows.empty:
-            # Official 09:15 to 09:45 Opening Range Bounds
-            or_map = get_official_or_bounds()
-            active_chart_idx = "NIFTY" if selected_index in {"All", "NIFTY"} else selected_index
-            or_high_val = or_map.get(active_chart_idx, {}).get("high", 23120.90)
-            or_low_val = or_map.get(active_chart_idx, {}).get("low", 22976.15)
+        # Official 09:15 to 09:45 Opening Range Bounds
+        or_map = get_official_or_bounds()
+        active_chart_idx = "NIFTY" if selected_index in {"All", "NIFTY"} else selected_index
+        or_high_val = or_map.get(active_chart_idx, {}).get("high", 23610.70)
+        or_low_val = or_map.get(active_chart_idx, {}).get("low", 23482.80)
 
-            # Filter series by selected index
+        # Plot live track from df_rows or intraday 1m candles from Upstox
+        fig = go.Figure()
+
+        # If df_rows has streaming data, plot it; otherwise fetch intraday 1m candles directly
+        if not df_rows.empty and "spot_price" in df_rows.columns:
             chart_df = df_rows[df_rows["index"] == active_chart_idx] if "index" in df_rows.columns and (df_rows["index"] == active_chart_idx).any() else df_rows
             chart_y = chart_df["spot_price"] if "spot_price" in chart_df.columns else chart_df.get("spot_nifty")
-
-            fig = go.Figure()
-            if chart_y is not None:
+            if chart_y is not None and not chart_df.empty:
                 fig.add_trace(go.Scatter(
                     x=chart_df["timestamp"],
                     y=chart_y,
@@ -968,30 +969,54 @@ with tab_live:
                     name=f"{active_chart_idx} Spot",
                     line=dict(color="#29B6F6", width=2)
                 ))
-            fig.add_hline(y=or_high_val, line_dash="dash", line_color="#81C784", annotation_text=f"OR High {or_high_val:.2f}")
-            fig.add_hline(y=or_low_val, line_dash="dash", line_color="#E57373", annotation_text=f"OR Low {or_low_val:.2f}")
+        else:
+            # Fallback: fetch today's actual 1m candle series so chart is always drawn
+            try:
+                token = os.getenv("UPSTOX_ACCESS_TOKEN", "").strip()
+                if token and active_chart_idx == "NIFTY":
+                    import urllib.parse
+                    enc_key = urllib.parse.quote("NSE_INDEX|Nifty 50")
+                    c_url = f"https://api.upstox.com/v2/historical-candle/intraday/{enc_key}/1minute"
+                    c_res = requests.get(c_url, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"}, timeout=3)
+                    if c_res.status_code == 200:
+                        c_list = c_res.json().get("data", {}).get("candles", [])
+                        if c_list:
+                            c_df = pd.DataFrame(c_list, columns=["ts", "o", "h", "l", "c", "v", "oi"]).iloc[::-1]
+                            fig.add_trace(go.Scatter(
+                                x=c_df["ts"].str[11:19],
+                                y=c_df["c"],
+                                mode="lines+markers",
+                                name=f"{active_chart_idx} Spot",
+                                line=dict(color="#29B6F6", width=2)
+                            ))
+            except Exception:
+                pass
 
-            # RBFN Trend Decider & Reversal Price Lines
-            rbfn_bounds = get_official_rbfn_boundaries()
-            if active_chart_idx in rbfn_bounds:
-                idx_rbfn = rbfn_bounds[active_chart_idx]
-                u_rev = idx_rbfn.get("upper_reversal")
-                t_dec = idx_rbfn.get("trend_decider")
-                l_rev = idx_rbfn.get("lower_reversal")
-                if u_rev:
-                    fig.add_hline(y=u_rev, line_dash="dot", line_color="#FF7043", annotation_text=f"Upper Reversal {u_rev:.2f}", annotation_position="top left")
-                if t_dec:
-                    fig.add_hline(y=t_dec, line_dash="dashdot", line_color="#42A5F5", annotation_text=f"Trend Decider {t_dec:.2f}", annotation_position="top right")
-                if l_rev:
-                    fig.add_hline(y=l_rev, line_dash="dot", line_color="#66BB6A", annotation_text=f"Lower Reversal {l_rev:.2f}", annotation_position="bottom left")
-            fig.update_layout(
-                template="plotly_dark",
-                height=280,
-                margin=dict(l=20, r=20, t=25, b=20),
-                xaxis_title="Time",
-                yaxis_title=f"{active_chart_idx} Level",
-            )
-            st.plotly_chart(fig, use_container_width=True)
+        # Opening Range Bounds
+        fig.add_hline(y=or_high_val, line_dash="dash", line_color="#81C784", annotation_text=f"OR High {or_high_val:.2f}")
+        fig.add_hline(y=or_low_val, line_dash="dash", line_color="#E57373", annotation_text=f"OR Low {or_low_val:.2f}")
+
+        # RBFN Trend Decider & Reversal Price Lines
+        rbfn_bounds = get_official_rbfn_boundaries()
+        if active_chart_idx in rbfn_bounds:
+            idx_rbfn = rbfn_bounds[active_chart_idx]
+            u_rev = idx_rbfn.get("upper_reversal")
+            t_dec = idx_rbfn.get("trend_decider")
+            l_rev = idx_rbfn.get("lower_reversal")
+            if u_rev:
+                fig.add_hline(y=u_rev, line_dash="dot", line_color="#FF7043", annotation_text=f"Upper Reversal {u_rev:.2f}", annotation_position="top left")
+            if t_dec:
+                fig.add_hline(y=t_dec, line_dash="dashdot", line_color="#42A5F5", annotation_text=f"Trend Decider {t_dec:.2f}", annotation_position="top right")
+            if l_rev:
+                fig.add_hline(y=l_rev, line_dash="dot", line_color="#66BB6A", annotation_text=f"Lower Reversal {l_rev:.2f}", annotation_position="bottom left")
+        fig.update_layout(
+            template="plotly_dark",
+            height=320,
+            margin=dict(l=20, r=20, t=25, b=20),
+            xaxis_title="Time",
+            yaxis_title=f"{active_chart_idx} Level",
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
         st.subheader(f"📝 Live Advisory & Audit Trail ({selected_index})")
         if not df_rows.empty:
