@@ -418,30 +418,32 @@ def get_official_or_bounds() -> dict:
     return bounds
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)
 def get_official_rbfn_boundaries() -> dict:
     """Computes daily causal RBFN Trend Decider and Reversal Price Lines."""
     try:
-        from research.rbfn_options.core.spot_boundary_model import CausalSpotBoundaryModel
         forecasts_path = Path("/Users/madhuram/tradebot/research/rbfn_options/results/forecasts_2026.csv")
         if forecasts_path.exists():
             fc_df = pd.read_csv(forecasts_path)
             if not fc_df.empty:
-                latest = fc_df.iloc[-1]
+                # Find today's forecast or fallback to latest
+                today_str = datetime.now().strftime("%Y-%m-%d")
+                match_df = fc_df[fc_df["date"] == today_str]
+                row = match_df.iloc[-1] if not match_df.empty else fc_df.iloc[-1]
                 return {
                     "NIFTY": {
-                        "upper_reversal": float(latest.get("upper_reversal", 23352.55)),
-                        "trend_decider": float(latest.get("trend_decider", 23280.00)),
-                        "lower_reversal": float(latest.get("lower_reversal", 23210.65)),
+                        "upper_reversal": float(row.get("upper_reversal", 23556.15)),
+                        "trend_decider": float(row.get("trend_decider", 23424.90)),
+                        "lower_reversal": float(row.get("lower_reversal", 23310.92)),
                     }
                 }
     except Exception:
         pass
     return {
         "NIFTY": {
-            "upper_reversal": 23352.55,
-            "trend_decider": 23280.00,
-            "lower_reversal": 23210.65,
+            "upper_reversal": 23556.15,
+            "trend_decider": 23424.90,
+            "lower_reversal": 23310.92,
         }
     }
 
