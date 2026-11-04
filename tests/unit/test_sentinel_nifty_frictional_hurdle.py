@@ -129,6 +129,9 @@ def test_end_to_end_veto_nifty_frictional_hurdle_in_depth_tick(advisor):
     advisor.market_open_time = dt_time(0, 0)
     advisor.opening_shock_end_time = dt_time(0, 0)
     advisor.eod_entry_freeze_time = dt_time(23, 59)
+    # Mock midday slump hours away so wall-clock time 11:30-12:30 doesn't preempt hurdle check
+    advisor.midday_slump_start = dt_time(0, 0)
+    advisor.midday_slump_end = dt_time(0, 0)
 
     now_ms = int(datetime.now().timestamp() * 1000)
 

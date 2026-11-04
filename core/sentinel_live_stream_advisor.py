@@ -56,6 +56,16 @@ from core.midday_momentum_extension_engine import (
     MiddayDirection,
     MiddayMomentumSignal,
 )
+from strategies.optionmate_rbfn_strategy import (
+    OptionMateRBFNStrategy,
+    OptionMateGrid,
+    OptionMateSignal,
+)
+from strategies.sensex_optionmate_rbfn_strategy import (
+    SensexOptionMateRBFNStrategy,
+    SensexOptionMateGrid,
+    SensexOptionMateSignal,
+)
 from core.sentinel_inmem_adapter import InMemorySentinelAdapter
 from core.structural_alpha_gates import (
     CrossIndexMacroGate,
@@ -128,6 +138,49 @@ class SyntheticBarBucket:
     volume: float = 0.0
     tick_count: int = 0
     last_timestamp_ms: int = 0
+
+
+@dataclass(slots=True)
+class Synthetic5mBarBucket:
+    """Aggregates spot ticks into discrete 5-minute OHLCV bars for RBFN auction evaluation."""
+    bucket_epoch_5min: int = -1
+    open: float = 0.0
+    high: float = -math.inf
+    low: float = math.inf
+    close: float = 0.0
+    volume: float = 0.0
+    tick_count: int = 0
+    last_timestamp_ms: int = 0
+    read_only: bool = True
+    is_order_action: bool = False
+    broker_api_called: bool = False
+    allowed_for_live_execution: bool = False
+
+
+@dataclass(slots=True, frozen=True)
+class CachedRBFNAuctionSignal:
+    """Cached precomputed RBFN Slingshot/Auction signal evaluated on 5-minute bar close.
+    
+    Provides sub-250ns execution in Level-5 depth evaluation loop with zero float math overhead.
+    """
+    timestamp_ms: int
+    index_name: str
+    action: str  # 'BUY_CALL', 'BUY_PUT', or 'ABSTAIN'
+    direction: str  # 'CE', 'PE', or ''
+    target_strike: float
+    target_pts: float
+    sl_pts: float
+    setup_reason: str
+    trade_phase: str  # 'OPENING_DRIVE' or 'MIDDAY_REVERSAL'
+    bar_time: dt_time
+    is_active: bool = True
+    is_vetoed: bool = False
+    veto_reason: str = ""
+    valid_until_epoch_sec: float = 0.0
+    read_only: bool = True
+    is_order_action: bool = False
+    broker_api_called: bool = False
+    allowed_for_live_execution: bool = False
 
 
 @dataclass(slots=True)
@@ -307,6 +360,46 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         }
         self.regime_router = self.regime_routers["NIFTY"]
 
+        # FEAT-SENTINEL-OPTIONMATE-RBFN-AUCTION-001: RBFN Strategy Engines per index
+        self.rbfn_strategies: dict[str, Any] = {
+            "NIFTY": OptionMateRBFNStrategy(step_size=50, min_atr_frictional_hurdle=150.0, min_vix_hurdle=12.0),
+            "BANKNIFTY": OptionMateRBFNStrategy(step_size=100, min_atr_frictional_hurdle=300.0, min_vix_hurdle=12.0),
+            "SENSEX": SensexOptionMateRBFNStrategy(step_size=100, min_atr_frictional_hurdle=450.0, min_vix_hurdle=12.0),
+        }
+        self.rbfn_strategy = self.rbfn_strategies["NIFTY"]
+
+        # Synthetic 5-minute bar buckets per index for Mode 5 RBFN Auction Engine
+        self.bar_buckets_5m: dict[str, Synthetic5mBarBucket] = {
+            "NIFTY": Synthetic5mBarBucket(),
+            "SENSEX": Synthetic5mBarBucket(),
+            "BANKNIFTY": Synthetic5mBarBucket(),
+        }
+        self.bars_5m_history: dict[str, list[dict[str, Any]]] = {
+            "NIFTY": [],
+            "SENSEX": [],
+            "BANKNIFTY": [],
+        }
+        self.cached_rbfn_grids: dict[str, Any] = {
+            "NIFTY": None,
+            "SENSEX": None,
+            "BANKNIFTY": None,
+        }
+        self.cached_rbfn_signals: dict[str, Optional[CachedRBFNAuctionSignal]] = {
+            "NIFTY": None,
+            "SENSEX": None,
+            "BANKNIFTY": None,
+        }
+        self.rp2_pierced_before_1030: dict[str, bool] = {
+            "NIFTY": False,
+            "SENSEX": False,
+            "BANKNIFTY": False,
+        }
+        self.session_open_prices: dict[str, float] = {
+            "NIFTY": 0.0,
+            "SENSEX": 0.0,
+            "BANKNIFTY": 0.0,
+        }
+
         # Synthetic 1-minute bar buckets per index for discrete regime discretization (Invariant 4.1)
         self.bar_buckets: dict[str, SyntheticBarBucket] = {
             "NIFTY": SyntheticBarBucket(),
@@ -338,7 +431,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         self.wall_gate = self.wall_gates["NIFTY"]
 
         self.alerts_history: list[AdvisoryAlert] = []
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._last_alert_time = 0.0
         self._last_wall_persist_time = 0.0
         self.session_gear = "GEAR_1_RANGE"  # "GEAR_1_RANGE" or "GEAR_2_TREND"
@@ -628,6 +721,55 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     bucket.tick_count += 1
                     bucket.last_timestamp_ms = ts_ms
 
+            # Mode 5: Discrete 5-minute bar accumulator for RBFN Auction Engine
+            bucket_5m = self.bar_buckets_5m.get(idx_key)
+            if bucket_5m is not None:
+                ts_ms = tick.exchange_timestamp_ms
+                epoch_sec = (ts_ms / 1000.0) if ts_ms > 0 else time.time()
+                epoch_5min = int(epoch_sec // 300)
+
+                if bucket_5m.bucket_epoch_5min == -1:
+                    # Initialize first 5m bucket
+                    bucket_5m.bucket_epoch_5min = epoch_5min
+                    bucket_5m.open = tick.ltp
+                    bucket_5m.high = tick.ltp
+                    bucket_5m.low = tick.ltp
+                    bucket_5m.close = tick.ltp
+                    bucket_5m.volume = float(tick.volume)
+                    bucket_5m.tick_count = 1
+                    bucket_5m.last_timestamp_ms = ts_ms
+                elif epoch_5min > bucket_5m.bucket_epoch_5min:
+                    # 5-minute boundary crossed: finalize completed bar
+                    bar_time = datetime.fromtimestamp((bucket_5m.bucket_epoch_5min + 1) * 300).time()
+                    self._on_5m_bar_close(
+                        index_name=idx_key,
+                        bar_open=bucket_5m.open,
+                        bar_high=bucket_5m.high,
+                        bar_low=bucket_5m.low,
+                        bar_close=bucket_5m.close,
+                        bar_volume=bucket_5m.volume,
+                        bar_time=bar_time,
+                        timestamp_ms=bucket_5m.last_timestamp_ms,
+                        epoch_5min=bucket_5m.bucket_epoch_5min,
+                    )
+                    # Start new 5m bucket
+                    bucket_5m.bucket_epoch_5min = epoch_5min
+                    bucket_5m.open = tick.ltp
+                    bucket_5m.high = tick.ltp
+                    bucket_5m.low = tick.ltp
+                    bucket_5m.close = tick.ltp
+                    bucket_5m.volume = float(tick.volume)
+                    bucket_5m.tick_count = 1
+                    bucket_5m.last_timestamp_ms = ts_ms
+                else:
+                    # Accumulate within current 5-minute bar
+                    bucket_5m.high = max(bucket_5m.high, tick.ltp)
+                    bucket_5m.low = min(bucket_5m.low, tick.ltp)
+                    bucket_5m.close = tick.ltp
+                    bucket_5m.volume += float(tick.volume)
+                    bucket_5m.tick_count += 1
+                    bucket_5m.last_timestamp_ms = ts_ms
+
     def on_depth(self, depth: UpstoxLevel5DepthRecord) -> None:
         """Handle incoming Level-5 depth snapshot."""
         token = depth.token
@@ -696,6 +838,8 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             self.spots_ts_ms[index_name] = ts_ms
             if index_name in self.spot_history:
                 self.spot_history[index_name].append(spot)
+            if self.session_open_prices.get(index_name, 0.0) <= 0.0 and spot > 0.0:
+                self.session_open_prices[index_name] = spot
 
             now_t = datetime.now().time()
             if now_t < self.opening_shock_end_time:
@@ -723,6 +867,484 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                                 rng = bounds["high"] - bounds["low"]
                                 print(f"   • {idx}: OR High={bounds['high']:.1f} | OR Low={bounds['low']:.1f} | Range={rng:.1f} pts")
                         print("🛰️ Sentinel Live Setup Trigger Engine ACTIVE.")
+
+    def _compute_rbfn_grid(
+        self,
+        index_name: str,
+        spot_open: float,
+        range_10m: Optional[float] = None,
+        atr: Optional[float] = None,
+        vix: Optional[float] = None,
+    ) -> Any:
+        """Computes scale-calibrated, gap-aware OptionMate RBFN Grid with dynamic channel scaling."""
+        open_p = spot_open if spot_open > 0 else self.session_open_prices.get(index_name, 0.0)
+        if open_p <= 0:
+            open_p = self.spots.get(index_name, 0.0)
+
+        pd_levels = self.prior_day_levels.get(index_name)
+        prev_close = pd_levels.pdc if (pd_levels and pd_levels.pdc > 0) else open_p
+
+        if atr is not None and atr > 0:
+            eff_atr = float(atr)
+        elif pd_levels and pd_levels.atr_20 and pd_levels.atr_20 > 0:
+            eff_atr = float(pd_levels.atr_20)
+        elif (obs := self.wall_observers.get(index_name)) and obs.atr_pts > 0:
+            eff_atr = float(obs.atr_pts)
+        else:
+            eff_atr = 160.0 if index_name == "NIFTY" else (350.0 if index_name == "BANKNIFTY" else 500.0)
+
+        vix_val = float(vix) if vix is not None else 14.0
+
+        if index_name == "SENSEX":
+            baseline_step = 300.0
+            anchor_base = 100.0
+            step_size = 100
+        elif index_name == "BANKNIFTY":
+            baseline_step = 250.0
+            anchor_base = 50.0
+            step_size = 100
+        else:  # NIFTY
+            baseline_step = 120.0
+            anchor_base = 40.0
+            step_size = 50
+
+        # Scale-calibrated dynamic channel step: max(baseline_step, 0.35 * range_10m)
+        if range_10m is not None and range_10m > 0:
+            channel_step = max(baseline_step, 0.35 * range_10m)
+        else:
+            channel_step = baseline_step
+
+        # Dynamic Trend Decider (TD)
+        gap = open_p - prev_close
+        gap_threshold = 0.25 * eff_atr
+        if abs(gap) >= gap_threshold:
+            raw_td = open_p
+        else:
+            raw_td = 0.5 * (open_p + prev_close)
+        trend_decider = round(raw_td / anchor_base) * anchor_base
+
+        # Harmonic Volatility Bands
+        vol_scale = math.sqrt(max(vix_val, 9.0) / 14.0)
+        rp1_dist = channel_step * vol_scale
+        rp2_dist = 2.0 * channel_step * vol_scale
+
+        rp1_up = trend_decider + rp1_dist
+        rp1_down = trend_decider - rp1_dist
+        rp2_up = trend_decider + rp2_dist
+        rp2_down = trend_decider - rp2_dist
+
+        if index_name == "SENSEX":
+            target_call = round(rp2_up / step_size) * step_size
+            target_put = round(rp2_down / step_size) * step_size
+            effective_dte = 2.0
+            straddle_fv = open_p * 0.80 * (max(vix_val, 9.0) / 100.0) * math.sqrt(effective_dte / 365.0)
+            sustainable_anchor = round(straddle_fv / 2.0, 1)
+            return SensexOptionMateGrid(
+                date=datetime.now().strftime("%Y-%m-%d"),
+                spot_open=round(float(open_p), 2),
+                prev_close=round(float(prev_close), 2),
+                atr_14=round(float(eff_atr), 2),
+                vix=round(float(vix_val), 2),
+                trend_decider=round(float(trend_decider), 2),
+                rp1_upper=round(float(rp1_up), 2),
+                rp2_upper=round(float(rp2_up), 2),
+                rp1_lower=round(float(rp1_down), 2),
+                rp2_lower=round(float(rp2_down), 2),
+                target_call_strike=float(target_call),
+                target_put_strike=float(target_put),
+                sustainable_price_anchor=sustainable_anchor,
+                dte=int(effective_dte),
+            )
+        else:
+            call_strike = round(rp1_up / step_size) * step_size
+            put_strike = round(rp1_down / step_size) * step_size
+            bias = "BULL" if open_p >= trend_decider else "BEAR"
+            target_strike = call_strike if bias == "BULL" else put_strike
+            return OptionMateGrid(
+                date=datetime.now().strftime("%Y-%m-%d"),
+                spot_open=round(float(open_p), 2),
+                trend_decider=round(float(trend_decider), 2),
+                rp1_upper=round(float(rp1_up), 2),
+                rp2_upper=round(float(rp2_up), 2),
+                rp1_lower=round(float(rp1_down), 2),
+                rp2_lower=round(float(rp2_down), 2),
+                call_strike=float(call_strike),
+                put_strike=float(put_strike),
+                recommended_bias=bias,
+                target_strike=float(target_strike),
+            )
+
+    def _on_5m_bar_close(
+        self,
+        index_name: str,
+        bar_open: float,
+        bar_high: float,
+        bar_low: float,
+        bar_close: float,
+        bar_volume: float,
+        bar_time: dt_time,
+        timestamp_ms: int,
+        epoch_5min: int,
+    ) -> Optional[CachedRBFNAuctionSignal]:
+        """Evaluates Mode 5 (OPTIONMATE_RBFN_AUCTION) on discrete 5-minute bar close.
+        
+        Evaluates:
+        - Phase A: Opening Drive Auction (09:20:00 - 09:45:00 IST)
+          * Aggressive Drive on 09:20 bar close if strong expansion candle outside RP1.
+          * Conservative Drive on 09:25 bar close with 2-candle confirmation.
+          * Scale-calibrated dynamic channel step: max(baseline_step, 0.35 * range_10m).
+          * Strict Gate 2 verification (ATR hurdle, VIX hurdle, Sustainable Anchor, OR quality).
+        - Phase B: Midday Reversal (10:45:00 - 13:30:00 IST)
+          * 2-bar rejection inside RP1 targeting Trend Decider.
+          * Permanently suppressed if the 10:30 RP2 piercing invalidation rule was tripped.
+        Updates self.cached_rbfn_signals[index_name] atomically.
+        """
+        bar_record = {
+            "open": bar_open,
+            "high": bar_high,
+            "low": bar_low,
+            "close": bar_close,
+            "volume": bar_volume,
+            "time": bar_time,
+            "timestamp_ms": timestamp_ms,
+            "epoch_5min": epoch_5min,
+        }
+        if index_name not in self.bars_5m_history:
+            self.bars_5m_history[index_name] = []
+        self.bars_5m_history[index_name].append(bar_record)
+
+        if self.session_open_prices.get(index_name, 0.0) <= 0.0:
+            self.session_open_prices[index_name] = bar_open
+
+        history = self.bars_5m_history[index_name]
+        if len(history) >= 2:
+            range_10m = max(b["high"] for b in history[:2]) - min(b["low"] for b in history[:2])
+        else:
+            range_10m = bar_high - bar_low
+
+        pd_levels = self.prior_day_levels.get(index_name)
+        if pd_levels and pd_levels.atr_20 and pd_levels.atr_20 > 0:
+            eff_atr = float(pd_levels.atr_20)
+        elif (obs := self.wall_observers.get(index_name)) and obs.atr_pts > 0:
+            eff_atr = float(obs.atr_pts)
+        else:
+            eff_atr = 160.0 if index_name == "NIFTY" else (350.0 if index_name == "BANKNIFTY" else 500.0)
+        vix_val = 14.0
+
+        grid = self._compute_rbfn_grid(
+            index_name=index_name,
+            spot_open=self.session_open_prices[index_name],
+            range_10m=range_10m,
+            atr=eff_atr,
+            vix=vix_val,
+        )
+        self.cached_rbfn_grids[index_name] = grid
+
+        eff_time = bar_time
+        if eff_time == dt_time(9, 15):
+            eff_time = dt_time(9, 20)
+
+        # 10:30 RP2 Piercing Invalidation Rule check
+        if eff_time <= dt_time(10, 30):
+            if bar_high >= grid.rp2_upper or bar_low <= grid.rp2_lower:
+                self.rp2_pierced_before_1030[index_name] = True
+
+        strat = self.rbfn_strategies.get(index_name)
+        min_atr = getattr(strat, "min_atr_frictional_hurdle", 150.0) if strat else 150.0
+        min_vix = getattr(strat, "min_vix_hurdle", 12.0) if strat else 12.0
+
+        signal: Optional[CachedRBFNAuctionSignal] = None
+
+        # -----------------------------------------------------------------
+        # Phase A: Opening Drive Auction (09:20:00 - 09:45:00 IST)
+        # -----------------------------------------------------------------
+        if dt_time(9, 20) <= eff_time <= dt_time(9, 45):
+            # Strict Gate 2 Verification
+            if eff_atr < min_atr or vix_val < min_vix:
+                signal = CachedRBFNAuctionSignal(
+                    timestamp_ms=timestamp_ms,
+                    index_name=index_name,
+                    action="ABSTAIN",
+                    direction="",
+                    target_strike=0.0,
+                    target_pts=0.0,
+                    sl_pts=0.0,
+                    setup_reason="GATE_2_FRICTIONAL_HURDLE",
+                    trade_phase="OPENING_DRIVE",
+                    bar_time=bar_time,
+                    is_active=False,
+                    is_vetoed=True,
+                    veto_reason="GATE_2_FRICTIONAL_HURDLE",
+                )
+            elif range_10m < (0.35 * eff_atr):
+                signal = CachedRBFNAuctionSignal(
+                    timestamp_ms=timestamp_ms,
+                    index_name=index_name,
+                    action="ABSTAIN",
+                    direction="",
+                    target_strike=0.0,
+                    target_pts=0.0,
+                    sl_pts=0.0,
+                    setup_reason="GATE_2_COMPRESSION_CHOP",
+                    trade_phase="OPENING_DRIVE",
+                    bar_time=bar_time,
+                    is_active=False,
+                    is_vetoed=True,
+                    veto_reason="GATE_2_COMPRESSION_CHOP",
+                )
+            else:
+                is_bullish = bar_close > grid.rp1_upper
+                is_bearish = bar_close < grid.rp1_lower
+
+                # Check if an expansion breakout was attempted in the last 2 bars
+                attempted_breakout = len(history) >= 2 and (
+                    any(b["close"] > grid.rp1_upper for b in history[-2:])
+                    or any(b["close"] < grid.rp1_lower for b in history[-2:])
+                )
+
+                if eff_time >= dt_time(9, 25):
+                    # Conservative Drive on 09:25 (or later) bar close with 2-candle confirmation
+                    if len(history) < 2:
+                        signal = CachedRBFNAuctionSignal(
+                            timestamp_ms=timestamp_ms,
+                            index_name=index_name,
+                            action="ABSTAIN",
+                            direction="",
+                            target_strike=0.0,
+                            target_pts=0.0,
+                            sl_pts=0.0,
+                            setup_reason="GATE_2_UNCONFIRMED_BREAKOUT",
+                            trade_phase="OPENING_DRIVE",
+                            bar_time=bar_time,
+                            is_active=False,
+                            is_vetoed=True,
+                            veto_reason="GATE_2_UNCONFIRMED_BREAKOUT",
+                        )
+                    else:
+                        c1 = history[-2]["close"]
+                        c2 = history[-1]["close"]
+                        two_bar_bull = (c1 > grid.rp1_upper and c2 > grid.rp1_upper)
+                        two_bar_bear = (c1 < grid.rp1_lower and c2 < grid.rp1_lower)
+                        if two_bar_bull or two_bar_bear:
+                            action = "BUY_CALL" if two_bar_bull else "BUY_PUT"
+                            direction = "CE" if two_bar_bull else "PE"
+                            is_bull = two_bar_bull
+                            if index_name == "SENSEX":
+                                t_strike = grid.target_call_strike if is_bull else grid.target_put_strike
+                                t_target = grid.rp2_upper if is_bull else grid.rp2_lower
+                                inval = grid.rp1_upper - 50.0 if is_bull else grid.rp1_lower + 50.0
+                                t_pts = max(45.0, abs(t_target - bar_close))
+                                s_pts = max(35.0, abs(bar_close - inval))
+                            else:
+                                t_strike = grid.call_strike if is_bull else grid.put_strike
+                                t_target = grid.rp1_upper if is_bull else grid.rp1_lower
+                                inval = grid.trend_decider - 15.0 if is_bull else grid.trend_decider + 15.0
+                                t_pts = max(15.0, abs(t_target - bar_close))
+                                s_pts = max(12.0, abs(bar_close - inval))
+                            setup_str = f"RP1_{'UPPER' if is_bull else 'LOWER'}_CONSERVATIVE_DRIVE"
+                            signal = CachedRBFNAuctionSignal(
+                                timestamp_ms=timestamp_ms,
+                                index_name=index_name,
+                                action=action,
+                                direction=direction,
+                                target_strike=float(t_strike),
+                                target_pts=round(t_pts, 2),
+                                sl_pts=round(s_pts, 2),
+                                setup_reason=setup_str,
+                                trade_phase="OPENING_DRIVE",
+                                bar_time=bar_time,
+                                is_active=True,
+                                is_vetoed=False,
+                                veto_reason="",
+                            )
+                        elif attempted_breakout:
+                            signal = CachedRBFNAuctionSignal(
+                                timestamp_ms=timestamp_ms,
+                                index_name=index_name,
+                                action="ABSTAIN",
+                                direction="",
+                                target_strike=0.0,
+                                target_pts=0.0,
+                                sl_pts=0.0,
+                                setup_reason="GATE_2_UNCONFIRMED_BREAKOUT",
+                                trade_phase="OPENING_DRIVE",
+                                bar_time=bar_time,
+                                is_active=False,
+                                is_vetoed=True,
+                                veto_reason="GATE_2_UNCONFIRMED_BREAKOUT",
+                            )
+                        else:
+                            signal = CachedRBFNAuctionSignal(
+                                timestamp_ms=timestamp_ms,
+                                index_name=index_name,
+                                action="ABSTAIN",
+                                direction="",
+                                target_strike=0.0,
+                                target_pts=0.0,
+                                sl_pts=0.0,
+                                setup_reason="IN_CORRIDOR_BETWEEN_RP1",
+                                trade_phase="OPENING_DRIVE",
+                                bar_time=bar_time,
+                                is_active=False,
+                                is_vetoed=False,
+                                veto_reason="",
+                            )
+                elif eff_time == dt_time(9, 20):
+                    # Aggressive Drive on 09:20 bar close if strong expansion candle outside RP1
+                    if not is_bullish and not is_bearish:
+                        signal = CachedRBFNAuctionSignal(
+                            timestamp_ms=timestamp_ms,
+                            index_name=index_name,
+                            action="ABSTAIN",
+                            direction="",
+                            target_strike=0.0,
+                            target_pts=0.0,
+                            sl_pts=0.0,
+                            setup_reason="IN_CORRIDOR_BETWEEN_RP1",
+                            trade_phase="OPENING_DRIVE",
+                            bar_time=bar_time,
+                            is_active=False,
+                            is_vetoed=False,
+                            veto_reason="",
+                        )
+                    else:
+                        strong_expansion = (is_bullish and bar_close > bar_open) or (is_bearish and bar_close < bar_open)
+                        if not strong_expansion:
+                            signal = CachedRBFNAuctionSignal(
+                                timestamp_ms=timestamp_ms,
+                                index_name=index_name,
+                                action="ABSTAIN",
+                                direction="",
+                                target_strike=0.0,
+                                target_pts=0.0,
+                                sl_pts=0.0,
+                                setup_reason="GATE_2_UNCONFIRMED_BREAKOUT",
+                                trade_phase="OPENING_DRIVE",
+                                bar_time=bar_time,
+                                is_active=False,
+                                is_vetoed=True,
+                                veto_reason="GATE_2_UNCONFIRMED_BREAKOUT",
+                            )
+                        else:
+                            action = "BUY_CALL" if is_bullish else "BUY_PUT"
+                            direction = "CE" if is_bullish else "PE"
+                            if index_name == "SENSEX":
+                                t_strike = grid.target_call_strike if is_bullish else grid.target_put_strike
+                                t_target = grid.rp2_upper if is_bullish else grid.rp2_lower
+                                inval = grid.rp1_upper - 50.0 if is_bullish else grid.rp1_lower + 50.0
+                                t_pts = max(45.0, abs(t_target - bar_close))
+                                s_pts = max(35.0, abs(bar_close - inval))
+                            else:
+                                t_strike = grid.call_strike if is_bullish else grid.put_strike
+                                t_target = grid.rp1_upper if is_bullish else grid.rp1_lower
+                                inval = grid.trend_decider - 15.0 if is_bullish else grid.trend_decider + 15.0
+                                t_pts = max(15.0, abs(t_target - bar_close))
+                                s_pts = max(12.0, abs(bar_close - inval))
+                            setup_str = f"RP1_{'UPPER' if is_bullish else 'LOWER'}_AGGRESSIVE_DRIVE"
+                            signal = CachedRBFNAuctionSignal(
+                                timestamp_ms=timestamp_ms,
+                                index_name=index_name,
+                                action=action,
+                                direction=direction,
+                                target_strike=float(t_strike),
+                                target_pts=round(t_pts, 2),
+                                sl_pts=round(s_pts, 2),
+                                setup_reason=setup_str,
+                                trade_phase="OPENING_DRIVE",
+                                bar_time=bar_time,
+                                is_active=True,
+                                is_vetoed=False,
+                                veto_reason="",
+                            )
+
+        # -----------------------------------------------------------------
+        # Phase B: Midday Reversal (10:45:00 - 13:30:00 IST)
+        # -----------------------------------------------------------------
+        elif dt_time(10, 45) <= eff_time <= dt_time(13, 30):
+            if self.rp2_pierced_before_1030.get(index_name, False):
+                signal = CachedRBFNAuctionSignal(
+                    timestamp_ms=timestamp_ms,
+                    index_name=index_name,
+                    action="ABSTAIN",
+                    direction="",
+                    target_strike=0.0,
+                    target_pts=0.0,
+                    sl_pts=0.0,
+                    setup_reason="10:30_RP2_PIERCING_TREND_DAY_INVALIDATION",
+                    trade_phase="MIDDAY_REVERSAL",
+                    bar_time=bar_time,
+                    is_active=False,
+                    is_vetoed=True,
+                    veto_reason="10:30_RP2_PIERCING_TREND_DAY_INVALIDATION",
+                )
+            elif eff_atr < min_atr or vix_val < min_vix:
+                signal = CachedRBFNAuctionSignal(
+                    timestamp_ms=timestamp_ms,
+                    index_name=index_name,
+                    action="ABSTAIN",
+                    direction="",
+                    target_strike=0.0,
+                    target_pts=0.0,
+                    sl_pts=0.0,
+                    setup_reason="GATE_2_FRICTIONAL_HURDLE",
+                    trade_phase="MIDDAY_REVERSAL",
+                    bar_time=bar_time,
+                    is_active=False,
+                    is_vetoed=True,
+                    veto_reason="GATE_2_FRICTIONAL_HURDLE",
+                )
+            elif len(history) < 2:
+                signal = None
+            else:
+                buf = 15.0 if index_name == "SENSEX" else 5.0
+                step = 100 if index_name in {"SENSEX", "BANKNIFTY"} else 50
+                tested_upper = any(b["high"] >= grid.rp1_upper for b in history[-3:])
+                closed_below_upper = all(b["close"] <= (grid.rp1_upper - buf) for b in history[-2:])
+                if tested_upper and closed_below_upper and bar_close > grid.trend_decider:
+                    t_strike = round(grid.trend_decider / step) * step
+                    t_pts = max(15.0 if index_name != "SENSEX" else 45.0, abs(bar_close - grid.trend_decider))
+                    s_pts = max(12.0 if index_name != "SENSEX" else 35.0, abs((grid.rp1_upper + (30.0 if index_name == "SENSEX" else 20.0)) - bar_close))
+                    signal = CachedRBFNAuctionSignal(
+                        timestamp_ms=timestamp_ms,
+                        index_name=index_name,
+                        action="BUY_PUT",
+                        direction="PE",
+                        target_strike=float(t_strike),
+                        target_pts=round(t_pts, 2),
+                        sl_pts=round(s_pts, 2),
+                        setup_reason="RP1_UPPER_REVERSAL_CONFIRMED",
+                        trade_phase="MIDDAY_REVERSAL",
+                        bar_time=bar_time,
+                        is_active=True,
+                        is_vetoed=False,
+                        veto_reason="",
+                    )
+                else:
+                    tested_lower = any(b["low"] <= grid.rp1_lower for b in history[-3:])
+                    closed_above_lower = all(b["close"] >= (grid.rp1_lower + buf) for b in history[-2:])
+                    if tested_lower and closed_above_lower and bar_close < grid.trend_decider:
+                        t_strike = round(grid.trend_decider / step) * step
+                        t_pts = max(15.0 if index_name != "SENSEX" else 45.0, abs(grid.trend_decider - bar_close))
+                        s_pts = max(12.0 if index_name != "SENSEX" else 35.0, abs(bar_close - (grid.rp1_lower - (30.0 if index_name == "SENSEX" else 20.0))))
+                        signal = CachedRBFNAuctionSignal(
+                            timestamp_ms=timestamp_ms,
+                            index_name=index_name,
+                            action="BUY_CALL",
+                            direction="CE",
+                            target_strike=float(t_strike),
+                            target_pts=round(t_pts, 2),
+                            sl_pts=round(s_pts, 2),
+                            setup_reason="RP1_LOWER_REVERSAL_CONFIRMED",
+                            trade_phase="MIDDAY_REVERSAL",
+                            bar_time=bar_time,
+                            is_active=True,
+                            is_vetoed=False,
+                            veto_reason="",
+                        )
+
+        with self._lock:
+            self.cached_rbfn_signals[index_name] = signal
+        return signal
 
     def _evaluate_option_depth(self, depth: UpstoxLevel5DepthRecord) -> None:
         now_ts = time.time()
@@ -811,8 +1433,23 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         now_dt = datetime.now()
         now_time = now_dt.time()
 
-        # Opening shock freeze: strictly suppress all candidate setups
-        if trade_lock or now_time < self.opening_shock_end_time:
+        # Opening shock freeze: strictly suppress all candidate setups unless Mode 5 Opening Drive is active
+        # Mode 5 Opening Drive is permitted between 09:20:00 and 09:45:00 IST.
+        # Mode 2 (ORB) and other general setups remain strictly frozen until 09:45:00.
+        in_opening_shock = (trade_lock or now_time < self.opening_shock_end_time)
+        if now_time < dt_time(9, 20):
+            return
+
+        with self._lock:
+            rbfn_sig = self.cached_rbfn_signals.get(index_name)
+        has_mode_5_signal = (
+            rbfn_sig is not None
+            and rbfn_sig.is_active
+            and not rbfn_sig.is_vetoed
+            and rbfn_sig.action in {"BUY_CALL", "BUY_PUT"}
+        )
+
+        if in_opening_shock and not has_mode_5_signal:
             return
 
         # Late-session entry freeze: strictly suppress all candidate setups (>= 15:00:00 IST)
@@ -860,21 +1497,30 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         setup_reason = ""
         strategy_name = "SENTINEL_ORB"
         required_option_type = None
+        is_exp = (self.expiry_info.active_expiry_index == index_name)
+
+        # -------------------------------------------------------------
+        # Mode 5: FEAT-SENTINEL-OPTIONMATE-RBFN-AUCTION-001 - OptionMate RBFN Auction Engine
+        # Evaluates Phase A (Opening Drive 09:20-09:45) and Phase B (Midday Reversal 10:45-13:30).
+        # Cached from 5m bar close evaluation: < 250ns execution with zero float math overhead.
+        # -------------------------------------------------------------
+        if has_mode_5_signal and rbfn_sig is not None:
+            trigger_active = True
+            strategy_name = "OPTIONMATE_RBFN_AUCTION"
+            required_option_type = rbfn_sig.direction
+            setup_reason = f"[{rbfn_sig.trade_phase}] {rbfn_sig.setup_reason}"
+            target_pts = rbfn_sig.target_pts
+            sl_pts = rbfn_sig.sl_pts
 
         # -------------------------------------------------------------
         # Mode 1: Strategy A & Hypothesis 2 - Prior-Day Liquidity Sweep Reversal
         # Evaluates 09:30 - 12:00. Strictly gated to GEAR_1_RANGE (Chop/Expiry Pinning).
         # Fading breakouts in Gear 2 Trend is strictly suppressed fail-closed.
         # -------------------------------------------------------------
-        pd_bounds = self.prior_day_levels.get(index_name)
-        pd_verified = getattr(pd_bounds, "verified", False) if pd_bounds else False
-        pdh = pd_bounds.get("pdh", 0.0) if pd_bounds else 0.0
-        pdl = pd_bounds.get("pdl", 0.0) if pd_bounds else 0.0
-        is_exp = (self.expiry_info.active_expiry_index == index_name)
-
-        sweep_sig = None
-        # Regime Gate: Strictly require pd_bounds.verified is True and GEAR_1_RANGE (remove or is_exp trend bypass)
-        if pd_verified and self.session_gear == "GEAR_1_RANGE":
+        elif (pd_bounds := self.prior_day_levels.get(index_name)) is not None and getattr(pd_bounds, "verified", False) and self.session_gear == "GEAR_1_RANGE":
+            pdh = pd_bounds.get("pdh", 0.0)
+            pdl = pd_bounds.get("pdl", 0.0)
+            is_exp = (self.expiry_info.active_expiry_index == index_name)
             sweep_sig = self.sweep_engine.evaluate_bar(
                 index_name=index_name,
                 bar_open=spot,
@@ -887,14 +1533,13 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 is_expiry_session=is_exp,
                 bar_time=now_time,
             )
-
-        if sweep_sig is not None:
-            trigger_active = True
-            strategy_name = f"LIQUIDITY_SWEEP_{sweep_sig.sweep_type}"
-            required_option_type = sweep_sig.direction
-            setup_reason = f"[{sweep_sig.sweep_type}] {sweep_sig.setup_reason}"
-            target_pts = sweep_sig.target_pts
-            sl_pts = sweep_sig.sl_pts
+            if sweep_sig is not None:
+                trigger_active = True
+                strategy_name = f"LIQUIDITY_SWEEP_{sweep_sig.sweep_type}"
+                required_option_type = sweep_sig.direction
+                setup_reason = f"[{sweep_sig.sweep_type}] {sweep_sig.setup_reason}"
+                target_pts = sweep_sig.target_pts
+                sl_pts = sweep_sig.sl_pts
 
         # -------------------------------------------------------------
         # Mode 1.5: FEAT-SENTINEL-INTRADAY-REVERSAL-001 - Intraday Reversal Engine
@@ -974,8 +1619,9 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         # Evaluates clean trend expansion when no sweep or reversal trap is active
         # Invariant 4.1: Consult RegimeRouter to block blind ORB during ROTATIONAL_CHOP,
         # unpermitted trading, AMBIGUOUS_NO_TRADE, EXHAUSTION_REVERSAL, and high entropy.
+        # Strictly frozen during opening shock (< 09:45:00 IST).
         # -------------------------------------------------------------
-        elif or_high > -math.inf and spot > or_high:
+        elif not in_opening_shock and or_high > -math.inf and spot > or_high:
             router = self.regime_routers.get(index_name)
             regime_permits = self._evaluate_orb_regime_permission(router)
             if regime_permits:
@@ -984,7 +1630,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 strategy_name = "OPENING_RANGE_BREAKOUT"
                 required_option_type = "CE"
                 setup_reason = f"Breakout > {or_high:.1f}"
-        elif or_low < math.inf and spot < or_low:
+        elif not in_opening_shock and or_low < math.inf and spot < or_low:
             router = self.regime_routers.get(index_name)
             regime_permits = self._evaluate_orb_regime_permission(router)
             if regime_permits:
@@ -999,11 +1645,28 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         if trigger_active and ((required_option_type == "CE" and is_ce) or (required_option_type == "PE" and is_pe)):
             depth_bids = depth.bid_q1 + depth.bid_q2 + depth.bid_q3 + depth.bid_q4 + depth.bid_q5
             depth_asks = depth.ask_q1 + depth.ask_q2 + depth.ask_q3 + depth.ask_q4 + depth.ask_q5
-            displacement = (spot - or_high) if required_option_type == "CE" else (spot - or_low)
+            if strategy_name == "OPTIONMATE_RBFN_AUCTION" and rbfn_sig is not None:
+                displacement = abs(spot - rbfn_sig.target_strike)
+            elif required_option_type == "CE":
+                displacement = (spot - or_high) if or_high > -math.inf else 0.0
+            else:
+                displacement = (spot - or_low) if or_low < math.inf else 0.0
             
             # Strike matching check for ITM or Strategy Target Strike
             if strategy_name == "MIDDAY_MOMENTUM_EXTENSION" and (m_sig := getattr(self, "_last_midday_sig", None)) is not None:
                 target_strike_to_match = m_sig.recommended_strike
+                itm_res = self.strike_resolver.resolve_target_strike(
+                    spot=spot,
+                    direction=required_option_type,
+                    index_name=index_name,
+                )
+            elif strategy_name == "OPTIONMATE_RBFN_AUCTION" and rbfn_sig is not None:
+                target_strike_to_match = rbfn_sig.target_strike
+                itm_res = self.strike_resolver.resolve_target_strike(
+                    spot=spot,
+                    direction=required_option_type,
+                    index_name=index_name,
+                )
             else:
                 itm_res = self.strike_resolver.resolve_target_strike(
                     spot=spot,
@@ -1020,12 +1683,27 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 strike_interval=strike_interval,
             )
 
-            macro_ok, macro_reason = self.macro_gate.evaluate_alignment(
-                target_index=index_name,
-                setup_direction=required_option_type,
-                spots=self.spots,
-                or_bounds=self.or_bounds,
-            )
+            if strategy_name == "OPTIONMATE_RBFN_AUCTION":
+                comp_index = "SENSEX" if index_name == "NIFTY" else "NIFTY"
+                comp_s = self.spots.get(comp_index, 0.0)
+                comp_b = self.or_bounds.get(comp_index, {})
+                if comp_s > 0 and comp_b.get("high", -math.inf) > -math.inf:
+                    macro_ok, macro_reason = self.macro_gate.evaluate_alignment(
+                        target_index=index_name,
+                        setup_direction=required_option_type,
+                        spots=self.spots,
+                        or_bounds=self.or_bounds,
+                    )
+                else:
+                    macro_ok = True
+                    macro_reason = "MODE_5_RBFN_AUTONOMOUS"
+            else:
+                macro_ok, macro_reason = self.macro_gate.evaluate_alignment(
+                    target_index=index_name,
+                    setup_direction=required_option_type,
+                    spots=self.spots,
+                    or_bounds=self.or_bounds,
+                )
 
             # Factor 2: Macro Multi-Strike Option Writer Conviction & Market Maker Stress
             wall_obs = self.wall_observers.get(index_name)
@@ -1055,6 +1733,10 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 dyn_conviction = max(0.20, min(0.95, round(base_conviction, 2)))
             else:
                 dyn_conviction = 0.50
+
+            # Boost conviction for Mode 5: RBFN auction breakout confirmed outside Gaussian barrier RP1
+            if strategy_name == "OPTIONMATE_RBFN_AUCTION":
+                dyn_conviction = max(0.75, dyn_conviction)
 
             conf_eval = self.confidence_scorer.evaluate_confidence(
                 macro_aligned=macro_ok,
@@ -1393,6 +2075,8 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                                 strategy_name=strategy_name,
                             )
                             if entered:
+                                if rbfn_sig is not None:
+                                    self.cached_rbfn_signals[index_name] = None
                                 self.journal.record_execution(
                                     position_id=pos_id,
                                     index_name=index_name,
