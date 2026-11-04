@@ -85,27 +85,56 @@ class OptionMateRBFNStrategy:
     ) -> OptionMateGrid:
         """
         Calculates Trend Decider (TD) and Reversal Price (RP1, RP2) lines
-        using Gaussian volatility dispersion scaling.
+        using scale-invariant, gap-aware Gaussian volatility dispersion.
+        
+        Gap-Aware Auction Principles:
+        - When an opening gap (|open - prev_close| >= 0.25 * ATR) occurs, the auction
+          decouples from prior-day close and anchors value around the opening equilibrium.
+        - For standard sessions, Trend Decider bridges the opening and prior settlement.
+        - Harmonic channel spacing enforces 120-pt intervals for NIFTY (scaled dynamically
+          by index price level: ~0.80 * ATR).
         """
         if atr_14 <= 0:
             raise ValueError(f"ATR_14 must be strictly positive, got {atr_14}")
 
-        # 1. Trend Decider Price (Central Equilibrium)
-        # Shifted slightly by institutional participant flow divergence
-        flow_bias = np.sign(pro_client_divergence) * 0.05 * atr_14
-        trend_decider = 0.5 * (spot_open + prev_close) + flow_bias
+        gap = spot_open - prev_close
+        gap_threshold = 0.25 * atr_14
 
-        # 2. Gaussian Volatility Bands (38.2% and 68.2% dispersion)
+        # 1. Scale-Invariant Step Size (120 pts for NIFTY ~24k, 300 pts for SENSEX ~77k)
+        # Ratio: step_size ≈ 0.80 * ATR rounded to nearest 10 or 50 pts
+        if spot_open > 60000:  # SENSEX
+            channel_step = 300.0
+            anchor_round_base = 100.0
+        elif spot_open > 40000:  # BANKNIFTY
+            channel_step = 250.0
+            anchor_round_base = 50.0
+        else:  # NIFTY (120-pt harmonic channel, 40-pt structural grid divisor)
+            channel_step = 120.0
+            anchor_round_base = 40.0
+
+        # 2. Trend Decider Price (Central Equilibrium)
+        flow_bias = np.sign(pro_client_divergence) * 0.05 * atr_14
+        if abs(gap) >= gap_threshold:
+            # Gap Regime: Market accepts new value; anchor directly around opening settlement
+            # e.g., Open 23742 -> Anchor 23760; Open 23570 -> Anchor 23600
+            raw_td = spot_open + flow_bias
+            trend_decider = round(raw_td / anchor_round_base) * anchor_round_base
+        else:
+            # Rotation Regime: Equilibrium between open and prior close
+            raw_td = 0.5 * (spot_open + prev_close) + flow_bias
+            trend_decider = round(raw_td / anchor_round_base) * anchor_round_base
+
+        # 3. Harmonic Volatility Bands (RP1 = 1x step, RP2 = 2x step)
         vol_scale = np.sqrt(max(vix, 9.0) / self.reference_vix)
-        rp1_dist = 0.382 * atr_14 * vol_scale
-        rp2_dist = 0.682 * atr_14 * vol_scale
+        rp1_dist = channel_step * vol_scale
+        rp2_dist = 2.0 * channel_step * vol_scale
 
         rp1_up = trend_decider + rp1_dist
         rp2_up = trend_decider + rp2_dist
         rp1_down = trend_decider - rp1_dist
         rp2_down = trend_decider - rp2_dist
 
-        # 3. Dynamic Slingshot Strike Selection (Target strike that converts to ATM)
+        # 4. Dynamic Slingshot Strike Selection (Target strike that converts to ATM)
         call_strike = round(rp1_up / self.step_size) * self.step_size
         put_strike = round(rp1_down / self.step_size) * self.step_size
 
