@@ -260,11 +260,15 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         self.enable_stdout = enable_stdout
 
         # Decoupled Multi-Index APM Instances: Each index runs an isolated position manager & WAL
-        wal_base = Path(wal_path).parent
+        p_wal = Path(wal_path)
+        wal_dir = p_wal.parent
+        self.wal_dir = wal_dir
+        stem = p_wal.stem
+        ext = p_wal.suffix or ".json"
         self.apms: dict[str, ActivePositionManager] = {
-            "NIFTY": ActivePositionManager(wal_path=str(wal_base / "sentinel_apm_wal.json")),
-            "SENSEX": ActivePositionManager(wal_path=str(wal_base / "sentinel_apm_wal_sensex.json")),
-            "BANKNIFTY": ActivePositionManager(wal_path=str(wal_base / "sentinel_apm_wal_banknifty.json")),
+            "NIFTY": ActivePositionManager(wal_path=str(wal_dir / f"{stem}{ext}")),
+            "SENSEX": ActivePositionManager(wal_path=str(wal_dir / f"{stem}_sensex{ext}")),
+            "BANKNIFTY": ActivePositionManager(wal_path=str(wal_dir / f"{stem}_banknifty{ext}")),
         }
         # Backward compatibility reference (default to NIFTY)
         self.apm = self.apms["NIFTY"]
@@ -455,6 +459,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             "SPREAD": 0,
             "SLUMP": 0,
             "PREMIUM_CAP": 0,
+            "LOW_PREMIUM": 0,
             "ADVERSE_WALL": 0,
             "MACRO_DIVERGENCE": 0,
             "VOL_EXHAUSTION": 0,
@@ -1461,7 +1466,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             if now_ts - self._last_wall_persist_time >= 2.0:
                 self._last_wall_persist_time = now_ts
                 try:
-                    fn = f"runtime/sentinel_wall_state_{index_name.lower()}.json"
+                    fn = str(self.wal_dir / f"sentinel_wall_state_{index_name.lower()}.json")
                     wall_obs.persist_state_atomic(fn)
                 except Exception:
                     pass
@@ -1920,6 +1925,29 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     timestamp_ms=depth.exchange_timestamp_ms,
                     wall_time_str=now_time.strftime("%H:%M:%S"),
                 )
+            elif ltp < 40.0:
+                status_flag = "VETO_LOW_PREMIUM"
+                advisory = f"🚨 [PENNY CONTRACT VETO] BUY {depth.symbol} LTP ₹{ltp:.1f} < ₹40.0 (Illiquid Penny Delta Hazard)"
+                self.record_veto("LOW_PREMIUM", f"LTP ₹{ltp:.1f} < ₹40.0")
+                self.journal.record_veto(
+                    index_name=index_name,
+                    symbol=depth.symbol,
+                    direction=required_option_type,
+                    setup_reason=setup_reason,
+                    veto_reason="VETO_LOW_PREMIUM",
+                    spot_price=spot,
+                    option_ltp=ltp,
+                    bid=bid,
+                    ask=ask,
+                    spread_pts=spread,
+                    spread_ratio=spread_ratio,
+                    nominal_target_pts=target_pts,
+                    nominal_sl_pts=sl_pts,
+                    confidence_score=conf_eval.total_score if conf_eval else 0,
+                    confidence_grade=conf_eval.grade if conf_eval else "GRADE_C_SUPPRESSED",
+                    timestamp_ms=depth.exchange_timestamp_ms,
+                    wall_time_str=now_time.strftime("%H:%M:%S"),
+                )
             elif ltp > self.max_premium_cap:
                 status_flag = "VETO_PREMIUM_OVER_CAP"
                 advisory = f"🚨 [PREMIUM VETO] BUY {depth.symbol} LTP ₹{ltp:.1f} > ₹{self.max_premium_cap:.1f} (Deep-ITM Gamma Collapse Risk)"
@@ -2053,27 +2081,41 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     wall_time_str=now_time.strftime("%H:%M:%S"),
                 )
             else:
+                # Option Native Stop Loss: 20% of option premium or 15.0 pts minimum
+                opt_sl_pts = max(15.0, round(ltp * 0.20, 2))
+
                 # Gate 1: Capital Discretization & Integer Lot Math (Floor-or-Reject Model)
                 computed_lots, sizing_tier = calculate_discrete_lots(
                     total_capital=self.advisory_capital,
                     risk_budget_pct=0.02,
                     opt_premium=ltp,
-                    sl_points=sl_pts,
+                    sl_points=opt_sl_pts,
                     index_name=index_name,
                     sizing_recommendation=conf_eval.sizing_recommendation,
                 )
+
+                # Strict Lot Caps enforcement per index
+                idx_upper = (index_name or "NIFTY").upper().strip()
+                if "NIFTY" in idx_upper and "BANK" not in idx_upper:
+                    computed_lots = min(computed_lots, 3)
+                elif "SENSEX" in idx_upper:
+                    computed_lots = min(computed_lots, 2)
+                elif "BANKNIFTY" in idx_upper:
+                    computed_lots = min(computed_lots, 2)
+
                 ex_lot_size = get_exchange_lot_size(index_name)
                 total_qty = computed_lots * ex_lot_size
 
                 if computed_lots < 1 or sizing_tier == "ZERO_SUPPRESS":
                     status_flag = "VETO_INSUFFICIENT_MARGIN" if computed_lots < 1 else "VETO_SIZING_SUPPRESSED"
                     advisory = f"🚨 [SIZING VETO: {sizing_tier}] BUY {depth.symbol} @ {setup_reason} -> SUPPRESSED (Lots={computed_lots})"
+                    veto_tag = "VETO_INSUFFICIENT_MARGIN" if computed_lots < 1 else f"SIZING_{sizing_tier}"
                     self.journal.record_veto(
                         index_name=index_name,
                         symbol=depth.symbol,
                         direction=required_option_type,
                         setup_reason=setup_reason,
-                        veto_reason=f"SIZING_{sizing_tier}",
+                        veto_reason=veto_tag,
                         spot_price=spot,
                         option_ltp=ltp,
                         bid=bid,
@@ -2081,7 +2123,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         spread_pts=spread,
                         spread_ratio=spread_ratio,
                         nominal_target_pts=target_pts,
-                        nominal_sl_pts=sl_pts,
+                        nominal_sl_pts=opt_sl_pts,
                         confidence_score=conf_eval.total_score if conf_eval else 0,
                         confidence_grade=conf_eval.grade if conf_eval else "GRADE_C_SUPPRESSED",
                         sizing_tier=sizing_tier,

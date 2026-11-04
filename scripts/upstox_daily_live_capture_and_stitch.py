@@ -195,6 +195,79 @@ def get_options_subscriptions(df_inst: pd.DataFrame, underlying_prices: dict[str
     subs["BSE_INDEX|SENSEX"] = "SENSEX"
     return subs
 
+def recenter_premarket_option_subscriptions(
+    streamer,
+    subscriptions: dict[str, str],
+    df_inst: pd.DataFrame,
+    premarket_spot: float,
+    index_name: str = "NIFTY",
+    max_total_tokens: int = 60,
+) -> int:
+    """Calculates updated ATM strike from pre-market 09:08:45-09:09:30 spot auction,
+    identifies ATM +- 10 strikes, adds union of new contracts up to max_total_tokens,
+    prioritizing nearest to ATM outward. Calls streamer.subscribe in 'full' mode.
+    Returns count of newly added strikes.
+    """
+    if df_inst is None or df_inst.empty or not premarket_spot or premarket_spot <= 0.0 or streamer is None:
+        return 0
+
+    idx_cfg = {
+        "NIFTY": {"name": "NIFTY", "interval": 50},
+        "BANKNIFTY": {"name": "BANKNIFTY", "interval": 100},
+        "SENSEX": {"name": "SENSEX", "interval": 100},
+    }
+    cfg = idx_cfg.get(index_name.upper(), idx_cfg["NIFTY"])
+    interval = cfg["interval"]
+    atm = round(premarket_spot / interval) * interval
+
+    # Order desired strikes from ATM outward: [0, 1, -1, 2, -2, ..., 10, -10]
+    strike_offsets = [0]
+    for i in range(1, 11):
+        strike_offsets.extend([i, -i])
+    ordered_desired_strikes = [atm + (off * interval) for off in strike_offsets]
+
+    today_date = pd.to_datetime(datetime.now().date())
+    df_sym = df_inst[(df_inst["name"] == cfg["name"]) & (df_inst["instrument_type"].isin(["CE", "PE"]))].copy()
+    if df_sym.empty:
+        return 0
+
+    df_sym["expiry_date"] = pd.to_datetime(df_sym["expiry"], unit="ms")
+    df_future = df_sym[df_sym["expiry_date"] >= today_date]
+    nearest_expiry = df_future["expiry_date"].min() if not df_future.empty else df_sym["expiry_date"].max()
+    df_exp = df_sym[df_sym["expiry_date"] == nearest_expiry]
+
+    # Candidate keys mapped by strike priority
+    candidate_keys_ordered = []
+    for strike in ordered_desired_strikes:
+        df_match = df_exp[df_exp["strike_price"] == strike]
+        for _, row in df_match.iterrows():
+            k = row["instrument_key"]
+            sym = row["trading_symbol"]
+            candidate_keys_ordered.append((k, sym, strike))
+
+    # Add-only / Union subscription: filter out already subscribed keys
+    new_keys_to_add = []
+    current_tokens_count = len(subscriptions)
+    available_slots = max(0, max_total_tokens - current_tokens_count)
+
+    for k, sym, strike in candidate_keys_ordered:
+        if k not in subscriptions:
+            if len(new_keys_to_add) < available_slots:
+                subscriptions[k] = sym
+                new_keys_to_add.append(k)
+
+    if new_keys_to_add:
+        try:
+            streamer.subscribe(new_keys_to_add, mode="full")
+            logger.info(
+                f"[Pre-Market Re-Centering ({index_name})] Spot: ₹{premarket_spot:.1f} | ATM: ₹{atm:.0f} | "
+                f"Subscribed {len(new_keys_to_add)} new strikes (Total tokens: {len(subscriptions)}/{max_total_tokens})."
+            )
+        except Exception as e:
+            logger.error(f"[Pre-Market Re-Centering ({index_name})] Subscription failed: {e}")
+
+    return len(new_keys_to_add)
+
 def format_depth(market_level) -> str:
     depth = {"bids": [], "asks": []}
     quotes = market_level.get("bidAskQuote", [])[:5]
@@ -496,6 +569,7 @@ def main():
     start_streamer()
     last_flush_time = time.time()
     market_close_time = dt_time(15, 41)  # Collect CAS data through 15:40 PM, stop stream and stitch at 15:41 IST
+    premarket_recenter_done = False
     late_day_refresh_done = False
 
     while running:
@@ -506,6 +580,42 @@ def main():
         if now.time() >= market_close_time:
             logger.info("Market close & CAS complete (15:41 IST). Ending streaming session...")
             break
+
+        # Dynamic Pre-Market Re-Centering Hook at 09:08:45 - 09:09:30 IST
+        if not premarket_recenter_done and dt_time(9, 8, 45) <= now.time() < dt_time(9, 9, 30):
+            try:
+                pm_quotes = get_underlying_prices(access_token)
+                pm_spot = pm_quotes.get("NIFTY", 0.0)
+                nifty_levels = sentinel_advisor.prior_day_levels.get("NIFTY")
+                prev_close = nifty_levels.pdc if (nifty_levels and nifty_levels.pdc > 0) else prices.get("NIFTY", 0.0)
+                atr_20 = nifty_levels.atr_20 if (nifty_levels and nifty_levels.atr_20 > 0) else 0.0
+                gap_threshold = (0.25 * atr_20) if atr_20 > 0 else 50.0
+
+                if pm_spot > 0:
+                    gap_pts = abs(pm_spot - prev_close)
+                    if gap_pts >= gap_threshold:
+                        logger.info(
+                            f"[Pre-Market Re-Centering Triggered] NIFTY PM Spot: ₹{pm_spot:.1f}, Prev Close: ₹{prev_close:.1f}, "
+                            f"Gap: {gap_pts:.1f}pts >= Threshold: {gap_threshold:.1f}pts (0.25 * ATR={atr_20:.1f})."
+                        )
+                        added = recenter_premarket_option_subscriptions(
+                            streamer=streamer,
+                            subscriptions=subscriptions,
+                            df_inst=df_inst,
+                            premarket_spot=pm_spot,
+                            index_name="NIFTY",
+                            max_total_tokens=60,
+                        )
+                        logger.info(f"[Pre-Market Re-Centering] Subscribed {added} new option strikes.")
+                    else:
+                        logger.info(
+                            f"[Pre-Market Re-Centering] Gap {gap_pts:.1f}pts < Threshold {gap_threshold:.1f}pts. Retaining initial basket."
+                        )
+                    premarket_recenter_done = True
+            except Exception as e:
+                logger.warning(f"[Pre-Market Re-Centering Warning] Encountered non-fatal error: {e}")
+                # Guard to avoid tight retry loop during error
+                premarket_recenter_done = True
 
         # Dynamic late-day option refresh at 15:23:00 - 15:24:00 IST
         # Subscribes ATM and ATM +/- 100 strikes around current spot to ensure 15:26 depth availability
