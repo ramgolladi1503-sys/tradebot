@@ -219,6 +219,12 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
     Upstox ticks and Level-5 order book depth.
     """
 
+    INDEX_ATR_BOUNDS: dict[str, tuple[float, float]] = {
+        "SENSEX": (450.0, 900.0),
+        "BANKNIFTY": (300.0, 650.0),
+        "NIFTY": (130.0, 300.0),
+    }
+
     def __init__(
         self,
         adapter: Optional[InMemorySentinelAdapter] = None,
@@ -511,13 +517,19 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         
         Fail-closed: if pdh <= pdl or pdl <= 0, verified is False and levels are rejected.
         """
+        resolved_atr = float(atr_20) if atr_20 is not None else None
+        if resolved_atr is None or resolved_atr <= 0.0:
+            pdr = float(pdh) - float(pdl)
+            floor, ceiling = self.INDEX_ATR_BOUNDS.get(index_name, (130.0, 300.0))
+            resolved_atr = max(floor, min(pdr, ceiling))
+
         levels = PriorDayReferenceLevels(
             index_name=index_name,
             pdh=float(pdh),
             pdl=float(pdl),
             pdc=float(pdc),
             session_date=session_date,
-            atr_20=float(atr_20) if atr_20 is not None else None,
+            atr_20=resolved_atr,
             verified=False,
         )
         if not levels.validate():
@@ -530,7 +542,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         levels.verified = True
         self.prior_day_levels[index_name] = levels
         logger.info(
-            f"[{index_name}] Successfully seeded verified prior-day levels: PDH={pdh:.2f}, PDL={pdl:.2f}, PDC={pdc:.2f}"
+            f"[{index_name}] Successfully seeded verified prior-day levels: PDH={pdh:.2f}, PDL={pdl:.2f}, PDC={pdc:.2f}, ATR_20={resolved_atr:.2f}"
         )
         return True
 
@@ -1028,19 +1040,34 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             range_10m = bar_high - bar_low
 
         pd_levels = self.prior_day_levels.get(index_name)
-        if pd_levels and pd_levels.atr_20 and pd_levels.atr_20 > 0:
-            eff_atr = float(pd_levels.atr_20)
-        elif (obs := self.wall_observers.get(index_name)) and obs.atr_pts > 0:
-            eff_atr = float(obs.atr_pts)
-        else:
-            eff_atr = 160.0 if index_name == "NIFTY" else (350.0 if index_name == "BANKNIFTY" else 500.0)
+        if pd_levels is None or not pd_levels.verified or pd_levels.atr_20 is None or pd_levels.atr_20 <= 0.0:
+            signal = CachedRBFNAuctionSignal(
+                timestamp_ms=timestamp_ms,
+                index_name=index_name,
+                action="ABSTAIN",
+                direction="",
+                target_strike=0.0,
+                target_pts=0.0,
+                sl_pts=0.0,
+                setup_reason="UNSEEDED_PRIOR_DAY_LEVELS",
+                trade_phase="UNSEEDED",
+                bar_time=bar_time,
+                is_active=False,
+                is_vetoed=True,
+                veto_reason="UNSEEDED_PRIOR_DAY_LEVELS",
+            )
+            self.cached_rbfn_signals[index_name] = signal
+            return signal
+
+        macro_daily_atr = float(pd_levels.atr_20)
+        micro_intraday_atr = float(obs.atr_pts) if ((obs := self.wall_observers.get(index_name)) and obs.atr_pts > 0) else 0.0
         vix_val = 14.0
 
         grid = self._compute_rbfn_grid(
             index_name=index_name,
             spot_open=self.session_open_prices[index_name],
             range_10m=range_10m,
-            atr=eff_atr,
+            atr=macro_daily_atr,
             vix=vix_val,
         )
         self.cached_rbfn_grids[index_name] = grid
@@ -1076,7 +1103,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         # -----------------------------------------------------------------
         if dt_time(9, 20) <= eff_time <= dt_time(9, 45):
             # Strict Gate 2 Verification
-            if eff_atr < min_atr or vix_val < min_vix:
+            if macro_daily_atr < min_atr or vix_val < min_vix:
                 signal = CachedRBFNAuctionSignal(
                     timestamp_ms=timestamp_ms,
                     index_name=index_name,
@@ -1092,7 +1119,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     is_vetoed=True,
                     veto_reason="GATE_2_FRICTIONAL_HURDLE",
                 )
-            elif range_10m < (0.35 * eff_atr):
+            elif range_10m < (0.35 * macro_daily_atr):
                 signal = CachedRBFNAuctionSignal(
                     timestamp_ms=timestamp_ms,
                     index_name=index_name,
@@ -1295,7 +1322,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     is_vetoed=True,
                     veto_reason="10:30_RP2_PIERCING_TREND_DAY_INVALIDATION",
                 )
-            elif eff_atr < min_atr or vix_val < min_vix:
+            elif macro_daily_atr < min_atr or vix_val < min_vix:
                 signal = CachedRBFNAuctionSignal(
                     timestamp_ms=timestamp_ms,
                     index_name=index_name,

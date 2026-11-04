@@ -361,12 +361,14 @@ def main():
                             pdh = float(sub["high"].max())
                             pdl = float(sub["low"].min())
                             pdc = float(sub.iloc[-1]["close"])
+                            pdr = float(pdh - pdl)
                             sentinel_advisor.seed_prior_day_levels(
                                 index_name=target,
                                 pdh=pdh,
                                 pdl=pdl,
                                 pdc=pdc,
                                 session_date=datetime.strptime(last_session_dir.name, "%Y-%m-%d").date(),
+                                atr_20=pdr,
                             )
     except Exception as e:
         logger.warning(f"Failed to auto-seed prior-day levels: {e}")
