@@ -235,8 +235,8 @@ def test_tc_sz_01_option_native_stop_loss_pts_calculation():
     assert opt_sl_c == 40.0
 
 
-def test_tc_sz_02_low_premium_penny_contract_veto(tmp_path):
-    """TC-SZ-02: Option LTP < 40.0 is suppressed with VETO_LOW_PREMIUM."""
+def test_tc_sz_02_otm_expansion_contracts_are_not_vetoed(tmp_path):
+    """TC-SZ-02: OTM expansion contracts (e.g. LTP 35.0) are NOT suppressed by arbitrary premium floors."""
     wal = tmp_path / "test_sz_02_wal.json"
     journal = SentinelRealtimeJournal(logs_dir=tmp_path / "j", enable_writer_thread=False)
     advisor = SentinelLiveStreamAdvisor(
@@ -270,7 +270,7 @@ def test_tc_sz_02_low_premium_penny_contract_veto(tmp_path):
     )
     advisor.cached_rbfn_signals["NIFTY"] = sig
 
-    # Send penny contract depth (LTP = 35.0 < 40.0) with tight bid/ask
+    # Send OTM expansion contract depth (LTP = 35.0)
     depth = UpstoxLevel5DepthRecord(
         token="NSE_FO|NIFTY26OCT22400CE",
         symbol="NIFTY 22400 CE",
@@ -299,12 +299,10 @@ def test_tc_sz_02_low_premium_penny_contract_veto(tmp_path):
         mock_dt.strptime = datetime.strptime
         advisor._evaluate_option_depth(depth)
 
-    # Must be vetoed, APM state remains STANDBY
-    assert advisor.apms["NIFTY"].state == STATE_STANDBY
-    assert advisor.veto_counters["LOW_PREMIUM"] >= 1
-    veto_recs = [v for v in advisor.journal.veto_history if v.veto_reason == "VETO_LOW_PREMIUM"]
-    assert len(veto_recs) == 1
-    assert veto_recs[0].option_ltp == 35.0
+    # Must NOT be vetoed for low premium - enters IN_FLIGHT
+    assert advisor.apms["NIFTY"].state == STATE_IN_FLIGHT
+    assert advisor.apms["NIFTY"].payload is not None
+    assert advisor.apms["NIFTY"].payload.opt_entry_ltp == 35.1
 
 
 def test_tc_sz_03_strict_multi_index_lot_caps():

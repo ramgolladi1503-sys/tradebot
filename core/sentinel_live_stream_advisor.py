@@ -459,7 +459,6 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             "SPREAD": 0,
             "SLUMP": 0,
             "PREMIUM_CAP": 0,
-            "LOW_PREMIUM": 0,
             "ADVERSE_WALL": 0,
             "MACRO_DIVERGENCE": 0,
             "VOL_EXHAUSTION": 0,
@@ -1912,29 +1911,6 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     direction=required_option_type,
                     setup_reason=setup_reason,
                     veto_reason="MIDDAY_LIQUIDITY_SLUMP_VETO (11:30-12:30 IST)",
-                    spot_price=spot,
-                    option_ltp=ltp,
-                    bid=bid,
-                    ask=ask,
-                    spread_pts=spread,
-                    spread_ratio=spread_ratio,
-                    nominal_target_pts=target_pts,
-                    nominal_sl_pts=sl_pts,
-                    confidence_score=conf_eval.total_score if conf_eval else 0,
-                    confidence_grade=conf_eval.grade if conf_eval else "GRADE_C_SUPPRESSED",
-                    timestamp_ms=depth.exchange_timestamp_ms,
-                    wall_time_str=now_time.strftime("%H:%M:%S"),
-                )
-            elif ltp < 40.0:
-                status_flag = "VETO_LOW_PREMIUM"
-                advisory = f"🚨 [PENNY CONTRACT VETO] BUY {depth.symbol} LTP ₹{ltp:.1f} < ₹40.0 (Illiquid Penny Delta Hazard)"
-                self.record_veto("LOW_PREMIUM", f"LTP ₹{ltp:.1f} < ₹40.0")
-                self.journal.record_veto(
-                    index_name=index_name,
-                    symbol=depth.symbol,
-                    direction=required_option_type,
-                    setup_reason=setup_reason,
-                    veto_reason="VETO_LOW_PREMIUM",
                     spot_price=spot,
                     option_ltp=ltp,
                     bid=bid,
