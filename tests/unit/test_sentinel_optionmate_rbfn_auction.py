@@ -729,3 +729,53 @@ def test_safety_invariants_across_mode_5_components(tmp_path):
     assert sig.read_only is True
     assert sig.is_order_action is False
     assert sig.broker_api_called is False
+
+
+# =========================================================================
+# 11. Mode 5 Zero-Tolerance RP1 Strike Matching (Prevents ATM Drift)
+# =========================================================================
+
+def test_mode5_zero_tolerance_rp1_strike_discrimination(tmp_path):
+    """Asserts Mode 5 Golden Strategy matches only the exact RP1 strike with tolerance=0."""
+    wal = tmp_path / "test_wal_stk_disc.json"
+    advisor = SentinelLiveStreamAdvisor(wal_path=str(wal), enable_stdout=False)
+    advisor.seed_prior_day_levels("NIFTY", pdh=24100.0, pdl=23900.0, pdc=24000.0, atr_20=160.0)
+    advisor.session_open_prices["NIFTY"] = 24000.0
+
+    # Trigger opening drive signal targeting RP1 strike 24100 CE
+    sig = advisor._on_5m_bar_close(
+        index_name="NIFTY",
+        bar_open=24010.0,
+        bar_high=24170.0,
+        bar_low=24005.0,
+        bar_close=24160.0,
+        bar_volume=60000.0,
+        bar_time=dt_time(9, 20),
+        timestamp_ms=1793188800000,
+        epoch_5min=100,
+    )
+    assert sig is not None
+    assert sig.target_strike == 24100.0
+
+    # Spot is ~24160, so ATM strike is 24150 or 24200.
+    # Suppose an incoming quote is for 24150 CE or 24200 CE (ATM strikes).
+    # With tolerance=0 for Mode 5, 24150 CE must NOT match target strike 24100 CE.
+    is_atm_match = advisor.strike_resolver.is_contract_matching(
+        symbol="NSE_FO|NIFTY26NOV24150CE",
+        target_strike=sig.target_strike,
+        option_type="CE",
+        tolerance_strikes=0,
+        strike_interval=50,
+    )
+    assert is_atm_match is False, "ATM strike 24150 must be rejected when RP1 target strike is 24100"
+
+    # Exact RP1 strike 24100 CE must match
+    is_exact_match = advisor.strike_resolver.is_contract_matching(
+        symbol="NSE_FO|NIFTY26NOV24100CE",
+        target_strike=sig.target_strike,
+        option_type="CE",
+        tolerance_strikes=0,
+        strike_interval=50,
+    )
+    assert is_exact_match is True, "Exact RP1 strike 24100 CE must match"
+

@@ -1700,6 +1700,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 displacement = (spot - or_low) if or_low < math.inf else 0.0
             
             # Strike matching check for ITM or Strategy Target Strike
+            tolerance_to_use = 1
             if strategy_name == "MIDDAY_MOMENTUM_EXTENSION" and (m_sig := getattr(self, "_last_midday_sig", None)) is not None:
                 target_strike_to_match = m_sig.recommended_strike
                 itm_res = self.strike_resolver.resolve_target_strike(
@@ -1708,10 +1709,16 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     index_name=index_name,
                 )
             elif strategy_name == "OPTIONMATE_RBFN_AUCTION" and rbfn_sig is not None:
-                # Mode 5 Premium-Proximity strike resolution
+                # Mode 5 Golden Strategy strictly targets the OTM Slingshot corridor strike (RP1).
+                # Live stream quotes must match the exact strike (zero tolerance) to prevent ATM drift.
+                quote_strike = float(atm_strike)
+                for part in depth.symbol.upper().split():
+                    if part.isdigit() and len(part) >= 4:
+                        quote_strike = float(part)
+                        break
                 opt_quote_sample = [{
                     "symbol": depth.symbol,
-                    "strike": float(atm_strike),
+                    "strike": quote_strike,
                     "ltp": ltp,
                     "direction": required_option_type,
                 }]
@@ -1723,6 +1730,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     live_quotes=opt_quote_sample,
                 )
                 target_strike_to_match = m5_strike_res.target_strike
+                tolerance_to_use = 0  # Strict zero-tolerance for Golden Slingshot strike
                 itm_res = self.strike_resolver.resolve_target_strike(
                     spot=spot,
                     direction=required_option_type,
@@ -1740,7 +1748,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 symbol=sym,
                 target_strike=target_strike_to_match,
                 option_type=required_option_type,
-                tolerance_strikes=1,
+                tolerance_strikes=tolerance_to_use,
                 strike_interval=strike_interval,
             )
 

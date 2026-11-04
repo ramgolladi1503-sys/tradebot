@@ -16,6 +16,7 @@ Safety Invariants:
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
@@ -116,6 +117,15 @@ class ITMStrikeResolver:
             if part.isdigit() and len(part) >= 4:
                 contract_strike = float(part)
                 break
+
+        if contract_strike is None:
+            # Match compact symbols like NSE_FO|NIFTY26NOV24100CE or NIFTY24100CE
+            m = re.search(r"(\d{4,6})(?=[-_]?(?:CE|PE)\b)", sym)
+            if m:
+                try:
+                    contract_strike = float(m.group(1))
+                except ValueError:
+                    contract_strike = None
 
         if contract_strike is None:
             return False
