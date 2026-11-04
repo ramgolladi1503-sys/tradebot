@@ -73,6 +73,10 @@ from core.structural_alpha_gates import (
     PassiveMidpointQueueModel,
     VolatilityCompressionGate,
 )
+from core.sentinel_option_strike_resolver import (
+    SentinelOptionStrikeResolver,
+    Mode5StrikeSelection,
+)
 from core.option_confidence_scorer import (
     OptionConfidenceScorer,
     ConfidenceEvaluation,
@@ -173,6 +177,7 @@ class CachedRBFNAuctionSignal:
     setup_reason: str
     trade_phase: str  # 'OPENING_DRIVE' or 'MIDDAY_REVERSAL'
     bar_time: dt_time
+    sustainable_anchor_price: float = 0.0
     is_active: bool = True
     is_vetoed: bool = False
     veto_reason: str = ""
@@ -1040,6 +1045,17 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         )
         self.cached_rbfn_grids[index_name] = grid
 
+        # Dynamic Black-Scholes ATM half-straddle sustainable price anchor calculation:
+        # formula: 0.40 * spot * (max(vix, 9.0) / 100.0) * math.sqrt(max(dte, 0.20) / 365.0)
+        spot_ref = bar_close if bar_close > 0 else (self.session_open_prices.get(index_name, 0.0) or bar_open)
+        dte_ref = 2.0 if index_name == "SENSEX" else (1.0 if index_name in {"NIFTY", "BANKNIFTY"} else 1.0)
+        if getattr(self, "expiry_info", None) and self.expiry_info.active_expiry_index == index_name:
+            dte_ref = 0.20  # Expiry day fraction
+        calc_anchor = round(
+            0.40 * spot_ref * (max(vix_val, 9.0) / 100.0) * math.sqrt(max(dte_ref, 0.20) / 365.0),
+            1,
+        )
+
         eff_time = bar_time
         if eff_time == dt_time(9, 15):
             eff_time = dt_time(9, 20)
@@ -1153,6 +1169,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                                 setup_reason=setup_str,
                                 trade_phase="OPENING_DRIVE",
                                 bar_time=bar_time,
+                                sustainable_anchor_price=calc_anchor,
                                 is_active=True,
                                 is_vetoed=False,
                                 veto_reason="",
@@ -1252,6 +1269,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                                 setup_reason=setup_str,
                                 trade_phase="OPENING_DRIVE",
                                 bar_time=bar_time,
+                                sustainable_anchor_price=calc_anchor,
                                 is_active=True,
                                 is_vetoed=False,
                                 veto_reason="",
@@ -1315,6 +1333,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         setup_reason="RP1_UPPER_REVERSAL_CONFIRMED",
                         trade_phase="MIDDAY_REVERSAL",
                         bar_time=bar_time,
+                        sustainable_anchor_price=calc_anchor,
                         is_active=True,
                         is_vetoed=False,
                         veto_reason="",
@@ -1337,6 +1356,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                             setup_reason="RP1_LOWER_REVERSAL_CONFIRMED",
                             trade_phase="MIDDAY_REVERSAL",
                             bar_time=bar_time,
+                            sustainable_anchor_price=calc_anchor,
                             is_active=True,
                             is_vetoed=False,
                             veto_reason="",
@@ -1661,7 +1681,21 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     index_name=index_name,
                 )
             elif strategy_name == "OPTIONMATE_RBFN_AUCTION" and rbfn_sig is not None:
-                target_strike_to_match = rbfn_sig.target_strike
+                # Mode 5 Premium-Proximity strike resolution
+                opt_quote_sample = [{
+                    "symbol": depth.symbol,
+                    "strike": float(atm_strike),
+                    "ltp": ltp,
+                    "direction": required_option_type,
+                }]
+                m5_strike_res = SentinelOptionStrikeResolver.resolve_mode5_strike(
+                    index_name=index_name,
+                    direction=required_option_type,
+                    anchor_price=rbfn_sig.sustainable_anchor_price,
+                    geometric_strike=rbfn_sig.target_strike,
+                    live_quotes=opt_quote_sample,
+                )
+                target_strike_to_match = m5_strike_res.target_strike
                 itm_res = self.strike_resolver.resolve_target_strike(
                     spot=spot,
                     direction=required_option_type,
@@ -2021,8 +2055,9 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     )
                 else:
                     status_flag = "SIGNAL_TRIGGERED"
+                    anchor_info = f" | Anchor: ₹{rbfn_sig.sustainable_anchor_price:.1f}" if (strategy_name == "OPTIONMATE_RBFN_AUCTION" and rbfn_sig and rbfn_sig.sustainable_anchor_price > 0) else ""
                     advisory = (
-                        f"🎯 [BUY {depth.symbol}] @ {setup_reason} | "
+                        f"🎯 [BUY {depth.symbol}] @ {setup_reason}{anchor_info} | "
                         f"Conviction: {conf_eval.total_score}/100 ({conf_eval.grade}, WinRate ~{conf_eval.probable_win_rate_pct:.0f}%, {sizing_tier}, {computed_lots} lots / {total_qty} qty) | "
                         f"Target: +{target_pts:.1f}pts | Vol-SL: -{sl_pts:.1f}pts"
                     )
@@ -2077,12 +2112,15 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                             if entered:
                                 if rbfn_sig is not None:
                                     self.cached_rbfn_signals[index_name] = None
+                                exec_reason = setup_reason
+                                if strategy_name == "OPTIONMATE_RBFN_AUCTION" and rbfn_sig and rbfn_sig.sustainable_anchor_price > 0:
+                                    exec_reason = f"{setup_reason} [ANCHOR: ₹{rbfn_sig.sustainable_anchor_price:.1f}]"
                                 self.journal.record_execution(
                                     position_id=pos_id,
                                     index_name=index_name,
                                     symbol=depth.symbol,
                                     direction=required_option_type,
-                                    setup_reason=setup_reason,
+                                    setup_reason=exec_reason,
                                     spot_price=spot,
                                     option_ltp=ltp,
                                     fill_price=fill_price,

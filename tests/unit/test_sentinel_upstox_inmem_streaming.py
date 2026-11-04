@@ -273,6 +273,7 @@ def test_backpressure_and_fail_closed_queue_saturation(tmp_path: Path) -> None:
         watermark_ratio=0.80,
         chunk_size=1000,  # worker won't flush automatically on size
         flush_interval_sec=999.0,  # worker won't flush automatically on time
+        fail_closed_on_saturation=True,
     )
     recorder.add_telemetry_callback(lambda ev: telemetry_events.append(ev))
 

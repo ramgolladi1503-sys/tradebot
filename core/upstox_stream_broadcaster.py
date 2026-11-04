@@ -127,10 +127,11 @@ class UpstoxAsyncParquetRecorder:
     def __init__(
         self,
         output_dir: str | Path,
-        max_queue_size: int = 10_000,
+        max_queue_size: int = 50_000,
         watermark_ratio: float = 0.80,
-        chunk_size: int = 1000,
+        chunk_size: int = 2000,
         flush_interval_sec: float = 1.0,
+        fail_closed_on_saturation: bool = False,
     ) -> None:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -138,6 +139,7 @@ class UpstoxAsyncParquetRecorder:
         self.watermark_threshold = int(self.max_queue_size * watermark_ratio)
         self.chunk_size = int(chunk_size)
         self.flush_interval_sec = float(flush_interval_sec)
+        self.fail_closed_on_saturation = bool(fail_closed_on_saturation)
 
         self._queue: queue.Queue[UpstoxLevel5DepthRecord | None] = queue.Queue(
             maxsize=self.max_queue_size
@@ -207,16 +209,31 @@ class UpstoxAsyncParquetRecorder:
         try:
             self._queue.put_nowait(depth)
         except queue.Full:
+            if self.fail_closed_on_saturation:
+                self._emit_telemetry(
+                    "PERSISTENCE_QUEUE_EXHAUSTED",
+                    {
+                        "queue_size": self._queue.qsize(),
+                        "capacity": self.max_queue_size,
+                        "action": "FAIL_CLOSED_HALT",
+                    },
+                )
+                raise QueueSaturationError(
+                    f"Persistence queue saturated at full capacity {self.max_queue_size}. Fail closed."
+                )
             self._emit_telemetry(
-                "PERSISTENCE_QUEUE_EXHAUSTED",
+                "PERSISTENCE_QUEUE_DROPPED_BURST",
                 {
                     "queue_size": self._queue.qsize(),
                     "capacity": self.max_queue_size,
-                    "action": "FAIL_CLOSED_HALT",
+                    "action": "TRANSIENT_BURST_RECORD_DROPPED",
                 },
             )
-            raise QueueSaturationError(
-                f"Persistence queue saturated at full capacity {self.max_queue_size}. Fail closed."
+            # Prevent fail-closed crash on transient bursts while logging dropped record telemetry
+            logger.warning(
+                "Persistence queue full at capacity %d; dropped transient depth burst record %s",
+                self.max_queue_size,
+                depth.symbol,
             )
 
     def on_stream_status(self, status: StreamStatusEvent) -> None:
@@ -242,6 +259,7 @@ class UpstoxAsyncParquetRecorder:
                     break
 
             # Drain any further pending items in queue quickly into buffer
+            # In burst conditions (queue size high), drain larger batch up to chunk_size
             while len(buffer) < self.chunk_size:
                 try:
                     item = self._queue.get_nowait()
@@ -252,8 +270,10 @@ class UpstoxAsyncParquetRecorder:
                     break
 
             now = time.monotonic()
+            # Dynamic flush: immediate flush if buffer reaches chunk_size or queue is backlogged
             should_flush = (
                 len(buffer) >= self.chunk_size
+                or (buffer and self._queue.qsize() >= self.watermark_threshold)
                 or (buffer and (now - last_flush_time) >= self.flush_interval_sec)
                 or (self._stop_event.is_set() and buffer)
             )
