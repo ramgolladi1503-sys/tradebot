@@ -321,10 +321,11 @@ def main():
     # 1. Asynchronous Level-5 Parquet Recorder (Non-blocking Research Tape Writer)
     recorder = UpstoxAsyncParquetRecorder(
         output_dir=chunks_dir,
-        chunk_size=5000,
-        flush_interval_sec=30.0,
-        max_queue_size=10000,
+        chunk_size=2000,
+        flush_interval_sec=10.0,
+        max_queue_size=50000,
         watermark_ratio=0.8,
+        fail_closed_on_saturation=False,
     )
 
     # 2. In-Memory Sentinel Adapter (O(1) latest state coalescing & cross-strike skew gate)
