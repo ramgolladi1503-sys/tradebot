@@ -14,6 +14,35 @@ import numpy as np
 
 
 @dataclass(frozen=True)
+class GoldenCandle:
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float = 0.0
+    range_pts: float = 0.0
+    body_ratio: float = 0.0
+    read_only: bool = True
+    is_order_action: bool = False
+    broker_api_called: bool = False
+    allowed_for_live_execution: bool = False
+
+    @classmethod
+    def create(cls, open: float, high: float, low: float, close: float, volume: float = 0.0) -> "GoldenCandle":
+        rng = max(float(high - low), 1e-6)
+        body = abs(float(close - open))
+        return cls(
+            open=round(float(open), 2),
+            high=round(float(high), 2),
+            low=round(float(low), 2),
+            close=round(float(close), 2),
+            volume=float(volume),
+            range_pts=round(rng, 2),
+            body_ratio=round(body / rng, 4),
+        )
+
+
+@dataclass(frozen=True)
 class OptionMateGrid:
     date: str
     spot_open: float
@@ -57,8 +86,9 @@ class OptionMateSignal:
 class OptionMateRBFNStrategy:
     """
     Directional options strategy computing non-linear volatility expansion barriers
-    and executing the Slingshot OTM-to-ATM migration setup.
+    and executing the Slingshot OTM-to-ATM migration setup (Strategy Name: 'golden').
     """
+    strategy_name: str = "golden"
 
     def __init__(
         self,
@@ -162,10 +192,12 @@ class OptionMateRBFNStrategy:
         current_atr: float,
         vix: float = 14.0,
         time_str: str = "09:30",
+        golden_candle: Optional[GoldenCandle] = None,
     ) -> OptionMateSignal:
         """
         Generates causal entry signal at 09:30 AM based on spot position
-        relative to the Trend Decider line, guarded by Gate 2 ATR hurdle.
+        relative to the Trend Decider line and Golden Candle confirmation,
+        guarded by Gate 2 ATR hurdle.
         """
         # Production Gate 2: ATR & VIX Frictional Hurdle Check
         if current_atr < self.min_atr_frictional_hurdle or vix < self.min_vix_hurdle:
@@ -192,6 +224,71 @@ class OptionMateRBFNStrategy:
                     f"(ATR={current_atr:.1f}, VIX={vix:.1f}) fails frictional hurdle."
                 ),
             )
+
+        # Golden Candle Validation (if provided)
+        if golden_candle is not None:
+            # Wick exhaustion check: If adverse wick > 60% of total range, reject blind chasing
+            upper_wick = golden_candle.high - max(golden_candle.open, golden_candle.close)
+            lower_wick = min(golden_candle.open, golden_candle.close) - golden_candle.low
+            adverse_wick_ratio = max(upper_wick, lower_wick) / max(golden_candle.range_pts, 1e-6)
+
+            if adverse_wick_ratio > 0.60 and golden_candle.body_ratio < 0.35:
+                return OptionMateSignal(
+                    date=grid.date,
+                    action="ABSTAIN",
+                    target_strike=0.0,
+                    spot_entry=current_spot,
+                    target_1_spot=0.0,
+                    target_2_spot=0.0,
+                    invalidation_spot=0.0,
+                    entry_premium_est=0.0,
+                    stop_loss_pts=0.0,
+                    take_profit_pts=0.0,
+                    trade_phase="MORNING_DRIVE",
+                    is_vetoed=True,
+                    veto_reason=f"GOLDEN_CANDLE_EXHAUSTION_VETO: Adverse wick ratio {adverse_wick_ratio:.2f} > 0.60 with weak body {golden_candle.body_ratio:.2f}.",
+                    narrative=f"[{time_str}] Golden Candle shows exhaustion wick ({adverse_wick_ratio:.2f}). Breakout suppressed.",
+                )
+
+            # Golden Candle directional alignment check
+            # For BULL: Spot must hold above TD and either Golden Candle closed bullish or spot pierced high
+            if current_spot >= grid.trend_decider:
+                if golden_candle.close < grid.trend_decider and current_spot < golden_candle.high:
+                    return OptionMateSignal(
+                        date=grid.date,
+                        action="ABSTAIN",
+                        target_strike=0.0,
+                        spot_entry=current_spot,
+                        target_1_spot=0.0,
+                        target_2_spot=0.0,
+                        invalidation_spot=0.0,
+                        entry_premium_est=0.0,
+                        stop_loss_pts=0.0,
+                        take_profit_pts=0.0,
+                        trade_phase="MORNING_DRIVE",
+                        is_vetoed=True,
+                        veto_reason="GOLDEN_CANDLE_CONFLICT_VETO: Spot above TD but Golden Candle closed below TD without high breakout.",
+                        narrative=f"[{time_str}] Directional conflict: Spot above TD but Golden Candle not confirmed.",
+                    )
+            else:
+                # For BEAR: Spot must trade below TD and either Golden Candle closed bearish or spot broke low
+                if golden_candle.close >= grid.trend_decider and current_spot > golden_candle.low:
+                    return OptionMateSignal(
+                        date=grid.date,
+                        action="ABSTAIN",
+                        target_strike=0.0,
+                        spot_entry=current_spot,
+                        target_1_spot=0.0,
+                        target_2_spot=0.0,
+                        invalidation_spot=0.0,
+                        entry_premium_est=0.0,
+                        stop_loss_pts=0.0,
+                        take_profit_pts=0.0,
+                        trade_phase="MORNING_DRIVE",
+                        is_vetoed=True,
+                        veto_reason="GOLDEN_CANDLE_CONFLICT_VETO: Spot below TD but Golden Candle closed above TD without low breakdown.",
+                        narrative=f"[{time_str}] Directional conflict: Spot below TD but Golden Candle not confirmed.",
+                    )
 
         entry_prem_est = 0.16 * current_atr
         stop_loss_pts = 0.35 * entry_prem_est
