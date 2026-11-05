@@ -106,8 +106,9 @@ class SensexOptionMateRBFNStrategy:
 
         gap = spot_open - prev_close
         gap_threshold = 0.25 * atr_14
-        channel_step = 300.0
+        step_round_base = 50.0
         anchor_round_base = 100.0
+        channel_step = round((spot_open * 0.0050) / step_round_base) * step_round_base
 
         # Institutional flow offset
         flow_offset = 0.05 * atr_14 * math.copysign(1.0, pro_client_divergence) if abs(pro_client_divergence) > 0.0 else 0.0

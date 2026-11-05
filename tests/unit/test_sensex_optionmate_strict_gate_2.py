@@ -75,8 +75,8 @@ class TestSensexStrictGate2AndAttackerVectors:
         """Prove that the Slingshot strike resolves to RP2 (the strike that converts to ATM)."""
         strat = SensexOptionMateRBFNStrategy(step_size=100)
         grid = strat.compute_daily_grid("2026-11-04", spot_open=76853.11, prev_close=76500.0, atr_14=400.0, vix=13.5, dte=1)
-        # RP2 Upper is ~77,500
-        assert grid.target_call_strike == 77500.0
+        # Dynamic channel step = 400 pts; RP2 Upper is ~77,700
+        assert grid.target_call_strike == 77700.0
         # Valid confirmed signal targets RP2 Upper
         sig = strat.generate_signal(
             grid,
@@ -87,7 +87,7 @@ class TestSensexStrictGate2AndAttackerVectors:
             consecutive_closes_outside_rp1=2,
         )
         assert sig.action == "BUY_CALL"
-        assert sig.target_strike == 77500.0
+        assert sig.target_strike == 77700.0
         assert sig.target_1_spot == grid.rp2_upper
         assert sig.is_order_action is False
         assert sig.broker_api_called is False

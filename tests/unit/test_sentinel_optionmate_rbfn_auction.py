@@ -679,18 +679,18 @@ def test_sensex_optionmate_rbfn_auction_mode_5(tmp_path):
     advisor.seed_prior_day_levels("SENSEX", pdh=77200.0, pdl=76800.0, pdc=77000.0, atr_20=550.0)
     advisor.session_open_prices["SENSEX"] = 77000.0
 
-    # Trend Decider = 77000, RP1 Upper = 77300, RP2 Upper = 77600
-    # Strong expansion bar closing at 77350 > 77300
+    # Trend Decider = 77000, RP1 Upper = 77400, RP2 Upper = 77800 (Dynamic 0.50% step = 400 pts)
+    # Strong expansion bar closing at 77450 > 77400
     sig = advisor._on_5m_bar_close(
         index_name="SENSEX",
-        bar_open=77050.0, bar_high=77380.0, bar_low=77040.0, bar_close=77350.0,
+        bar_open=77050.0, bar_high=77480.0, bar_low=77040.0, bar_close=77450.0,
         bar_volume=100000.0, bar_time=dt_time(9, 20), timestamp_ms=1793188800000, epoch_5min=100,
     )
 
     assert sig is not None
     assert sig.action == "BUY_CALL"
     assert sig.direction == "CE"
-    assert sig.target_strike == 77600.0  # Slingshot target strike at RP2 Upper
+    assert sig.target_strike == 77800.0  # Slingshot target strike at RP2 Upper (77000 + 800)
     assert sig.is_active is True
     assert sig.is_vetoed is False
 

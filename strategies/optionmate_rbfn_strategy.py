@@ -112,12 +112,15 @@ class OptionMateRBFNStrategy:
         atr_14: float,
         vix: float,
         pro_client_divergence: float = 0.0,
+        bar_5m_equilibrium: Optional[GoldenCandle] = None,
     ) -> OptionMateGrid:
         """
         Calculates Trend Decider (TD) and Reversal Price (RP1, RP2) lines
         using scale-invariant, gap-aware Gaussian volatility dispersion.
         
         Gap-Aware Auction Principles:
+        - When bar_5m_equilibrium is provided (at or after 09:20 5m bar close), the opening
+          auction equilibrium is anchored causal-first using the closed 5m bar (e.g. bar close/range).
         - When an opening gap (|open - prev_close| >= 0.25 * ATR) occurs, the auction
           decouples from prior-day close and anchors value around the opening equilibrium.
         - For standard sessions, Trend Decider bridges the opening and prior settlement.
@@ -127,31 +130,44 @@ class OptionMateRBFNStrategy:
         if atr_14 <= 0:
             raise ValueError(f"ATR_14 must be strictly positive, got {atr_14}")
 
-        gap = spot_open - prev_close
+        effective_spot = spot_open
+        if bar_5m_equilibrium is not None:
+            # If 09:20 5m bar completed, anchor around true closed 5m equilibrium price
+            effective_spot = float(bar_5m_equilibrium.close)
+
+        gap = effective_spot - prev_close
         gap_threshold = 0.25 * atr_14
 
-        # 1. Scale-Invariant Step Size (120 pts for NIFTY ~24k, 300 pts for SENSEX ~77k)
-        # Ratio: step_size ≈ 0.80 * ATR rounded to nearest 10 or 50 pts
-        if spot_open > 60000:  # SENSEX
-            channel_step = 300.0
+        # 1. Scale-Invariant Step Size (Dynamic 0.50% harmonic channel)
+        # SENSEX/BANKNIFTY round to 50 pts; NIFTY rounds to 10 pts.
+        # At 79k SENSEX -> 400 pts; at 24k NIFTY -> 120 pts; at 50k BANKNIFTY -> 250 pts.
+        if effective_spot > 60000:  # SENSEX
+            step_round_base = 50.0
             anchor_round_base = 100.0
-        elif spot_open > 40000:  # BANKNIFTY
-            channel_step = 250.0
+        elif effective_spot > 40000:  # BANKNIFTY
+            step_round_base = 50.0
             anchor_round_base = 50.0
-        else:  # NIFTY (120-pt harmonic channel, 40-pt structural grid divisor)
-            channel_step = 120.0
+        else:  # NIFTY
+            step_round_base = 10.0
             anchor_round_base = 40.0
+
+        channel_step = round((effective_spot * 0.0050) / step_round_base) * step_round_base
+
+        # Dynamic channel expansion if 5m bar expansion range exceeds standard step
+        if bar_5m_equilibrium is not None and bar_5m_equilibrium.range_pts > 0:
+            channel_step = max(channel_step, round(0.35 * bar_5m_equilibrium.range_pts, 2))
 
         # 2. Trend Decider Price (Central Equilibrium)
         flow_bias = np.sign(pro_client_divergence) * 0.05 * atr_14
         if abs(gap) >= gap_threshold:
             # Gap Regime: Market accepts new value; anchor directly around opening settlement
-            # e.g., Open 23742 -> Anchor 23760; Open 23570 -> Anchor 23600
-            raw_td = spot_open + flow_bias
+            # On gap shock, anchor TD to spot_open to avoid drift from 5m candle wick
+            anchor_spot = spot_open if abs(spot_open - prev_close) >= gap_threshold else effective_spot
+            raw_td = anchor_spot + flow_bias
             trend_decider = round(raw_td / anchor_round_base) * anchor_round_base
         else:
             # Rotation Regime: Equilibrium between open and prior close
-            raw_td = 0.5 * (spot_open + prev_close) + flow_bias
+            raw_td = 0.5 * (effective_spot + prev_close) + flow_bias
             trend_decider = round(raw_td / anchor_round_base) * anchor_round_base
 
         # 3. Harmonic Volatility Bands (RP1 = 1x step, RP2 = 2x step)
@@ -168,12 +184,12 @@ class OptionMateRBFNStrategy:
         call_strike = round(rp1_up / self.step_size) * self.step_size
         put_strike = round(rp1_down / self.step_size) * self.step_size
 
-        bias = "BULL" if spot_open >= trend_decider else "BEAR"
+        bias = "BULL" if effective_spot >= trend_decider else "BEAR"
         target_strike = call_strike if bias == "BULL" else put_strike
 
         return OptionMateGrid(
             date=date,
-            spot_open=round(float(spot_open), 2),
+            spot_open=round(float(effective_spot), 2),
             trend_decider=round(float(trend_decider), 2),
             rp1_upper=round(float(rp1_up), 2),
             rp2_upper=round(float(rp2_up), 2),

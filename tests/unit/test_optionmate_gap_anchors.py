@@ -39,10 +39,10 @@ class TestOptionMateGapAwareGrid:
         assert nifty.rp1_upper - nifty.trend_decider == 120.0
         assert nifty.rp2_upper - nifty.rp1_upper == 120.0
 
-        # SENSEX: ~300 pt channel
+        # SENSEX: scale-invariant ~0.50% channel (at 76.8k -> round(76853*0.005/50)*50 = 400 pt channel)
         sensex = strat.compute_daily_grid("2026-11-04", spot_open=76853.11, prev_close=76500.0, atr_14=400.0, vix=14.0)
-        assert sensex.rp1_upper - sensex.trend_decider == 300.0
-        assert sensex.rp2_upper - sensex.rp1_upper == 300.0
+        assert sensex.rp1_upper - sensex.trend_decider == 400.0
+        assert sensex.rp2_upper - sensex.rp1_upper == 400.0
 
     def test_attacker_4_harmonic_symmetry_and_divisibility(self):
         """Prove that Reversal Price levels are equidistant and fall cleanly on structural grids."""

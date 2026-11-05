@@ -399,6 +399,11 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             "SENSEX": None,
             "BANKNIFTY": None,
         }
+        self.rbfn_grids_frozen: dict[str, bool] = {
+            "NIFTY": False,
+            "SENSEX": False,
+            "BANKNIFTY": False,
+        }
         self.cached_rbfn_signals: dict[str, Optional[CachedRBFNAuctionSignal]] = {
             "NIFTY": None,
             "SENSEX": None,
@@ -917,17 +922,20 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         vix_val = float(vix) if vix is not None else 14.0
 
         if index_name == "SENSEX":
-            baseline_step = 300.0
+            step_round_base = 50.0
             anchor_base = 100.0
             step_size = 100
         elif index_name == "BANKNIFTY":
-            baseline_step = 250.0
+            step_round_base = 50.0
             anchor_base = 50.0
             step_size = 100
         else:  # NIFTY
-            baseline_step = 120.0
+            step_round_base = 10.0
             anchor_base = 40.0
             step_size = 50
+
+        # Scale-Invariant Harmonic Step: 0.50% of spot rounded to step_round_base
+        baseline_step = round((open_p * 0.0050) / step_round_base) * step_round_base
 
         # Scale-calibrated dynamic channel step: max(baseline_step, 0.35 * range_10m)
         if range_10m is not None and range_10m > 0:
@@ -1067,14 +1075,20 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         micro_intraday_atr = float(obs.atr_pts) if ((obs := self.wall_observers.get(index_name)) and obs.atr_pts > 0) else 0.0
         vix_val = 14.0
 
-        grid = self._compute_rbfn_grid(
-            index_name=index_name,
-            spot_open=self.session_open_prices[index_name],
-            range_10m=range_10m,
-            atr=macro_daily_atr,
-            vix=vix_val,
-        )
-        self.cached_rbfn_grids[index_name] = grid
+        # Grid Immutability Lock: Freeze RBFN grid once 09:20 bar completes so Trend Decider and RP1/RP2 are immutable
+        if self.rbfn_grids_frozen.get(index_name, False) and self.cached_rbfn_grids.get(index_name) is not None:
+            grid = self.cached_rbfn_grids[index_name]
+        else:
+            grid = self._compute_rbfn_grid(
+                index_name=index_name,
+                spot_open=self.session_open_prices[index_name],
+                range_10m=range_10m,
+                atr=macro_daily_atr,
+                vix=vix_val,
+            )
+            self.cached_rbfn_grids[index_name] = grid
+            if bar_time >= dt_time(9, 20):
+                self.rbfn_grids_frozen[index_name] = True
 
         # Dynamic Black-Scholes ATM half-straddle sustainable price anchor calculation:
         # formula: 0.40 * spot * (max(vix, 9.0) / 100.0) * math.sqrt(max(dte, 0.20) / 365.0)
@@ -1150,8 +1164,17 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 )
 
                 if eff_time >= dt_time(9, 25):
-                    # Conservative Drive on 09:25 (or later) bar close with 2-candle confirmation
-                    if len(history) < 2:
+                    # Conservative Drive on 09:25 (or later) bar close
+                    # Phase A: Drive towards RP1 if holding above/below TD, or expansion past RP1 targeting RP2
+                    c1 = history[-2]["close"] if len(history) >= 2 else bar_close
+                    c2 = history[-1]["close"]
+                    two_bar_bull_rp1 = (c1 > grid.rp1_upper and c2 > grid.rp1_upper)
+                    two_bar_bear_rp1 = (c1 < grid.rp1_lower and c2 < grid.rp1_lower)
+                    holding_above_td = (c1 >= grid.trend_decider and c2 >= grid.trend_decider)
+                    holding_below_td = (c1 <= grid.trend_decider and c2 <= grid.trend_decider)
+
+                    if attempted_breakout and not (two_bar_bull_rp1 or two_bar_bear_rp1):
+                        # Attempted breakout outside RP1 that failed 2-candle confirmation -> VETO
                         signal = CachedRBFNAuctionSignal(
                             timestamp_ms=timestamp_ms,
                             index_name=index_name,
@@ -1167,79 +1190,105 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                             is_vetoed=True,
                             veto_reason="GATE_2_UNCONFIRMED_BREAKOUT",
                         )
-                    else:
-                        c1 = history[-2]["close"]
-                        c2 = history[-1]["close"]
-                        two_bar_bull = (c1 > grid.rp1_upper and c2 > grid.rp1_upper)
-                        two_bar_bear = (c1 < grid.rp1_lower and c2 < grid.rp1_lower)
-                        if two_bar_bull or two_bar_bear:
-                            action = "BUY_CALL" if two_bar_bull else "BUY_PUT"
-                            direction = "CE" if two_bar_bull else "PE"
-                            is_bull = two_bar_bull
-                            if index_name == "SENSEX":
-                                t_strike = grid.target_call_strike if is_bull else grid.target_put_strike
-                                t_target = grid.rp2_upper if is_bull else grid.rp2_lower
-                                inval = grid.rp1_upper - 50.0 if is_bull else grid.rp1_lower + 50.0
-                                t_pts = max(45.0, abs(t_target - bar_close))
-                                s_pts = max(35.0, abs(bar_close - inval))
-                            else:
-                                t_strike = grid.call_strike if is_bull else grid.put_strike
-                                t_target = grid.rp1_upper if is_bull else grid.rp1_lower
-                                inval = grid.trend_decider - 15.0 if is_bull else grid.trend_decider + 15.0
-                                t_pts = max(15.0, abs(t_target - bar_close))
-                                s_pts = max(12.0, abs(bar_close - inval))
-                            setup_str = f"RP1_{'UPPER' if is_bull else 'LOWER'}_CONSERVATIVE_DRIVE"
-                            signal = CachedRBFNAuctionSignal(
-                                timestamp_ms=timestamp_ms,
-                                index_name=index_name,
-                                action=action,
-                                direction=direction,
-                                target_strike=float(t_strike),
-                                target_pts=round(t_pts, 2),
-                                sl_pts=round(s_pts, 2),
-                                setup_reason=setup_str,
-                                trade_phase="OPENING_DRIVE",
-                                bar_time=bar_time,
-                                sustainable_anchor_price=calc_anchor,
-                                is_active=True,
-                                is_vetoed=False,
-                                veto_reason="",
-                            )
-                        elif attempted_breakout:
-                            signal = CachedRBFNAuctionSignal(
-                                timestamp_ms=timestamp_ms,
-                                index_name=index_name,
-                                action="ABSTAIN",
-                                direction="",
-                                target_strike=0.0,
-                                target_pts=0.0,
-                                sl_pts=0.0,
-                                setup_reason="GATE_2_UNCONFIRMED_BREAKOUT",
-                                trade_phase="OPENING_DRIVE",
-                                bar_time=bar_time,
-                                is_active=False,
-                                is_vetoed=True,
-                                veto_reason="GATE_2_UNCONFIRMED_BREAKOUT",
-                            )
+                    elif two_bar_bull_rp1 or two_bar_bear_rp1:
+                        # RP1 Expansion Breakout -> Targets RP2
+                        action = "BUY_CALL" if two_bar_bull_rp1 else "BUY_PUT"
+                        direction = "CE" if two_bar_bull_rp1 else "PE"
+                        is_bull = two_bar_bull_rp1
+                        if index_name == "SENSEX":
+                            t_strike = grid.target_call_strike if is_bull else grid.target_put_strike
+                            t_target = grid.rp2_upper if is_bull else grid.rp2_lower
+                            inval = grid.rp1_upper - 50.0 if is_bull else grid.rp1_lower + 50.0
+                            t_pts = max(45.0, abs(t_target - bar_close))
+                            s_pts = max(35.0, abs(bar_close - inval))
                         else:
-                            signal = CachedRBFNAuctionSignal(
-                                timestamp_ms=timestamp_ms,
-                                index_name=index_name,
-                                action="ABSTAIN",
-                                direction="",
-                                target_strike=0.0,
-                                target_pts=0.0,
-                                sl_pts=0.0,
-                                setup_reason="IN_CORRIDOR_BETWEEN_RP1",
-                                trade_phase="OPENING_DRIVE",
-                                bar_time=bar_time,
-                                is_active=False,
-                                is_vetoed=False,
-                                veto_reason="",
-                            )
-                elif eff_time == dt_time(9, 20):
-                    # Aggressive Drive on 09:20 bar close if strong expansion candle outside RP1
-                    if not is_bullish and not is_bearish:
+                            t_strike = grid.call_strike if is_bull else grid.put_strike
+                            t_target = grid.rp2_upper if is_bull else grid.rp2_lower
+                            inval = grid.rp1_upper - 15.0 if is_bull else grid.rp1_lower + 15.0
+                            t_pts = max(20.0, abs(t_target - bar_close))
+                            s_pts = max(15.0, abs(bar_close - inval))
+                        setup_str = f"RP1_{'UPPER' if is_bull else 'LOWER'}_CONSERVATIVE_DRIVE"
+                        signal = CachedRBFNAuctionSignal(
+                            timestamp_ms=timestamp_ms,
+                            index_name=index_name,
+                            action=action,
+                            direction=direction,
+                            target_strike=float(t_strike),
+                            target_pts=round(t_pts, 2),
+                            sl_pts=round(s_pts, 2),
+                            setup_reason=setup_str,
+                            trade_phase="OPENING_DRIVE",
+                            bar_time=bar_time,
+                            sustainable_anchor_price=calc_anchor,
+                            is_active=True,
+                            is_vetoed=False,
+                            veto_reason="",
+                        )
+                    elif holding_above_td and bar_close < grid.rp1_upper:
+                        # TD to RP1 Drive: Holding above TD, targeting RP1 Upper
+                        is_bull = True
+                        action = "BUY_CALL"
+                        direction = "CE"
+                        if index_name == "SENSEX":
+                            t_strike = round(grid.rp1_upper / 100.0) * 100.0
+                            inval = grid.trend_decider - 50.0
+                            t_pts = max(40.0, abs(grid.rp1_upper - bar_close))
+                            s_pts = max(30.0, abs(bar_close - inval))
+                        else:
+                            t_strike = grid.call_strike
+                            inval = grid.trend_decider - 15.0
+                            t_pts = max(15.0, abs(grid.rp1_upper - bar_close))
+                            s_pts = max(12.0, abs(bar_close - inval))
+                        setup_str = "TD_TO_RP1_UPPER_DRIVE"
+                        signal = CachedRBFNAuctionSignal(
+                            timestamp_ms=timestamp_ms,
+                            index_name=index_name,
+                            action=action,
+                            direction=direction,
+                            target_strike=float(t_strike),
+                            target_pts=round(t_pts, 2),
+                            sl_pts=round(s_pts, 2),
+                            setup_reason=setup_str,
+                            trade_phase="OPENING_DRIVE",
+                            bar_time=bar_time,
+                            sustainable_anchor_price=calc_anchor,
+                            is_active=True,
+                            is_vetoed=False,
+                            veto_reason="",
+                        )
+                    elif holding_below_td and bar_close > grid.rp1_lower:
+                        # TD to RP1 Drive: Holding below TD, targeting RP1 Lower
+                        is_bull = False
+                        action = "BUY_PUT"
+                        direction = "PE"
+                        if index_name == "SENSEX":
+                            t_strike = round(grid.rp1_lower / 100.0) * 100.0
+                            inval = grid.trend_decider + 50.0
+                            t_pts = max(40.0, abs(bar_close - grid.rp1_lower))
+                            s_pts = max(30.0, abs(inval - bar_close))
+                        else:
+                            t_strike = grid.put_strike
+                            inval = grid.trend_decider + 15.0
+                            t_pts = max(15.0, abs(bar_close - grid.rp1_lower))
+                            s_pts = max(12.0, abs(inval - bar_close))
+                        setup_str = "TD_TO_RP1_LOWER_DRIVE"
+                        signal = CachedRBFNAuctionSignal(
+                            timestamp_ms=timestamp_ms,
+                            index_name=index_name,
+                            action=action,
+                            direction=direction,
+                            target_strike=float(t_strike),
+                            target_pts=round(t_pts, 2),
+                            sl_pts=round(s_pts, 2),
+                            setup_reason=setup_str,
+                            trade_phase="OPENING_DRIVE",
+                            bar_time=bar_time,
+                            sustainable_anchor_price=calc_anchor,
+                            is_active=True,
+                            is_vetoed=False,
+                            veto_reason="",
+                        )
+                    else:
                         signal = CachedRBFNAuctionSignal(
                             timestamp_ms=timestamp_ms,
                             index_name=index_name,
@@ -1255,7 +1304,11 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                             is_vetoed=False,
                             veto_reason="",
                         )
-                    else:
+                elif eff_time == dt_time(9, 20):
+                    # Aggressive Drive on 09:20 bar close:
+                    # Case 1: Outside RP1 (strong expansion candle outside RP1) -> targets RP2
+                    # Case 2: Above/Below TD holding (opening drive towards RP1)
+                    if is_bullish or is_bearish:
                         strong_expansion = (is_bullish and bar_close > bar_open) or (is_bearish and bar_close < bar_open)
                         if not strong_expansion:
                             signal = CachedRBFNAuctionSignal(
@@ -1284,10 +1337,10 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                                 s_pts = max(35.0, abs(bar_close - inval))
                             else:
                                 t_strike = grid.call_strike if is_bullish else grid.put_strike
-                                t_target = grid.rp1_upper if is_bullish else grid.rp1_lower
-                                inval = grid.trend_decider - 15.0 if is_bullish else grid.trend_decider + 15.0
-                                t_pts = max(15.0, abs(t_target - bar_close))
-                                s_pts = max(12.0, abs(bar_close - inval))
+                                t_target = grid.rp2_upper if is_bullish else grid.rp2_lower
+                                inval = grid.rp1_upper - 15.0 if is_bullish else grid.rp1_lower + 15.0
+                                t_pts = max(20.0, abs(t_target - bar_close))
+                                s_pts = max(15.0, abs(bar_close - inval))
                             setup_str = f"RP1_{'UPPER' if is_bullish else 'LOWER'}_AGGRESSIVE_DRIVE"
                             signal = CachedRBFNAuctionSignal(
                                 timestamp_ms=timestamp_ms,
@@ -1305,6 +1358,84 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                                 is_vetoed=False,
                                 veto_reason="",
                             )
+                    elif bar_close > grid.trend_decider and bar_close > bar_open:
+                        # Opening Drive: Bullish bar holding above TD, targeting RP1 Upper
+                        action = "BUY_CALL"
+                        direction = "CE"
+                        if index_name == "SENSEX":
+                            t_strike = round(grid.rp1_upper / 100.0) * 100.0
+                            inval = grid.trend_decider - 50.0
+                            t_pts = max(40.0, abs(grid.rp1_upper - bar_close))
+                            s_pts = max(30.0, abs(bar_close - inval))
+                        else:
+                            t_strike = grid.call_strike
+                            inval = grid.trend_decider - 15.0
+                            t_pts = max(15.0, abs(grid.rp1_upper - bar_close))
+                            s_pts = max(12.0, abs(bar_close - inval))
+                        setup_str = "TD_TO_RP1_UPPER_AGGRESSIVE_DRIVE"
+                        signal = CachedRBFNAuctionSignal(
+                            timestamp_ms=timestamp_ms,
+                            index_name=index_name,
+                            action=action,
+                            direction=direction,
+                            target_strike=float(t_strike),
+                            target_pts=round(t_pts, 2),
+                            sl_pts=round(s_pts, 2),
+                            setup_reason=setup_str,
+                            trade_phase="OPENING_DRIVE",
+                            bar_time=bar_time,
+                            sustainable_anchor_price=calc_anchor,
+                            is_active=True,
+                            is_vetoed=False,
+                            veto_reason="",
+                        )
+                    elif bar_close < grid.trend_decider and bar_close < bar_open:
+                        # Opening Drive: Bearish bar holding below TD, targeting RP1 Lower
+                        action = "BUY_PUT"
+                        direction = "PE"
+                        if index_name == "SENSEX":
+                            t_strike = round(grid.rp1_lower / 100.0) * 100.0
+                            inval = grid.trend_decider + 50.0
+                            t_pts = max(40.0, abs(bar_close - grid.rp1_lower))
+                            s_pts = max(30.0, abs(inval - bar_close))
+                        else:
+                            t_strike = grid.put_strike
+                            inval = grid.trend_decider + 15.0
+                            t_pts = max(15.0, abs(bar_close - grid.rp1_lower))
+                            s_pts = max(12.0, abs(inval - bar_close))
+                        setup_str = "TD_TO_RP1_LOWER_AGGRESSIVE_DRIVE"
+                        signal = CachedRBFNAuctionSignal(
+                            timestamp_ms=timestamp_ms,
+                            index_name=index_name,
+                            action=action,
+                            direction=direction,
+                            target_strike=float(t_strike),
+                            target_pts=round(t_pts, 2),
+                            sl_pts=round(s_pts, 2),
+                            setup_reason=setup_str,
+                            trade_phase="OPENING_DRIVE",
+                            bar_time=bar_time,
+                            sustainable_anchor_price=calc_anchor,
+                            is_active=True,
+                            is_vetoed=False,
+                            veto_reason="",
+                        )
+                    else:
+                        signal = CachedRBFNAuctionSignal(
+                            timestamp_ms=timestamp_ms,
+                            index_name=index_name,
+                            action="ABSTAIN",
+                            direction="",
+                            target_strike=0.0,
+                            target_pts=0.0,
+                            sl_pts=0.0,
+                            setup_reason="IN_CORRIDOR_BETWEEN_RP1",
+                            trade_phase="OPENING_DRIVE",
+                            bar_time=bar_time,
+                            is_active=False,
+                            is_vetoed=False,
+                            veto_reason="",
+                        )
 
         # -----------------------------------------------------------------
         # Phase B: Midday Reversal (10:45:00 - 13:30:00 IST)
@@ -1905,6 +2036,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             elif midday_slump_vetoed:
                 status_flag = "VETO_MIDDAY_LIQUIDITY_SLUMP"
                 advisory = f"🚨 [MIDDAY_LIQUIDITY_SLUMP_VETO (11:30-12:30 IST)] BUY {depth.symbol} @ {setup_reason} -> SUPPRESSED"
+                self.record_veto("SLUMP", f"Midday Liquidity Slump (11:30-12:30 IST) for {strategy_name}")
                 self.journal.record_veto(
                     index_name=index_name,
                     symbol=depth.symbol,
