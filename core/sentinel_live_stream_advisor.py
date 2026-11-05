@@ -454,7 +454,43 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         self._lock = threading.RLock()
         self._last_alert_time = 0.0
         self._last_wall_persist_time = 0.0
-        self.session_gear = "GEAR_1_RANGE"  # "GEAR_1_RANGE" or "GEAR_2_TREND"
+        self.session_gear = "GEAR_1_RANGE"  # Legacy global fallback
+        self.session_gears: dict[str, str] = {
+            "NIFTY": "GEAR_1_RANGE",
+            "SENSEX": "GEAR_1_RANGE",
+            "BANKNIFTY": "GEAR_1_RANGE",
+        }
+        self.gear_expansion_ratios: dict[str, float] = {
+            "NIFTY": 0.0,
+            "SENSEX": 0.0,
+            "BANKNIFTY": 0.0,
+        }
+        self.gear_trend_bar_counters: dict[str, int] = {
+            "NIFTY": 0,
+            "SENSEX": 0,
+            "BANKNIFTY": 0,
+        }
+        self.gear_range_bar_counters: dict[str, int] = {
+            "NIFTY": 0,
+            "SENSEX": 0,
+            "BANKNIFTY": 0,
+        }
+        # Multi-Strategy Advisory Ranking Ledger (maps position_id -> priority weight)
+        self.strategy_priority_weights: dict[str, float] = {
+            "OPTIONMATE_RBFN_AUCTION": 1.00,
+            "MIDDAY_MOMENTUM_EXTENSION": 0.85,
+            "OPENING_RANGE_BREAKOUT": 0.75,
+            "OPENING_RANGE_BREAKDOWN": 0.75,
+            "LIQUIDITY_SWEEP": 0.50,
+            "INTRADAY_REVERSAL": 0.40,
+            "DERIVATIVE_BASIS_REVERSION": 0.40,
+        }
+        # Daily canonical trade counters per index for dual-stream shadow tagging
+        self.daily_trade_counters: dict[str, int] = {
+            "NIFTY": 0,
+            "SENSEX": 0,
+            "BANKNIFTY": 0,
+        }
 
         # Forensic Decision Journal Engine (non-blocking in-memory queue & shadow barrier evaluator)
         self.journal = journal if journal is not None else SentinelRealtimeJournal()
@@ -1526,6 +1562,47 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
         with self._lock:
             self.cached_rbfn_signals[index_name] = signal
+
+            # -------------------------------------------------------------
+            # Step 1: Dynamic Per-Index Gear Switching with 3-Bar Hysteresis Lock
+            # Mathematical Specification:
+            # Ω_10 = Range_10m / ATR_20
+            # If Ω_10 >= 1.80: Escalate to GEAR_2_TREND immediately on expansion impulse.
+            # If Ω_10 < 1.00: Require 3 consecutive 5m bars of corridor compression
+            # before de-escalating to GEAR_1_RANGE, preventing trailing stop chattering.
+            # -------------------------------------------------------------
+            if macro_daily_atr > 0.0:
+                omega_10 = round(range_10m / macro_daily_atr, 3)
+                self.gear_expansion_ratios[index_name] = omega_10
+                curr_gear = self.session_gears.get(index_name, "GEAR_1_RANGE")
+
+                if omega_10 >= 1.80:
+                    self.gear_range_bar_counters[index_name] = 0
+                    self.gear_trend_bar_counters[index_name] = self.gear_trend_bar_counters.get(index_name, 0) + 1
+                    if curr_gear != "GEAR_2_TREND":
+                        self.session_gears[index_name] = "GEAR_2_TREND"
+                        if index_name == "NIFTY":
+                            self.session_gear = "GEAR_2_TREND"  # Sync legacy fallback
+                        logger.info(
+                            f"⚙️ [GEAR ESCALATION] {index_name} switched {curr_gear} -> GEAR_2_TREND "
+                            f"(Range10m={range_10m:.1f}, ATR20={macro_daily_atr:.1f}, Ω10={omega_10:.2f} >= 1.80)"
+                        )
+                elif omega_10 < 1.00:
+                    self.gear_range_bar_counters[index_name] = self.gear_range_bar_counters.get(index_name, 0) + 1
+                    # 3-Bar Hysteresis Lock: require 3 consecutive consolidation bars to revert to RANGE
+                    if curr_gear == "GEAR_2_TREND" and self.gear_range_bar_counters[index_name] >= 3:
+                        self.session_gears[index_name] = "GEAR_1_RANGE"
+                        if index_name == "NIFTY":
+                            self.session_gear = "GEAR_1_RANGE"  # Sync legacy fallback
+                        logger.info(
+                            f"⚙️ [GEAR DE-ESCALATION] {index_name} switched GEAR_2_TREND -> GEAR_1_RANGE "
+                            f"(3 consecutive compression bars, Ω10={omega_10:.2f} < 1.00)"
+                        )
+                else:
+                    # In hysteresis deadband [1.00, 1.80): retain current gear and reset counters
+                    self.gear_range_bar_counters[index_name] = 0
+                    self.gear_trend_bar_counters[index_name] = 0
+
         return signal
 
     def _evaluate_option_depth(self, depth: UpstoxLevel5DepthRecord) -> None:
@@ -1580,7 +1657,13 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             # Gate 4: Derivatives OI Quarantine (Pre-09:15:00 IST stand-aside)
             # OI broadcast during pre-market is stale remnant from prior session
             effective_oi = float(depth.open_interest)
-            if datetime.now().time() < self.market_open_time:
+            if depth.exchange_timestamp_ms > 0:
+                from datetime import timezone, timedelta
+                ist_tz = timezone(timedelta(hours=5, minutes=30))
+                opt_check_time = datetime.fromtimestamp(depth.exchange_timestamp_ms / 1000.0, tz=ist_tz).time()
+            else:
+                opt_check_time = datetime.now().time()
+            if opt_check_time < self.market_open_time:
                 effective_oi = 0.0
 
             wall_obs.on_option_tick(
@@ -1612,7 +1695,14 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         if spot <= 0:
             return
 
-        now_dt = datetime.now()
+        # Derive causal wall time from exchange timestamp or fallback to system clock
+        if depth.exchange_timestamp_ms > 0:
+            from datetime import timezone, timedelta
+            # IST is UTC+5:30
+            ist_tz = timezone(timedelta(hours=5, minutes=30))
+            now_dt = datetime.fromtimestamp(depth.exchange_timestamp_ms / 1000.0, tz=ist_tz)
+        else:
+            now_dt = datetime.now()
         now_time = now_dt.time()
 
         # Opening shock freeze: strictly suppress all candidate setups unless Mode 5 Opening Drive is active
@@ -1699,7 +1789,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         # Evaluates 09:30 - 12:00. Strictly gated to GEAR_1_RANGE (Chop/Expiry Pinning).
         # Fading breakouts in Gear 2 Trend is strictly suppressed fail-closed.
         # -------------------------------------------------------------
-        elif (pd_bounds := self.prior_day_levels.get(index_name)) is not None and getattr(pd_bounds, "verified", False) and self.session_gear == "GEAR_1_RANGE":
+        elif (pd_bounds := self.prior_day_levels.get(index_name)) is not None and getattr(pd_bounds, "verified", False) and self.session_gears.get(index_name, self.session_gear) == "GEAR_1_RANGE":
             pdh = pd_bounds.get("pdh", 0.0)
             pdl = pd_bounds.get("pdl", 0.0)
             is_exp = (self.expiry_info.active_expiry_index == index_name)
@@ -1750,7 +1840,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         # Requires GEAR_1_RANGE (or rotational chop) to avoid fading strong macro trending drives.
         # -------------------------------------------------------------
         elif (
-            self.session_gear == "GEAR_1_RANGE"
+            self.session_gears.get(index_name, self.session_gear) == "GEAR_1_RANGE"
             and (b_engine := self.basis_engines.get(index_name)) is not None
             and len(self.spot_history.get(index_name, ())) >= 20
             and len(self.futures_history.get(index_name, ())) >= 20
@@ -2256,11 +2346,31 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
                     with self._lock:
                         idx_apm = self.apms.get(index_name, self.apm)
-                        # Invariant 2.3: Reject entry if in COOL_OFF or unarmable state
-                        if idx_apm.state in {STATE_COOL_OFF, STATE_IN_FLIGHT, STATE_TRAIL_LOCK, STATE_EXIT_PENDING}:
+                        active_gear = self.session_gears.get(index_name, self.session_gear)
+                        strat_priority = self.strategy_priority_weights.get(strategy_name, 0.50)
+
+                        # Dual-Stream Shadow Telemetry Tagging (Canonical vs Observational)
+                        curr_trades = self.daily_trade_counters.get(index_name, 0)
+                        shadow_tier = "PRIMARY_CANONICAL" if curr_trades < 2 else "OBSERVATIONAL_SHADOW"
+
+                        # Invariant 2.3 & Hardened Defense 3: Priority-Based Early Release from STATE_COOL_OFF
+                        # Allow entry if:
+                        # 1. State is STANDBY, LIQUIDATED, or PULLBACK_WAIT
+                        # 2. State is COOL_OFF, BUT setup is high-priority (Mode 5, priority >= 0.90) OR
+                        #    the signal direction inverts (e.g. PE after stopped CE), preventing false lock.
+                        can_bypass_cool_off = (
+                            idx_apm.state == STATE_COOL_OFF
+                            and (
+                                strat_priority >= 0.90
+                                or (getattr(idx_apm, "cool_off_direction", None) is not None and getattr(idx_apm, "cool_off_direction") != required_option_type)
+                            )
+                        )
+
+                        if idx_apm.state in {STATE_IN_FLIGHT, STATE_TRAIL_LOCK, STATE_EXIT_PENDING}:
                             is_target_strike = False
-                        # Allow entry if APM is in STANDBY, LIQUIDATED, or PULLBACK_WAIT
-                        elif is_target_strike and idx_apm.state in {STATE_STANDBY, STATE_LIQUIDATED, STATE_PULLBACK_WAIT}:
+                        elif idx_apm.state == STATE_COOL_OFF and not can_bypass_cool_off:
+                            is_target_strike = False
+                        elif is_target_strike and (idx_apm.state in {STATE_STANDBY, STATE_LIQUIDATED, STATE_PULLBACK_WAIT} or can_bypass_cool_off):
                             opt_q = {
                                 "symbol": depth.symbol,
                                 "token": depth.token,
@@ -2282,8 +2392,8 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                                 tp_pts=target_pts,
                                 friction_drag_pts=total_drag,
                                 opt_quote=opt_q,
-                                is_runner_mode=True,
-                                session_gear="GEAR_2_TREND",
+                                is_runner_mode=(active_gear == "GEAR_2_TREND"),
+                                session_gear=active_gear,
                                 opt_stop_loss_pct=0.20,
                                 atr_1m=effective_atr,
                                 lots=computed_lots,
@@ -2291,15 +2401,16 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                                 lot_size=ex_lot_size,
                                 total_quantity=total_qty,
                                 is_expiry_day=is_exp,
-                                is_deep_itm=(itm_res.moneyness == "DEEP_ITM"),
+                                is_deep_itm=(itm_res.moneyness in {"ITM_1", "DEEP_ITM"}),
                                 strategy_name=strategy_name,
                             )
                             if entered:
+                                self.daily_trade_counters[index_name] = curr_trades + 1
                                 if rbfn_sig is not None:
                                     self.cached_rbfn_signals[index_name] = None
-                                exec_reason = setup_reason
+                                exec_reason = f"[{shadow_tier}] {setup_reason}"
                                 if strategy_name == "OPTIONMATE_RBFN_AUCTION" and rbfn_sig and rbfn_sig.sustainable_anchor_price > 0:
-                                    exec_reason = f"{setup_reason} [ANCHOR: ₹{rbfn_sig.sustainable_anchor_price:.1f}]"
+                                    exec_reason = f"{exec_reason} [ANCHOR: ₹{rbfn_sig.sustainable_anchor_price:.1f}]"
                                 self.journal.record_execution(
                                     position_id=pos_id,
                                     index_name=index_name,
