@@ -12,4 +12,4 @@ export TRADEBOT_ROOT="/Users/madhuram/tradebot"
 export PYTHONPATH="$REPO_DIR:${PYTHONPATH:-}"
 
 cd "$REPO_DIR"
-exec /opt/anaconda3/bin/python3 -m uvicorn pocket_companion.service:app --host 0.0.0.0 --port 8765
+exec /Users/madhuram/tradebot/.venv/bin/python -m uvicorn pocket_companion.service:app --host 0.0.0.0 --port 8765

@@ -1,8 +1,12 @@
 package com.aixion.tradebotpocket
 
+import android.content.Context
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -24,6 +28,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -32,6 +37,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aixion.tradebotpocket.data.*
+import com.aixion.tradebotpocket.notification.NotificationHelper
 import com.aixion.tradebotpocket.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -44,7 +50,8 @@ sealed class UiState {
         val health: HealthResponse,
         val positions: PositionsResponse,
         val market: MarketResponse,
-        val chart: ChartResponse?
+        val chart: ChartResponse?,
+        val notifications: List<NotificationItem> = emptyList()
     ) : UiState()
     data class Error(val message: String) : UiState()
 }
@@ -66,8 +73,16 @@ class MainViewModel : ViewModel() {
     var apiKey by mutableStateOf("aixion-pocket-secret-key-v1")
     var autoRefresh by mutableStateOf(true)
 
+    private val seenNotificationIds = mutableSetOf<String>()
+    var appContext: Context? = null
+
     init {
         startPolling()
+    }
+
+    fun setContext(context: Context) {
+        appContext = context.applicationContext
+        NotificationHelper.createNotificationChannel(context)
     }
 
     fun refreshData() {
@@ -82,7 +97,25 @@ class MainViewModel : ViewModel() {
                 } catch (e: Exception) {
                     null
                 }
-                _uiState.value = UiState.Success(health, positions, market, chart)
+                val notifResponse = try {
+                    api.getNotifications(apiKey, selectedIndex)
+                } catch (e: Exception) {
+                    null
+                }
+
+                val notifs = notifResponse?.notifications ?: emptyList()
+
+                // Check for new notifications to trigger local Android heads-up alerts
+                appContext?.let { ctx ->
+                    for (notif in notifs) {
+                        if (!seenNotificationIds.contains(notif.id)) {
+                            seenNotificationIds.add(notif.id)
+                            NotificationHelper.showNotification(ctx, notif)
+                        }
+                    }
+                }
+
+                _uiState.value = UiState.Success(health, positions, market, chart, notifs)
             } catch (e: Exception) {
                 _uiState.value = UiState.Error(e.localizedMessage ?: "Connection failure to companion service.")
             }
@@ -120,6 +153,22 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainNavigationScaffold(viewModel: MainViewModel = viewModel()) {
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        viewModel.setContext(context)
+    }
+
+    // Android 13+ Notification Permission Launcher
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val permissionLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestPermission(),
+            onResult = { _ -> }
+        )
+        LaunchedEffect(Unit) {
+            permissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
     val uiState by viewModel.uiState.collectAsState()
     var showConfigDialog by remember { mutableStateOf(false) }
 

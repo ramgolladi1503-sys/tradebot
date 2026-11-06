@@ -34,6 +34,12 @@ interface PocketApiService {
     suspend fun getSignals(
         @Header("X-Aixion-Pocket-Key") apiKey: String
     ): SignalsResponse
+
+    @GET("notifications")
+    suspend fun getNotifications(
+        @Header("X-Aixion-Pocket-Key") apiKey: String,
+        @retrofit2.http.Query("index") index: String = "NIFTY"
+    ): NotificationsResponse
 }
 
 object ApiClient {

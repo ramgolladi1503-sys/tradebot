@@ -86,3 +86,19 @@ data class ChartResponse(
     @SerializedName("bias") val bias: String?,
     @SerializedName("current_spot") val currentSpot: Double?
 )
+
+data class NotificationItem(
+    @SerializedName("id") val id: String,
+    @SerializedName("timestamp") val timestamp: String,
+    @SerializedName("type") val type: String,
+    @SerializedName("title") val title: String,
+    @SerializedName("message") val message: String,
+    @SerializedName("level_price") val levelPrice: Double?,
+    @SerializedName("spot_price") val spotPrice: Double?,
+    @SerializedName("urgency") val urgency: String = "HIGH"
+)
+
+data class NotificationsResponse(
+    @SerializedName("timestamp") val timestamp: String,
+    @SerializedName("notifications") val notifications: List<NotificationItem>
+)

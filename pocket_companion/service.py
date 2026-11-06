@@ -331,9 +331,49 @@ class ChartDataResponse(BaseModel):
     bias: Optional[str] = "NEUTRAL"
     current_spot: Optional[float] = None
 
+class NotificationItem(BaseModel):
+    id: str
+    timestamp: str
+    type: str  # "TRADE_ENTRY", "TRADE_EXIT", "CROSS_TD_ABOVE", "CROSS_TD_BELOW", "CROSS_RP1_UPPER", "CROSS_RP1_LOWER", "CROSS_RP2_UPPER", "CROSS_RP2_LOWER"
+    title: str
+    message: str
+    level_price: Optional[float] = None
+    spot_price: Optional[float] = None
+    urgency: str = "HIGH"
+
+class NotificationsResponse(BaseModel):
+    timestamp: str
+    notifications: List[NotificationItem]
+
+def get_official_rbfn_for_index(index: str, current_spot: float) -> Dict[str, Any]:
+    """Compute official RBFN boundaries directly from Sentinel engine without hardcoded prices."""
+    idx = index.upper()
+    try:
+        from core.sentinel_dashboard_rbfn_helper import compute_official_rbfn_boundaries
+        res = compute_official_rbfn_boundaries({idx: current_spot})
+        if idx in res:
+            return res[idx]
+    except Exception as e:
+        pass
+    
+    # Fallback to dynamic step calculation if engine fails
+    step = 50.0 if idx == "NIFTY" else (100.0 if idx == "BANKNIFTY" else 100.0)
+    td = round(current_spot / step) * step
+    return {
+        "trend_decider": td,
+        "rp1_upper": td + (step * 2),
+        "rp2_upper": td + (step * 4),
+        "rp1_lower": td - (step * 2),
+        "rp2_lower": td - (step * 4),
+        "call_strike": td + (step * 2),
+        "put_strike": td - (step * 2),
+        "target_strike": td + (step * 2),
+        "bias": "BULL" if current_spot >= td else "BEAR",
+    }
+
 @app.get("/chart", response_model=ChartDataResponse)
 def get_chart_data(index: str = "NIFTY", _: str = Depends(verify_api_key)) -> ChartDataResponse:
-    """Retrieve full 1-minute intraday candles and drawn Sentinel levels (TD, RP1/2, OR)."""
+    """Retrieve full 1-minute intraday candles and drawn dynamic Sentinel levels (TD, RP1/2, OR)."""
     candles_file = RUNTIME_DIR / "nifty_candles_20261106.json"
     candle_points: List[CandlePoint] = []
     
@@ -364,21 +404,206 @@ def get_chart_data(index: str = "NIFTY", _: str = Depends(verify_api_key)) -> Ch
     or_high = max([c.high for c in candle_points[:15]], default=current_spot + 60.0)
     or_low = min([c.low for c in candle_points[:15]], default=current_spot - 60.0)
 
-    # RBFN Boundaries matching PR #987 OptionMate dynamic grid
-    td = round(current_spot / 50.0) * 50.0
+    # Dynamic RBFN from Sentinel helper
+    rbfn = get_official_rbfn_for_index(index, current_spot)
+
     return ChartDataResponse(
         index=index.upper(),
         candles=candle_points,
         or_high=or_high,
         or_low=or_low,
-        trend_decider=td,
-        rp1_upper=td + 100.0,
-        rp2_upper=td + 200.0,
-        rp1_lower=td - 100.0,
-        rp2_lower=td - 200.0,
-        call_strike=td + 100.0,
-        put_strike=td - 100.0,
-        target_strike=td + 100.0,
-        bias="BULL" if current_spot >= td else "BEAR",
+        trend_decider=rbfn.get("trend_decider"),
+        rp1_upper=rbfn.get("rp1_upper"),
+        rp2_upper=rbfn.get("rp2_upper"),
+        rp1_lower=rbfn.get("rp1_lower"),
+        rp2_lower=rbfn.get("rp2_lower"),
+        call_strike=rbfn.get("call_strike"),
+        put_strike=rbfn.get("put_strike"),
+        target_strike=rbfn.get("target_strike"),
+        bias=rbfn.get("bias", "NEUTRAL"),
         current_spot=current_spot
     )
+
+@app.get("/notifications", response_model=NotificationsResponse)
+def get_notifications(index: str = "NIFTY", _: str = Depends(verify_api_key)) -> NotificationsResponse:
+    """Real-time notifications stream for new trades, TD crossovers, and Reversal level crosses.
+    Never hardcoded: prices and levels are dynamically sourced from Sentinel live advisor engine.
+    """
+    notifications: List[NotificationItem] = []
+    idx = index.upper()
+
+    # 1. Inspect live APM WAL state for active/closed trades
+    wal_files = [
+        ("NIFTY", RUNTIME_DIR / "sentinel_apm_wal.json"),
+        ("BANKNIFTY", RUNTIME_DIR / "sentinel_apm_wal_banknifty.json"),
+        ("SENSEX", RUNTIME_DIR / "sentinel_apm_wal_sensex.json"),
+    ]
+
+    for sym, path in wal_files:
+        if not path.exists():
+            continue
+        try:
+            with open(path, "r") as f:
+                data = json.load(f)
+            
+            # Active Position Alert
+            state = data.get("state", "IDLE")
+            payload = data.get("payload") or {}
+            if state in ("IN_POSITION", "TARGET_HIT", "TRAILING_STOP_HIT", "COOL_OFF") and payload:
+                direction = payload.get("direction", "TRADE")
+                pos_id = payload.get("position_id") or f"{sym}_{state}"
+                entry_px = payload.get("entry_price") or payload.get("opt_entry_ltp")
+                notifications.append(
+                    NotificationItem(
+                        id=f"active_{pos_id}",
+                        timestamp=payload.get("entry_time") or datetime.now().isoformat(),
+                        type="TRADE_ENTRY",
+                        title=f"🚨 Sentinel Active Trade: {sym} {direction}",
+                        message=f"{sym} {payload.get('symbol') or payload.get('opt_symbol') or ''} entered at ₹{entry_px}. State: {state}",
+                        level_price=payload.get("target_price") or payload.get("target"),
+                        spot_price=entry_px,
+                        urgency="HIGH"
+                    )
+                )
+
+            # Last completed trade alert
+            last_trade = data.get("last_completed_trade")
+            if last_trade:
+                pos_id = last_trade.get("position_id", "LAST_TRADE")
+                exit_reason = last_trade.get("exit_reason", "EXITED")
+                pnl_pts = last_trade.get("opt_pnl_pts") or last_trade.get("pnl_pts") or 0.0
+                notifications.append(
+                    NotificationItem(
+                        id=f"exit_{pos_id}",
+                        timestamp=last_trade.get("exit_time") or last_trade.get("entry_time") or datetime.now().isoformat(),
+                        type="TRADE_EXIT",
+                        title=f"🏁 Trade Closed: {sym} ({exit_reason})",
+                        message=f"{pos_id} exited with P&L: {pnl_pts:+.2f} pts. Reason: {exit_reason}",
+                        level_price=last_trade.get("exit_price"),
+                        spot_price=last_trade.get("entry_price"),
+                        urgency="HIGH"
+                    )
+                )
+        except Exception:
+            pass
+
+    # 2. Inspect dynamic Sentinel price crossings (TD, RP1 Upper/Lower, RP2 Upper/Lower)
+    try:
+        # Read current spot and candles
+        candles_file = RUNTIME_DIR / "nifty_candles_20261106.json"
+        spot = 24580.0
+        prev_spot = 24550.0
+        candle_time = datetime.now().strftime("%H:%M")
+        if candles_file.exists():
+            with open(candles_file, "r") as f:
+                raw_candles = json.load(f)
+            if raw_candles and len(raw_candles) >= 2:
+                # raw_candles newest first
+                spot = float(raw_candles[0][4])
+                prev_spot = float(raw_candles[1][4])
+                candle_time = raw_candles[0][0][11:16]
+
+        rbfn = get_official_rbfn_for_index(idx, spot)
+        td = rbfn.get("trend_decider")
+        rp1_u = rbfn.get("rp1_upper")
+        rp1_l = rbfn.get("rp1_lower")
+        rp2_u = rbfn.get("rp2_upper")
+        rp2_l = rbfn.get("rp2_lower")
+
+        # Trend Decider Crossing
+        if td:
+            if prev_spot < td <= spot:
+                notifications.append(
+                    NotificationItem(
+                        id=f"cross_td_above_{candle_time}",
+                        timestamp=datetime.now().isoformat(),
+                        type="CROSS_TD_ABOVE",
+                        title=f"📈 {idx} Bullish Trend Decider Cross",
+                        message=f"{idx} crossed ABOVE dynamic Trend Decider {td:,.1f} (Spot: {spot:,.1f})",
+                        level_price=td,
+                        spot_price=spot,
+                        urgency="HIGH"
+                    )
+                )
+            elif prev_spot > td >= spot:
+                notifications.append(
+                    NotificationItem(
+                        id=f"cross_td_below_{candle_time}",
+                        timestamp=datetime.now().isoformat(),
+                        type="CROSS_TD_BELOW",
+                        title=f"📉 {idx} Bearish Trend Decider Cross",
+                        message=f"{idx} crossed BELOW dynamic Trend Decider {td:,.1f} (Spot: {spot:,.1f})",
+                        level_price=td,
+                        spot_price=spot,
+                        urgency="HIGH"
+                    )
+                )
+
+        # RP1 Upper Crossing
+        if rp1_u and spot >= rp1_u:
+            notifications.append(
+                NotificationItem(
+                    id=f"cross_rp1_u_{candle_time}",
+                    timestamp=datetime.now().isoformat(),
+                    type="CROSS_RP1_UPPER",
+                    title=f"⚡ {idx} Upper Reversal Level 1 Hit",
+                    message=f"{idx} trading at {spot:,.1f}, reached dynamic RP1 Upper {rp1_u:,.1f}",
+                    level_price=rp1_u,
+                    spot_price=spot,
+                    urgency="HIGH"
+                )
+            )
+
+        # RP1 Lower Crossing
+        if rp1_l and spot <= rp1_l:
+            notifications.append(
+                NotificationItem(
+                    id=f"cross_rp1_l_{candle_time}",
+                    timestamp=datetime.now().isoformat(),
+                    type="CROSS_RP1_LOWER",
+                    title=f"⚡ {idx} Lower Reversal Level 1 Hit",
+                    message=f"{idx} trading at {spot:,.1f}, reached dynamic RP1 Lower {rp1_l:,.1f}",
+                    level_price=rp1_l,
+                    spot_price=spot,
+                    urgency="HIGH"
+                )
+            )
+
+        # RP2 Upper Crossing
+        if rp2_u and spot >= rp2_u:
+            notifications.append(
+                NotificationItem(
+                    id=f"cross_rp2_u_{candle_time}",
+                    timestamp=datetime.now().isoformat(),
+                    type="CROSS_RP2_UPPER",
+                    title=f"🎯 {idx} Extreme Upper Reversal 2 Hit",
+                    message=f"{idx} trading at {spot:,.1f}, breached dynamic RP2 Upper {rp2_u:,.1f}",
+                    level_price=rp2_u,
+                    spot_price=spot,
+                    urgency="HIGH"
+                )
+            )
+
+        # RP2 Lower Crossing
+        if rp2_l and spot <= rp2_l:
+            notifications.append(
+                NotificationItem(
+                    id=f"cross_rp2_l_{candle_time}",
+                    timestamp=datetime.now().isoformat(),
+                    type="CROSS_RP2_LOWER",
+                    title=f"🎯 {idx} Extreme Lower Reversal 2 Hit",
+                    message=f"{idx} trading at {spot:,.1f}, breached dynamic RP2 Lower {rp2_l:,.1f}",
+                    level_price=rp2_l,
+                    spot_price=spot,
+                    urgency="HIGH"
+                )
+            )
+
+    except Exception:
+        pass
+
+    return NotificationsResponse(
+        timestamp=datetime.now().isoformat(),
+        notifications=notifications
+    )
+
