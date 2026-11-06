@@ -571,9 +571,9 @@ class ActivePositionManager:
             opt_gain = current_opt_ltp - p.opt_entry_ltp
             if opt_gain > p.max_opt_excursion:
                 p.max_opt_excursion = round(opt_gain, 2)
-            if opt_gain >= tp1_milestone_pts or gain >= tp1_milestone_pts:
+            if opt_gain >= tp1_milestone_pts:
                 p.target_1_hit = True
-            if opt_gain >= tp2_milestone_pts or gain >= tp2_milestone_pts:
+            if opt_gain >= tp2_milestone_pts:
                 p.target_2_hit = True
 
         # 1. Option Native Stop Loss (-20%)

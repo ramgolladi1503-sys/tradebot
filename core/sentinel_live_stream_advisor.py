@@ -1514,11 +1514,97 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             else:
                 buf = 15.0 if index_name == "SENSEX" else 5.0
                 step = 100 if index_name in {"SENSEX", "BANKNIFTY"} else 50
-                tested_upper = any(b["high"] >= grid.rp1_upper for b in history[-3:])
-                closed_below_upper = all(b["close"] <= (grid.rp1_upper - buf) for b in history[-2:])
-                if tested_upper and closed_below_upper and bar_close > grid.trend_decider:
+                
+                # Check for 10-Minute Sustained Breakout (Two consecutive 5-minute bars closing beyond boundary)
+                c_prev = history[-2]["close"]
+                c_curr = history[-1]["close"]
+                is_10m_breakout_upper = (c_prev >= grid.rp1_upper and c_curr >= grid.rp1_upper)
+                is_10m_breakdown_lower = (c_prev <= grid.rp1_lower and c_curr <= grid.rp1_lower)
+                
+                # Check for S7: Extreme Floor Bounce (Tested RP2_LOWER and holds above for 10 mins)
+                tested_rp2_lower = any(b["low"] <= grid.rp2_lower for b in history[-6:])
+                is_10m_bounce_rp2 = tested_rp2_lower and (c_prev >= grid.rp2_lower and c_curr >= grid.rp2_lower and c_curr < grid.rp1_lower)
+
+                # -------------------------------------------------------------
+                # 1. SCENARIO 7 (S7): RP2_LOWER -> RP1_LOWER Extreme Floor Bounce
+                # Tested RP2_LOWER, sustained bounce >= RP2_LOWER for 10m -> Target = RP1_LOWER
+                # Evaluated before general breakdown to prioritize mean-reversion at extreme floor.
+                # -------------------------------------------------------------
+                if is_10m_bounce_rp2:
+                    target_k = round(grid.rp1_lower / step) * step
+                    t_pts = max(20.0 if index_name != "SENSEX" else 50.0, abs(grid.rp1_lower - bar_close))
+                    s_pts = max(15.0 if index_name != "SENSEX" else 40.0, abs(bar_close - (grid.rp2_lower - (25.0 if index_name == "SENSEX" else 15.0))))
+                    signal = CachedRBFNAuctionSignal(
+                        timestamp_ms=timestamp_ms,
+                        index_name=index_name,
+                        action="BUY_CALL",
+                        direction="CE",
+                        target_strike=float(target_k),
+                        target_pts=round(t_pts, 2),
+                        sl_pts=round(s_pts, 2),
+                        setup_reason="RP2_LOWER_10M_FLOOR_BOUNCE",
+                        trade_phase="EXTREME_EXHAUSTION_REVERSAL",
+                        bar_time=bar_time,
+                        sustainable_anchor_price=calc_anchor,
+                        is_active=True,
+                        is_vetoed=False,
+                        veto_reason="",
+                    )
+                # -------------------------------------------------------------
+                # 2. SCENARIO 2 (S2): RP1_UPPER -> RP2_UPPER Expansion Breakout
+                # 10-min sustained hold above RP1_UPPER -> Target strike = round(RP2_UPPER)
+                # -------------------------------------------------------------
+                elif is_10m_breakout_upper and bar_close < grid.rp2_upper:
+                    target_k = round(grid.rp2_upper / step) * step
+                    t_pts = max(20.0 if index_name != "SENSEX" else 60.0, abs(grid.rp2_upper - bar_close))
+                    s_pts = max(15.0 if index_name != "SENSEX" else 45.0, abs(bar_close - (grid.rp1_upper - (25.0 if index_name == "SENSEX" else 15.0))))
+                    signal = CachedRBFNAuctionSignal(
+                        timestamp_ms=timestamp_ms,
+                        index_name=index_name,
+                        action="BUY_CALL",
+                        direction="CE",
+                        target_strike=float(target_k),
+                        target_pts=round(t_pts, 2),
+                        sl_pts=round(s_pts, 2),
+                        setup_reason="RP1_UPPER_10M_EXPANSION_BREAKOUT",
+                        trade_phase="MIDDAY_EXPANSION_BREAKOUT",
+                        bar_time=bar_time,
+                        sustainable_anchor_price=calc_anchor,
+                        is_active=True,
+                        is_vetoed=False,
+                        veto_reason="",
+                    )
+                # -------------------------------------------------------------
+                # 3. SCENARIO 4 (S4): RP1_LOWER -> RP2_LOWER Expansion Breakdown
+                # 10-min sustained hold below RP1_LOWER -> Target strike = round(RP2_LOWER)
+                # -------------------------------------------------------------
+                elif is_10m_breakdown_lower and bar_close > grid.rp2_lower:
+                    target_k = round(grid.rp2_lower / step) * step
+                    t_pts = max(20.0 if index_name != "SENSEX" else 60.0, abs(bar_close - grid.rp2_lower))
+                    s_pts = max(15.0 if index_name != "SENSEX" else 45.0, abs((grid.rp1_lower + (25.0 if index_name == "SENSEX" else 15.0)) - bar_close))
+                    signal = CachedRBFNAuctionSignal(
+                        timestamp_ms=timestamp_ms,
+                        index_name=index_name,
+                        action="BUY_PUT",
+                        direction="PE",
+                        target_strike=float(target_k),
+                        target_pts=round(t_pts, 2),
+                        sl_pts=round(s_pts, 2),
+                        setup_reason="RP1_LOWER_10M_EXPANSION_BREAKDOWN",
+                        trade_phase="MIDDAY_EXPANSION_BREAKDOWN",
+                        bar_time=bar_time,
+                        sustainable_anchor_price=calc_anchor,
+                        is_active=True,
+                        is_vetoed=False,
+                        veto_reason="",
+                    )
+                # -------------------------------------------------------------
+                # 4. SCENARIO 6 (S6): RP1_UPPER Reversal Fade (Capped Target)
+                # -------------------------------------------------------------
+                elif any(b["high"] >= grid.rp1_upper for b in history[-3:]) and all(b["close"] <= (grid.rp1_upper - buf) for b in history[-2:]) and bar_close > grid.trend_decider:
                     t_strike = round(grid.trend_decider / step) * step
-                    t_pts = max(15.0 if index_name != "SENSEX" else 45.0, abs(bar_close - grid.trend_decider))
+                    # Hardened: Cap reversal target to +20 pts milestone to eliminate midday theta bleed
+                    t_pts = min(20.0 if index_name != "SENSEX" else 50.0, max(15.0, abs(bar_close - grid.trend_decider)))
                     s_pts = max(12.0 if index_name != "SENSEX" else 35.0, abs((grid.rp1_upper + (30.0 if index_name == "SENSEX" else 20.0)) - bar_close))
                     signal = CachedRBFNAuctionSignal(
                         timestamp_ms=timestamp_ms,
@@ -1536,29 +1622,30 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         is_vetoed=False,
                         veto_reason="",
                     )
-                else:
-                    tested_lower = any(b["low"] <= grid.rp1_lower for b in history[-3:])
-                    closed_above_lower = all(b["close"] >= (grid.rp1_lower + buf) for b in history[-2:])
-                    if tested_lower and closed_above_lower and bar_close < grid.trend_decider:
-                        t_strike = round(grid.trend_decider / step) * step
-                        t_pts = max(15.0 if index_name != "SENSEX" else 45.0, abs(grid.trend_decider - bar_close))
-                        s_pts = max(12.0 if index_name != "SENSEX" else 35.0, abs(bar_close - (grid.rp1_lower - (30.0 if index_name == "SENSEX" else 20.0))))
-                        signal = CachedRBFNAuctionSignal(
-                            timestamp_ms=timestamp_ms,
-                            index_name=index_name,
-                            action="BUY_CALL",
-                            direction="CE",
-                            target_strike=float(t_strike),
-                            target_pts=round(t_pts, 2),
-                            sl_pts=round(s_pts, 2),
-                            setup_reason="RP1_LOWER_REVERSAL_CONFIRMED",
-                            trade_phase="MIDDAY_REVERSAL",
-                            bar_time=bar_time,
-                            sustainable_anchor_price=calc_anchor,
-                            is_active=True,
-                            is_vetoed=False,
-                            veto_reason="",
-                        )
+                # -------------------------------------------------------------
+                # 5. SCENARIO 8 (S8): RP1_LOWER Reversal Fade (Capped Target)
+                # -------------------------------------------------------------
+                elif any(b["low"] <= grid.rp1_lower for b in history[-3:]) and all(b["close"] >= (grid.rp1_lower + buf) for b in history[-2:]) and bar_close < grid.trend_decider:
+                    t_strike = round(grid.trend_decider / step) * step
+                    # Hardened: Cap reversal target to +20 pts milestone to eliminate midday theta bleed
+                    t_pts = min(20.0 if index_name != "SENSEX" else 50.0, max(15.0, abs(grid.trend_decider - bar_close)))
+                    s_pts = max(12.0 if index_name != "SENSEX" else 35.0, abs(bar_close - (grid.rp1_lower - (30.0 if index_name == "SENSEX" else 20.0))))
+                    signal = CachedRBFNAuctionSignal(
+                        timestamp_ms=timestamp_ms,
+                        index_name=index_name,
+                        action="BUY_CALL",
+                        direction="CE",
+                        target_strike=float(t_strike),
+                        target_pts=round(t_pts, 2),
+                        sl_pts=round(s_pts, 2),
+                        setup_reason="RP1_LOWER_REVERSAL_CONFIRMED",
+                        trade_phase="MIDDAY_REVERSAL",
+                        bar_time=bar_time,
+                        sustainable_anchor_price=calc_anchor,
+                        is_active=True,
+                        is_vetoed=False,
+                        veto_reason="",
+                    )
 
         with self._lock:
             self.cached_rbfn_signals[index_name] = signal
