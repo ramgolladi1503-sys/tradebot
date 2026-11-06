@@ -264,23 +264,51 @@ def validate_work_item(item: WorkItem, *, complete: bool = False) -> None:
     if not isinstance(item.extensions, dict):
         raise ValueError("work-item extensions must be an object")
     validate_evidence_standard_record(item, contract_hash=work_item_contract_hash(item))
+    if item.research_journal_initialized is not None and type(item.research_journal_initialized) is not bool:
+        raise ValueError("research_journal_initialized must be a boolean when present")
+    if (item.research_evidence is None) != (item.research_evidence_schema_version is None):
+        raise ValueError("research_evidence and research_evidence_schema_version must be present together")
+    if item.research_evidence is not None:
+        if not isinstance(item.research_evidence, tuple):
+            raise ValueError("research_evidence must be a tuple of event objects")
+        if (type(item.research_evidence_schema_version) is not int
+                or item.research_evidence_schema_version != 1):
+            raise ValueError("unsupported research_evidence_schema_version")
+        from .research_request_capture import validate_research_stream
+        validate_research_stream(item, contract_hash=work_item_contract_hash(item))
 
 
 def work_item_to_dict(item: WorkItem) -> dict[str, Any]:
     from dataclasses import asdict
     from .evidence import _plain
-    return _plain(asdict(item))
+    result = _plain(asdict(item))
+    for name in ("research_evidence", "research_evidence_schema_version", "research_journal_initialized"):
+        if result[name] is None:
+            result.pop(name)
+    return result
 
 
 def work_item_from_dict(data: dict[str, Any]) -> WorkItem:
     if not isinstance(data, dict):
         raise ValueError("work item must be a JSON object")
     unknown = set(data) - WORK_ITEM_FIELDS
-    missing = WORK_ITEM_FIELDS - set(data)
+    optional_fields = {"research_evidence", "research_evidence_schema_version", "research_journal_initialized"}
+    missing = WORK_ITEM_FIELDS - set(data) - optional_fields
     if unknown or missing:
         raise ValueError(f"work item schema mismatch; missing={sorted(missing)}, unknown={sorted(unknown)}")
+    research_pair = {"research_evidence", "research_evidence_schema_version"}
+    if bool(research_pair & set(data)) != (research_pair <= set(data)):
+        raise ValueError("research_evidence and research_evidence_schema_version must be present together")
+    if research_pair <= set(data) and (data["research_evidence"] is None
+                                       or data["research_evidence_schema_version"] is None):
+        raise ValueError("research stream fields cannot be null")
+    if ("research_journal_initialized" in data
+            and type(data["research_journal_initialized"]) is not bool):
+        raise ValueError("research_journal_initialized must be a boolean when present")
     enum_fields = {"type": WorkItemType, "current_state": DeliveryState}
     converted: dict[str, Any] = dict(data)
+    for name in optional_fields:
+        converted.setdefault(name, None)
     for key, enum_type in enum_fields.items():
         try:
             converted[key] = enum_type(converted[key])
@@ -326,6 +354,10 @@ def work_item_from_dict(data: dict[str, Any]) -> WorkItem:
                  "allowed_paths", "forbidden_paths", "expected_tests", "qa_attack_plan", "uat_criteria",
                  "release_gates", "evidence_refs", "required_ci_checks"):
         converted[name] = tuple(converted[name])
+    if converted["research_evidence"] is not None:
+        if not isinstance(converted["research_evidence"], list):
+            raise ValueError("research_evidence must be a JSON array")
+        converted["research_evidence"] = tuple(converted["research_evidence"])
     item = WorkItem(**converted)
     validate_work_item(item)
     return item
