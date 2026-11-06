@@ -62,7 +62,7 @@ class MainViewModel : ViewModel() {
     var currentTab by mutableStateOf(ScreenTab.DASHBOARD)
     var selectedIndex by mutableStateOf("NIFTY")
 
-    var serverUrl by mutableStateOf("http://10.0.2.2:8765")
+    var serverUrl by mutableStateOf("http://100.68.131.88:8765")
     var apiKey by mutableStateOf("aixion-pocket-secret-key-v1")
     var autoRefresh by mutableStateOf(true)
 

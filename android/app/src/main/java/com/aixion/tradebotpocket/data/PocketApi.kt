@@ -37,7 +37,7 @@ interface PocketApiService {
 }
 
 object ApiClient {
-    private var currentBaseUrl: String = "http://10.0.2.2:8765/"
+    private var currentBaseUrl: String = "http://100.68.131.88:8765/"
     private var apiService: PocketApiService? = null
 
     fun getService(baseUrl: String = currentBaseUrl): PocketApiService {
