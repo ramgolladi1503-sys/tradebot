@@ -746,16 +746,26 @@ class GovernedMorningOrchestrator:
                 clean_rows = [_serialize_instrument_row(r) for r in rows]
                 master_file.write_text(json.dumps(clean_rows, indent=2) + "\n", encoding="utf-8")
             authority_file = instruments_dir / f"instrument_authority_{self.session_date}.json"
-            if not authority_file.exists():
-                source_sha = getattr(self, "current_commit_sha", "")
-                if not source_sha:
-                    try:
-                        import subprocess
-                        source_sha = subprocess.check_output(
-                            ["git", "rev-parse", "HEAD"], cwd=str(self.repo_root), text=True
-                        ).strip()
-                    except Exception:
-                        source_sha = "UNKNOWN_COMMIT"
+            source_sha = getattr(self, "current_commit_sha", "")
+            if not source_sha:
+                try:
+                    import subprocess
+                    source_sha = subprocess.check_output(
+                        ["git", "rev-parse", "HEAD"], cwd=str(self.repo_root), text=True
+                    ).strip()
+                except Exception:
+                    source_sha = "UNKNOWN_COMMIT"
+            reproduce = True
+            if authority_file.exists():
+                try:
+                    existing = json.loads(authority_file.read_text(encoding="utf-8"))
+                    if existing.get("source_sha") == source_sha and existing.get("authority_verdict") == "PASS":
+                        reproduce = False
+                except Exception:
+                    reproduce = True
+            if reproduce:
+                if authority_file.exists():
+                    authority_file.unlink()
                 produce_authority(
                     master_path=master_file,
                     output_path=authority_file,

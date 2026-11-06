@@ -205,6 +205,24 @@
       "source_ids": [],
       "evidence_refs": [],
       "limitation": "Covers argument parity and cryptographic verification only; does not authorize live orders."
+    },
+    {
+      "claim_id": "LIVE_OBS_FEED_OPTION_DEBOUNCE_STABILITY",
+      "statement": "core/kite_depth_ws.py debounces option subscription missing checks and commits async option ownership on both subscribe and unsubscribe completion.",
+      "claim_kind": "implementation",
+      "scope_paths": [
+        "core/kite_client.py",
+        "core/kite_depth_ws.py",
+        "docs/agent_reviews/pr990_feed_option_subscription_debounce.md",
+        "governance/evidence/CLAIM_REGISTRY.json",
+        "governance/evidence/VERIFICATION_MATRIX.json",
+        "governance/evidence/work_items/LIVE-OBS-FEED-OPTION-DEBOUNCE-20261023.json",
+        "tests/test_kite_depth_restart.py"
+      ],
+      "status": "UNVERIFIED",
+      "source_ids": [],
+      "evidence_refs": [],
+      "limitation": "Covers feed stability and ownership commitment only; does not authorize live orders."
     }
   ]
 }

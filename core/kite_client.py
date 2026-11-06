@@ -400,11 +400,19 @@ class KiteClient:
         """
         interval_norm = self._normalize_interval(interval)
 
-        # Kite can be picky about tz-aware datetimes; strip tzinfo if present.
+        # Kite requires naive datetimes formatted in Indian Standard Time (IST).
+        # If tz-aware, convert to IST before stripping tzinfo.
         def _naive_dt(x: Any) -> Any:
             try:
-                if isinstance(x, datetime) and x.tzinfo is not None:
-                    return x.replace(tzinfo=None)
+                if isinstance(x, datetime):
+                    if x.tzinfo is not None:
+                        try:
+                            import pytz
+                            ist = pytz.timezone("Asia/Kolkata")
+                            return x.astimezone(ist).replace(tzinfo=None)
+                        except Exception:
+                            return x.replace(tzinfo=None)
+                    return x
             except Exception:
                 pass
             return x
