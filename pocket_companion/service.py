@@ -466,6 +466,29 @@ def get_notifications(index: str = "NIFTY", _: str = Depends(verify_api_key)) ->
                     )
                 )
 
+            # Recent Trade Entries from Trade History (today's entries)
+            history = data.get("trade_history", [])
+            for t in history[-5:]:
+                pos_id = t.get("position_id")
+                if not pos_id:
+                    continue
+                dir_str = t.get("direction", "TRADE")
+                contract = t.get("opt_symbol") or t.get("strike_contract") or ""
+                entry_px = t.get("opt_entry_ltp") or t.get("entry_price")
+                entry_time = str(t.get("entry_time") or "")
+                notifications.append(
+                    NotificationItem(
+                        id=f"entry_{pos_id}",
+                        timestamp=entry_time,
+                        type="TRADE_ENTRY",
+                        title=f"🚨 Sentinel Trade Entry: {sym} {dir_str}",
+                        message=f"{sym} {contract} triggered entry at ₹{entry_px} ({entry_time[11:16] if 'T' in entry_time else entry_time})",
+                        level_price=t.get("target_price"),
+                        spot_price=entry_px,
+                        urgency="HIGH"
+                    )
+                )
+
             # Last completed trade alert
             last_trade = data.get("last_completed_trade")
             if last_trade:
@@ -487,118 +510,122 @@ def get_notifications(index: str = "NIFTY", _: str = Depends(verify_api_key)) ->
         except Exception:
             pass
 
-    # 2. Inspect dynamic Sentinel price crossings (TD, RP1 Upper/Lower, RP2 Upper/Lower)
+    # 2. Inspect dynamic Sentinel price crossings across intraday candles
     try:
-        # Read current spot and candles
         candles_file = RUNTIME_DIR / "nifty_candles_20261106.json"
         spot = 24580.0
-        prev_spot = 24550.0
-        candle_time = datetime.now().strftime("%H:%M")
         if candles_file.exists():
             with open(candles_file, "r") as f:
                 raw_candles = json.load(f)
-            if raw_candles and len(raw_candles) >= 2:
-                # raw_candles newest first
-                spot = float(raw_candles[0][4])
-                prev_spot = float(raw_candles[1][4])
-                candle_time = raw_candles[0][0][11:16]
+            if raw_candles:
+                # Chronological order (oldest to newest)
+                chron = raw_candles[::-1] if isinstance(raw_candles[0], list) else []
+                spot = float(chron[-1][4]) if chron else 24580.0
+                rbfn = get_official_rbfn_for_index(idx, spot)
+                td = rbfn.get("trend_decider")
+                rp1_u = rbfn.get("rp1_upper")
+                rp1_l = rbfn.get("rp1_lower")
+                rp2_u = rbfn.get("rp2_upper")
+                rp2_l = rbfn.get("rp2_lower")
 
-        rbfn = get_official_rbfn_for_index(idx, spot)
-        td = rbfn.get("trend_decider")
-        rp1_u = rbfn.get("rp1_upper")
-        rp1_l = rbfn.get("rp1_lower")
-        rp2_u = rbfn.get("rp2_upper")
-        rp2_l = rbfn.get("rp2_lower")
+                # Scan through recent bars (last 45 bars) to detect all genuine crossing events
+                for i in range(max(1, len(chron) - 45), len(chron)):
+                    prev_c = float(chron[i-1][4])
+                    curr_c = float(chron[i][4])
+                    bar_time = chron[i][0][11:16]
 
-        # Trend Decider Crossing
-        if td:
-            if prev_spot < td <= spot:
-                notifications.append(
-                    NotificationItem(
-                        id=f"cross_td_above_{candle_time}",
-                        timestamp=datetime.now().isoformat(),
-                        type="CROSS_TD_ABOVE",
-                        title=f"📈 {idx} Bullish Trend Decider Cross",
-                        message=f"{idx} crossed ABOVE dynamic Trend Decider {td:,.1f} (Spot: {spot:,.1f})",
-                        level_price=td,
-                        spot_price=spot,
-                        urgency="HIGH"
-                    )
-                )
-            elif prev_spot > td >= spot:
-                notifications.append(
-                    NotificationItem(
-                        id=f"cross_td_below_{candle_time}",
-                        timestamp=datetime.now().isoformat(),
-                        type="CROSS_TD_BELOW",
-                        title=f"📉 {idx} Bearish Trend Decider Cross",
-                        message=f"{idx} crossed BELOW dynamic Trend Decider {td:,.1f} (Spot: {spot:,.1f})",
-                        level_price=td,
-                        spot_price=spot,
-                        urgency="HIGH"
-                    )
-                )
+                    # Trend Decider Crossing
+                    if td:
+                        if prev_c < td <= curr_c:
+                            notifications.append(
+                                NotificationItem(
+                                    id=f"cross_td_above_{bar_time}",
+                                    timestamp=chron[i][0],
+                                    type="CROSS_TD_ABOVE",
+                                    title=f"📈 {idx} Bullish TD Breakout",
+                                    message=f"{idx} crossed ABOVE dynamic Trend Decider ₹{td:,.1f} at {bar_time} (Spot: ₹{curr_c:,.1f})",
+                                    level_price=td,
+                                    spot_price=curr_c,
+                                    urgency="HIGH"
+                                )
+                            )
+                        elif prev_c > td >= curr_c:
+                            notifications.append(
+                                NotificationItem(
+                                    id=f"cross_td_below_{bar_time}",
+                                    timestamp=chron[i][0],
+                                    type="CROSS_TD_BELOW",
+                                    title=f"📉 {idx} Bearish TD Breakdown",
+                                    message=f"{idx} crossed BELOW dynamic Trend Decider ₹{td:,.1f} at {bar_time} (Spot: ₹{curr_c:,.1f})",
+                                    level_price=td,
+                                    spot_price=curr_c,
+                                    urgency="HIGH"
+                                )
+                            )
 
-        # RP1 Upper Crossing
-        if rp1_u and spot >= rp1_u:
-            notifications.append(
-                NotificationItem(
-                    id=f"cross_rp1_u_{candle_time}",
-                    timestamp=datetime.now().isoformat(),
-                    type="CROSS_RP1_UPPER",
-                    title=f"⚡ {idx} Upper Reversal Level 1 Hit",
-                    message=f"{idx} trading at {spot:,.1f}, reached dynamic RP1 Upper {rp1_u:,.1f}",
-                    level_price=rp1_u,
-                    spot_price=spot,
-                    urgency="HIGH"
-                )
-            )
+                    # RP1 Upper Crossing
+                    if rp1_u:
+                        if prev_c < rp1_u <= curr_c:
+                            notifications.append(
+                                NotificationItem(
+                                    id=f"cross_rp1_u_above_{bar_time}",
+                                    timestamp=chron[i][0],
+                                    type="CROSS_RP1_UPPER",
+                                    title=f"⚡ {idx} Upper Reversal 1 Breached",
+                                    message=f"{idx} surged ABOVE dynamic RP1 Upper ₹{rp1_u:,.1f} at {bar_time} (Spot: ₹{curr_c:,.1f})",
+                                    level_price=rp1_u,
+                                    spot_price=curr_c,
+                                    urgency="HIGH"
+                                )
+                            )
 
-        # RP1 Lower Crossing
-        if rp1_l and spot <= rp1_l:
-            notifications.append(
-                NotificationItem(
-                    id=f"cross_rp1_l_{candle_time}",
-                    timestamp=datetime.now().isoformat(),
-                    type="CROSS_RP1_LOWER",
-                    title=f"⚡ {idx} Lower Reversal Level 1 Hit",
-                    message=f"{idx} trading at {spot:,.1f}, reached dynamic RP1 Lower {rp1_l:,.1f}",
-                    level_price=rp1_l,
-                    spot_price=spot,
-                    urgency="HIGH"
-                )
-            )
+                    # RP1 Lower Crossing
+                    if rp1_l:
+                        if prev_c < rp1_l <= curr_c or prev_c > rp1_l >= curr_c:
+                            action_str = "reclaimed ABOVE" if curr_c >= rp1_l else "slipped BELOW"
+                            notifications.append(
+                                NotificationItem(
+                                    id=f"cross_rp1_l_{bar_time}",
+                                    timestamp=chron[i][0],
+                                    type="CROSS_RP1_LOWER",
+                                    title=f"⚡ {idx} Lower Reversal 1 Hit",
+                                    message=f"{idx} {action_str} dynamic RP1 Lower ₹{rp1_l:,.1f} at {bar_time} (Spot: ₹{curr_c:,.1f})",
+                                    level_price=rp1_l,
+                                    spot_price=curr_c,
+                                    urgency="HIGH"
+                                )
+                            )
 
-        # RP2 Upper Crossing
-        if rp2_u and spot >= rp2_u:
-            notifications.append(
-                NotificationItem(
-                    id=f"cross_rp2_u_{candle_time}",
-                    timestamp=datetime.now().isoformat(),
-                    type="CROSS_RP2_UPPER",
-                    title=f"🎯 {idx} Extreme Upper Reversal 2 Hit",
-                    message=f"{idx} trading at {spot:,.1f}, breached dynamic RP2 Upper {rp2_u:,.1f}",
-                    level_price=rp2_u,
-                    spot_price=spot,
-                    urgency="HIGH"
-                )
-            )
+                    # RP2 Upper Crossing
+                    if rp2_u and (prev_c < rp2_u <= curr_c):
+                        notifications.append(
+                            NotificationItem(
+                                id=f"cross_rp2_u_{bar_time}",
+                                timestamp=chron[i][0],
+                                type="CROSS_RP2_UPPER",
+                                title=f"🎯 {idx} Extreme Upper Reversal 2 Hit",
+                                message=f"{idx} breached dynamic RP2 Upper ₹{rp2_u:,.1f} at {bar_time} (Spot: ₹{curr_c:,.1f})",
+                                level_price=rp2_u,
+                                spot_price=curr_c,
+                                urgency="HIGH"
+                            )
+                        )
 
-        # RP2 Lower Crossing
-        if rp2_l and spot <= rp2_l:
-            notifications.append(
-                NotificationItem(
-                    id=f"cross_rp2_l_{candle_time}",
-                    timestamp=datetime.now().isoformat(),
-                    type="CROSS_RP2_LOWER",
-                    title=f"🎯 {idx} Extreme Lower Reversal 2 Hit",
-                    message=f"{idx} trading at {spot:,.1f}, breached dynamic RP2 Lower {rp2_l:,.1f}",
-                    level_price=rp2_l,
-                    spot_price=spot,
-                    urgency="HIGH"
-                )
-            )
-
+                    # RP2 Lower Crossing
+                    if rp2_l and (prev_c < rp2_l <= curr_c or prev_c > rp2_l >= curr_c):
+                        action_str = "rebounded ABOVE" if curr_c >= rp2_l else "fell BELOW"
+                        notifications.append(
+                            NotificationItem(
+                                id=f"cross_rp2_l_{bar_time}",
+                                timestamp=chron[i][0],
+                                type="CROSS_RP2_LOWER",
+                                title=f"🎯 {idx} Extreme Lower Reversal 2 Hit",
+                                message=f"{idx} {action_str} dynamic RP2 Lower ₹{rp2_l:,.1f} at {bar_time} (Spot: ₹{curr_c:,.1f})",
+                                level_price=rp2_l,
+                                spot_price=curr_c,
+                                urgency="HIGH"
+                            )
+                        )
     except Exception:
         pass
 
