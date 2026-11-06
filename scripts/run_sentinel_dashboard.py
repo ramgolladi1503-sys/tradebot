@@ -15,10 +15,13 @@ import sys
 import glob
 import time
 from pathlib import Path
+from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+load_dotenv(ROOT / ".env", override=True)
 
 from datetime import datetime
 import pandas as pd
@@ -247,7 +250,7 @@ audit_dates = [
     for p in glob.glob(str(WORKTREE / "runtime/audit/sentinel_execution_paths_*.jsonl")) + glob.glob("/Users/madhuram/tradebot/runtime/audit/sentinel_execution_paths_*.jsonl")
 ]
 capture_dates = []
-for base in [Path("/Volumes/TradeBot/live market capture"), Path("/Volumes/TradeBotData/live market capture")]:
+for base in [Path("/Users/madhuram/tradebot/.runtime/market_data")]:
     if base.exists():
         for d in base.glob("2026-*"):
             if d.is_dir():
@@ -290,7 +293,7 @@ wal_path = wal_path_nifty
 # Helper to read latest option quotes from live capture parquet (cached for 1.5s to eliminate disk thrashing)
 @st.cache_data(ttl=1.5, show_spinner=False)
 def get_live_option_quotes() -> dict:
-    for base in [Path("/Volumes/TradeBot/live market capture"), Path("/Volumes/TradeBotData/live market capture")]:
+    for base in [Path("/Users/madhuram/tradebot/.runtime/market_data")]:
         chunks_dir = base / today_dash / "chunks"
         if chunks_dir.exists():
             chunk_files = [f for f in chunks_dir.glob("*.parquet") if not f.name.startswith(".")]
@@ -418,64 +421,16 @@ def get_official_or_bounds() -> dict:
     return bounds
 
 
+from core.sentinel_dashboard_rbfn_helper import compute_official_rbfn_boundaries
+
 @st.cache_data(ttl=60)
 def get_official_rbfn_boundaries() -> dict:
-    """Computes daily causal RBFN Trend Decider and Reversal Price Lines (RP1, RP2) using OptionMate strategy engine."""
+    """Computes daily causal RBFN Trend Decider and Reversal Price Lines (RP1, RP2) using OptionMate strategy engine.
+    Anchors to closed 09:15-09:20 5m bar equilibrium when available to eliminate opening auction drift.
+    """
     try:
-        from strategies.optionmate_rbfn_strategy import OptionMateRBFNStrategy
-        
-        # Load latest spot prices and prior close if available
         spots = get_live_index_spots()
-        today_s = datetime.now().strftime("%Y-%m-%d")
-        
-        # Load seeded prior levels from memory / logs if available
-        # Prior Day Close from NSE: NIFTY 23694.25
-        strat = OptionMateRBFNStrategy(step_size=50)
-        
-        nifty_spot = spots.get("NIFTY", 23742.25)
-        # Check if we have true open or current spot
-        nifty_grid = strat.compute_daily_grid(
-            date=today_s,
-            spot_open=23742.25 if today_s == "2026-11-04" else nifty_spot,
-            prev_close=23694.25,
-            atr_14=150.0,
-            vix=14.0,
-        )
-        
-        # SENSEX grid
-        sensex_spot = spots.get("SENSEX", 76853.11)
-        sensex_grid = strat.compute_daily_grid(
-            date=today_s,
-            spot_open=76853.11 if today_s == "2026-11-04" else sensex_spot,
-            prev_close=76500.0,
-            atr_14=400.0,
-            vix=14.0,
-        )
-        
-        return {
-            "NIFTY": {
-                "trend_decider": nifty_grid.trend_decider,
-                "rp1_upper": nifty_grid.rp1_upper,
-                "rp2_upper": nifty_grid.rp2_upper,
-                "rp1_lower": nifty_grid.rp1_lower,
-                "rp2_lower": nifty_grid.rp2_lower,
-                "call_strike": nifty_grid.call_strike,
-                "put_strike": nifty_grid.put_strike,
-                "target_strike": nifty_grid.target_strike,
-                "bias": nifty_grid.recommended_bias,
-            },
-            "SENSEX": {
-                "trend_decider": sensex_grid.trend_decider,
-                "rp1_upper": sensex_grid.rp1_upper,
-                "rp2_upper": sensex_grid.rp2_upper,
-                "rp1_lower": sensex_grid.rp1_lower,
-                "rp2_lower": sensex_grid.rp2_lower,
-                "call_strike": sensex_grid.call_strike,
-                "put_strike": sensex_grid.put_strike,
-                "target_strike": sensex_grid.target_strike,
-                "bias": sensex_grid.recommended_bias,
-            }
-        }
+        return compute_official_rbfn_boundaries(spots=spots)
     except Exception:
         pass
     return {
@@ -608,10 +563,10 @@ def get_all_executed_trades_today() -> list:
                 is_runner = item.get("is_runner_mode", False)
                 half_bk = item.get("half_booked", False)
 
-                # Target 1 is hit if explicitly marked, if half_booked, if RUNNER exit, or if gain >= 15 pts
-                hit_1 = bool(item.get("target_1_hit")) or half_bk or ("RUNNER" in exit_rsn) or ("TARGET" in exit_rsn) or (opt_pnl >= 15.0) or (spot_pnl >= 15.0) or (max_o >= 15.0)
-                # Target 2 is hit if explicitly marked or if gain >= 30 pts
-                hit_2 = bool(item.get("target_2_hit")) or (opt_pnl >= 30.0) or (spot_pnl >= 30.0) or (max_o >= 30.0)
+                # Target 1 is hit strictly if explicitly marked by APM, if half_booked, if RUNNER exit, if TARGET exit, or if option gain >= 15 pts
+                hit_1 = bool(item.get("target_1_hit")) or half_bk or ("RUNNER" in exit_rsn) or ("TARGET" in exit_rsn) or (opt_pnl >= 15.0) or (max_o >= 15.0)
+                # Target 2 is hit strictly if explicitly marked or if option gain >= 30 pts
+                hit_2 = bool(item.get("target_2_hit")) or (opt_pnl >= 30.0) or (max_o >= 30.0)
 
                 t1 = "✅ Hit" if hit_1 else "❌"
                 t2 = "✅ Hit" if hit_2 else "❌"
@@ -653,8 +608,8 @@ def get_all_executed_trades_today() -> list:
         max_o = float(wal_payload.get("max_opt_excursion") or opt_peak_gain)
         max_s = float(wal_payload.get("max_spot_excursion") or 0.0)
 
-        hit_1 = bool(wal_payload.get("target_1_hit")) or wal_payload.get("half_booked") or (max_o >= 15.0) or (max_s >= 15.0)
-        hit_2 = bool(wal_payload.get("target_2_hit")) or (max_o >= 30.0) or (max_s >= 30.0)
+        hit_1 = bool(wal_payload.get("target_1_hit")) or wal_payload.get("half_booked") or (max_o >= 15.0)
+        hit_2 = bool(wal_payload.get("target_2_hit")) or (max_o >= 30.0)
         t1 = "✅ Hit" if hit_1 else "❌"
         t2 = "✅ Hit" if hit_2 else "❌"
 
@@ -694,7 +649,7 @@ if audit_log_path.exists():
 elif today_str == today_real:
     # Dynamically discover all task logs created or modified today so the chart never loads older sessions or gets stuck on yesterday's tasks
     import glob
-    all_task_logs = glob.glob("/Users/madhuram/.gemini/antigravity/brain/162de38c-8263-4254-8b50-0c5fa8538833/.system_generated/tasks/task-*.log")
+    all_task_logs = []  # O(1) direct live pipeline log bypass
     today_task_logs = []
     for log_p in all_task_logs:
         p_obj = Path(log_p)
@@ -717,25 +672,29 @@ elif today_str == today_real:
     for pipe_log in log_candidates:
         if pipe_log.exists() and pipe_log.stat().st_size > 0:
             try:
-                with open(pipe_log, "r", encoding="utf-8") as pl:
-                    # Seek to end minus 128KB for instantaneous tailing without reading whole file into memory
-                    try:
-                        pl.seek(0, 2)
-                        fsize = pl.tell()
-                        read_bytes = min(fsize, 128 * 1024)
-                        pl.seek(fsize - read_bytes, 0)
-                        # Discard partial first line
-                        if read_bytes == fsize:
-                            tail_lines = pl.readlines()
-                        else:
-                            pl.readline()
-                            tail_lines = pl.readlines()
-                    except Exception:
-                        pl.seek(0)
-                        lines = pl.readlines()
-                        tail_lines = lines[-500:] if len(lines) > 500 else lines
+                # Reverse-scan file in chunks to reliably collect up to 350 telemetry lines even during high-frequency log bursts
+                chunk_size = 256 * 1024
+                max_telemetry_lines = 350
+                collected_lines = []
 
-                    for line in tail_lines:
+                with open(pipe_log, "rb") as pl:
+                    pl.seek(0, 2)
+                    file_size = pl.tell()
+                    pos = file_size
+                    while pos > 0 and len(collected_lines) < max_telemetry_lines:
+                        read_len = min(chunk_size, pos)
+                        pos -= read_len
+                        pl.seek(pos)
+                        chunk = pl.read(read_len).decode("utf-8", errors="ignore")
+                        for line in reversed(chunk.splitlines()):
+                            if "🛰️" in line:
+                                collected_lines.append(line)
+                                if len(collected_lines) >= max_telemetry_lines:
+                                    break
+
+                tail_lines = list(reversed(collected_lines))
+
+                for line in tail_lines:
                         m = pattern_with_conv.search(line)
                         if m:
                             wall_t, idx, spot, sym, ltp, c_score, c_grade, spread, sp_pct, status, adv = m.groups()
@@ -841,273 +800,312 @@ tab_live, tab_walls, tab_portal, tab_regimes, tab_journal, tab_oracle = st.tabs(
 ])
 
 with tab_live:
-    # Main Content Layout
-    col_left, col_right = st.columns([2, 1])
+    # 🎯 Full-width spotlight for active trades & wide chart
+    # 🎯 REAL-TIME OPTION STRIKE CONTRACT DISPLAY (Spotlight & Multi-Position APM)
+    st.subheader("🎯 Active Option Strike Contract Entry & Risk Profile")
 
-    with col_left:
-        # 🎯 REAL-TIME OPTION STRIKE CONTRACT DISPLAY (Spotlight & Multi-Position APM)
-        st.subheader("🎯 Active Option Strike Contract Entry & Risk Profile")
+    # Determine all candidate active positions across all three index WALs
+    raw_active_list = []
+    for w_data in [wal_data_nifty, wal_data_sensex, wal_data_banknifty]:
+        st_name = w_data.get("state", "STANDBY")
+        w_pay = w_data.get("payload")
+        if isinstance(w_data.get("active_positions"), list) and w_data["active_positions"]:
+            raw_active_list.extend(w_data["active_positions"])
+        elif w_pay and isinstance(w_pay, dict) and st_name in {"IN_FLIGHT", "TRAIL_LOCK", "EXIT_PENDING"}:
+            raw_active_list.append(w_pay)
 
-        # Determine all candidate active positions across all three index WALs
-        raw_active_list = []
-        for w_data in [wal_data_nifty, wal_data_sensex, wal_data_banknifty]:
-            st_name = w_data.get("state", "STANDBY")
-            w_pay = w_data.get("payload")
-            if isinstance(w_data.get("active_positions"), list) and w_data["active_positions"]:
-                raw_active_list.extend(w_data["active_positions"])
-            elif w_pay and isinstance(w_pay, dict) and st_name in {"IN_FLIGHT", "TRAIL_LOCK", "EXIT_PENDING"}:
-                raw_active_list.append(w_pay)
+    # Filter active positions by selected index
+    filtered_active_list = [
+        p for p in raw_active_list
+        if match_index(str(p.get("opt_symbol") or p.get("strike_contract", "")), selected_index)
+    ]
 
-        # Filter active positions by selected index
-        filtered_active_list = [
-            p for p in raw_active_list
-            if match_index(str(p.get("opt_symbol") or p.get("strike_contract", "")), selected_index)
-        ]
+    if filtered_active_list:
+        # Render responsive grid of active positions
+        st.markdown('<div class="active-card-grid">', unsafe_allow_html=True)
+        for pos in filtered_active_list:
+            pos_sym = str(pos.get("opt_symbol") or pos.get("strike_contract", "UNKNOWN CONTRACT"))
+            pos_id = str(pos.get("position_id", "ACTIVE"))
+            pos_dir = str(pos.get("direction", "PE"))
+            pos_gear = str(pos.get("session_gear", "GEAR_2_TREND")).replace("_", " ")
 
-        if filtered_active_list:
-            # Render responsive grid of active positions
-            st.markdown('<div class="active-card-grid">', unsafe_allow_html=True)
-            for pos in filtered_active_list:
-                pos_sym = str(pos.get("opt_symbol") or pos.get("strike_contract", "UNKNOWN CONTRACT"))
-                pos_id = str(pos.get("position_id", "ACTIVE"))
-                pos_dir = str(pos.get("direction", "PE"))
-                pos_gear = str(pos.get("session_gear", "GEAR_2_TREND")).replace("_", " ")
+            # Live streaming quote lookup (check direct Upstox sub-second quote first, then parquet book, then WAL fallback)
+            opt_token = str(pos.get("opt_token") or "")
+            q_direct = get_live_contract_quote_upstox(opt_token) if opt_token else None
+            q_live = q_direct or live_option_book.get(pos_sym)
+            c_ltp = q_live.get("ltp") if q_live else pos.get("opt_current_ltp")
+            c_bid = q_live.get("bid") if q_live else (c_ltp or pos.get("opt_bid"))
+            c_ask = q_live.get("ask") if q_live else (c_ltp or pos.get("opt_ask"))
 
-                # Live streaming quote lookup (check direct Upstox sub-second quote first, then parquet book, then WAL fallback)
-                opt_token = str(pos.get("opt_token") or "")
-                q_direct = get_live_contract_quote_upstox(opt_token) if opt_token else None
-                q_live = q_direct or live_option_book.get(pos_sym)
-                c_ltp = q_live.get("ltp") if q_live else pos.get("opt_current_ltp")
-                c_bid = q_live.get("bid") if q_live else (c_ltp or pos.get("opt_bid"))
-                c_ask = q_live.get("ask") if q_live else (c_ltp or pos.get("opt_ask"))
+            e_ltp = float(pos.get("opt_entry_ltp") or 0.0)
+            init_sl = float(pos.get("opt_initial_sl") or round(e_ltp * 0.80, 1)) if e_ltp > 0 else 0.0
+            curr_sl = float(pos.get("runner_trailing_sl") or init_sl)
 
-                e_ltp = float(pos.get("opt_entry_ltp") or 0.0)
-                init_sl = float(pos.get("opt_initial_sl") or round(e_ltp * 0.80, 1)) if e_ltp > 0 else 0.0
-                curr_sl = float(pos.get("runner_trailing_sl") or init_sl)
+            tp1_val = round(e_ltp + 15.0, 1)
+            tp2_val = round(e_ltp + 30.0, 1)
 
-                tp1_val = round(e_ltp + 15.0, 1)
-                tp2_val = round(e_ltp + 30.0, 1)
+            pnl_pts = (c_ltp - e_ltp) if (c_ltp is not None and e_ltp > 0) else 0.0
+            pnl_pct = (pnl_pts / e_ltp * 100.0) if e_ltp > 0 else 0.0
+            pnl_color = "#34D399" if pnl_pts >= 0 else "#F87171"
+            pnl_sign = "+" if pnl_pts >= 0 else ""
 
-                pnl_pts = (c_ltp - e_ltp) if (c_ltp is not None and e_ltp > 0) else 0.0
-                pnl_pct = (pnl_pts / e_ltp * 100.0) if e_ltp > 0 else 0.0
-                pnl_color = "#34D399" if pnl_pts >= 0 else "#F87171"
-                pnl_sign = "+" if pnl_pts >= 0 else ""
+            ltp_disp = f"₹{c_ltp:.2f}" if c_ltp is not None else "Awaiting tick..."
+            pnl_disp = f"{pnl_sign}{pnl_pts:.2f} pts ({pnl_sign}{pnl_pct:.1f}%)" if c_ltp is not None else "Calculating..."
+            bid_disp = f"₹{c_bid:.2f}" if c_bid is not None else "N/A"
+            ask_disp = f"₹{c_ask:.2f}" if c_ask is not None else "N/A"
+            spot_ref = pos.get("entry_price") or pos.get("current_sl")
 
-                ltp_disp = f"₹{c_ltp:.2f}" if c_ltp is not None else "Awaiting tick..."
-                pnl_disp = f"{pnl_sign}{pnl_pts:.2f} pts ({pnl_sign}{pnl_pct:.1f}%)" if c_ltp is not None else "Calculating..."
-                bid_disp = f"₹{c_bid:.2f}" if c_bid is not None else "N/A"
-                ask_disp = f"₹{c_ask:.2f}" if c_ask is not None else "N/A"
-                spot_ref = pos.get("entry_price") or pos.get("current_sl")
+            is_snx = "SENSEX" in pos_sym
+            tp1_label = f"+{45 if is_snx else 15} pts (1.5 ATR)"
+            tp2_label = f"+{110 if is_snx else 35} pts (3.5 ATR)"
 
-                is_snx = "SENSEX" in pos_sym
-                tp1_label = f"+{45 if is_snx else 15} pts (1.5 ATR)"
-                tp2_label = f"+{110 if is_snx else 35} pts (3.5 ATR)"
-
-                st.markdown(f"""
-                <div class="apm-card-container">
-                    <div class="apm-title-row">
-                        <div class="apm-symbol">
-                            🚀 {pos_sym}
-                        </div>
-                        <span class="badge-in-flight">
-                            <span class="pulse-dot"></span> IN-FLIGHT • {pos_id}
-                        </span>
+            st.markdown(f"""
+            <div class="apm-card-container">
+                <div class="apm-title-row">
+                    <div class="apm-symbol">
+                        🚀 {pos_sym}
                     </div>
-                    <div class="apm-stats-grid">
-                        <div class="apm-stat-item">
-                            <span class="apm-stat-label">Locked Entry</span>
-                            <span class="apm-stat-value">₹{e_ltp:.2f}</span>
-                        </div>
-                        <div class="apm-stat-item">
-                            <span class="apm-stat-label">Live LTP</span>
-                            <span class="apm-stat-value" style="color: {pnl_color};">{ltp_disp}</span>
-                        </div>
-                        <div class="apm-stat-item">
-                            <span class="apm-stat-label">Unrealized PnL</span>
-                            <span class="apm-stat-value" style="color: {pnl_color};">{pnl_disp}</span>
-                        </div>
+                    <span class="badge-in-flight">
+                        <span class="pulse-dot"></span> IN-FLIGHT • {pos_id}
+                    </span>
+                </div>
+                <div class="apm-stats-grid">
+                    <div class="apm-stat-item">
+                        <span class="apm-stat-label">Locked Entry</span>
+                        <span class="apm-stat-value">₹{e_ltp:.2f}</span>
                     </div>
-                    <div style="font-size: 12px; color: #94A3B8; margin-bottom: 8px;">
-                        <span>Bid: <strong style="color: #CBD5E1;">{bid_disp}</strong></span> &nbsp;|&nbsp; 
-                        <span>Ask: <strong style="color: #CBD5E1;">{ask_disp}</strong></span> &nbsp;|&nbsp; 
-                        <span>Direction: <strong style="color: #38BDF8;">{pos_dir}</strong></span> &nbsp;|&nbsp;
-                        <span>Regime: <strong style="color: #A78BFA;">{pos_gear}</strong></span>
+                    <div class="apm-stat-item">
+                        <span class="apm-stat-label">Live LTP</span>
+                        <span class="apm-stat-value" style="color: {pnl_color};">{ltp_disp}</span>
                     </div>
-                    <div class="target-pills-row">
-                        <span class="pill-sl">🛑 Chandelier SL: ₹{curr_sl:.1f}</span>
-                        <span class="pill-t1">🎯 Target 1 ({tp1_label}): ₹{tp1_val:.1f}</span>
-                        <span class="pill-t2">🚀 Target 2 ({tp2_label}): ₹{tp2_val:.1f}</span>
-                    </div>
-                    <div style="font-size: 11px; color: #64748B; margin-top: 10px;">
-                        * Telemetry monitored by APM engine. Ingress spot entry: {f"₹{spot_ref:,.2f}" if spot_ref else "N/A"}
+                    <div class="apm-stat-item">
+                        <span class="apm-stat-label">Unrealized PnL</span>
+                        <span class="apm-stat-value" style="color: {pnl_color};">{pnl_disp}</span>
                     </div>
                 </div>
-                """, unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-        else:
-            filter_msg = f" for **{selected_index}**" if selected_index != "All" else ""
-            st.info(f"ℹ️ **No Active In-Flight Trade{filter_msg}.** Sentinel APM is standing by for the next qualified displacement breakout.")
-            if raw_active_list and selected_index != "All":
-                other_indices = {
-                    ("SENSEX" if "SENSEX" in str(p.get("opt_symbol") or p.get("strike_contract", ""))
-                     else ("BANKNIFTY" if "BANKNIFTY" in str(p.get("opt_symbol") or p.get("strike_contract", ""))
-                     else "NIFTY"))
-                    for p in raw_active_list
+                <div style="font-size: 12px; color: #94A3B8; margin-bottom: 8px;">
+                    <span>Bid: <strong style="color: #CBD5E1;">{bid_disp}</strong></span> &nbsp;|&nbsp; 
+                    <span>Ask: <strong style="color: #CBD5E1;">{ask_disp}</strong></span> &nbsp;|&nbsp; 
+                    <span>Direction: <strong style="color: #38BDF8;">{pos_dir}</strong></span> &nbsp;|&nbsp;
+                    <span>Regime: <strong style="color: #A78BFA;">{pos_gear}</strong></span>
+                </div>
+                <div class="target-pills-row">
+                    <span class="pill-sl">🛑 Chandelier SL: ₹{curr_sl:.1f}</span>
+                    <span class="pill-t1">🎯 Target 1 ({tp1_label}): ₹{tp1_val:.1f}</span>
+                    <span class="pill-t2">🚀 Target 2 ({tp2_label}): ₹{tp2_val:.1f}</span>
+                </div>
+                <div style="font-size: 11px; color: #64748B; margin-top: 10px;">
+                    * Telemetry monitored by APM engine. Ingress spot entry: {f"₹{spot_ref:,.2f}" if spot_ref else "N/A"}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+    else:
+        filter_msg = f" for **{selected_index}**" if selected_index != "All" else ""
+        st.info(f"ℹ️ **No Active In-Flight Trade{filter_msg}.** Sentinel APM is standing by for the next qualified displacement breakout.")
+        if raw_active_list and selected_index != "All":
+            other_indices = {
+                ("SENSEX" if "SENSEX" in str(p.get("opt_symbol") or p.get("strike_contract", ""))
+                 else ("BANKNIFTY" if "BANKNIFTY" in str(p.get("opt_symbol") or p.get("strike_contract", ""))
+                 else "NIFTY"))
+                for p in raw_active_list
+            }
+            st.warning(f"💡 **Active trade exists in {', '.join(other_indices)}!** Switch the Index Filter in the sidebar to **{' or '.join(other_indices)}** or **All** to view it.")
+
+    # 📊 DEDICATED RECORD OF ALL EXECUTED TRADES (Filtered by selected_index)
+    st.subheader(f"📋 Executed Trades Record & Performance Log ({selected_index})")
+    all_executed = get_all_executed_trades_today()
+    if all_executed:
+        df_trades = pd.DataFrame(all_executed)
+        # Filter strictly by selected index
+        if selected_index != "All" and "strike_contract" in df_trades.columns:
+            df_trades = df_trades[df_trades["strike_contract"].apply(lambda s: match_index(str(s), selected_index))]
+
+        if not df_trades.empty:
+            st.dataframe(
+                df_trades,
+                use_container_width=True,
+                column_config={
+                    "trade_time": st.column_config.TextColumn("Date & Time (IST)", width="medium"),
+                    "position_id": st.column_config.TextColumn("Trade ID", width="small"),
+                    "strategy": st.column_config.TextColumn("Strategy Trigger", width="medium"),
+                    "strike_contract": st.column_config.TextColumn("Contract", width="medium"),
+                    "entry_price": st.column_config.NumberColumn("Spot Entry", format="₹%.2f"),
+                    "exit_price": st.column_config.NumberColumn("Spot Exit", format="₹%.2f"),
+                    "pnl_pts": st.column_config.NumberColumn("Spot PnL (pts)", format="%+.1f"),
+                    "max_spot_gain": st.column_config.NumberColumn("Max Spot Gain", format="+%.1f pts"),
+                    "opt_entry_ltp": st.column_config.NumberColumn("Option Entry LTP", format="₹%.2f"),
+                    "opt_exit_ltp": st.column_config.NumberColumn("Option Exit LTP", format="₹%.2f"),
+                    "opt_pnl_pts": st.column_config.NumberColumn("Option PnL (pts)", format="%+.2f"),
+                    "max_opt_gain": st.column_config.NumberColumn("Max Opt Gain", format="+%.2f pts"),
+                    "t1_milestone": st.column_config.TextColumn("Target 1 (+15)", width="small"),
+                    "t2_milestone": st.column_config.TextColumn("Target 2 (+30)", width="small"),
+                    "exit_reason": st.column_config.TextColumn("Exit Reason / Result", width="medium"),
                 }
-                st.warning(f"💡 **Active trade exists in {', '.join(other_indices)}!** Switch the Index Filter in the sidebar to **{' or '.join(other_indices)}** or **All** to view it.")
-
-        # 📊 DEDICATED RECORD OF ALL EXECUTED TRADES (Filtered by selected_index)
-        st.subheader(f"📋 Executed Trades Record & Performance Log ({selected_index})")
-        all_executed = get_all_executed_trades_today()
-        if all_executed:
-            df_trades = pd.DataFrame(all_executed)
-            # Filter strictly by selected index
-            if selected_index != "All" and "strike_contract" in df_trades.columns:
-                df_trades = df_trades[df_trades["strike_contract"].apply(lambda s: match_index(str(s), selected_index))]
-
-            if not df_trades.empty:
-                st.dataframe(
-                    df_trades,
-                    use_container_width=True,
-                    column_config={
-                        "trade_time": st.column_config.TextColumn("Date & Time (IST)", width="medium"),
-                        "position_id": st.column_config.TextColumn("Trade ID", width="small"),
-                        "strategy": st.column_config.TextColumn("Strategy Trigger", width="medium"),
-                        "strike_contract": st.column_config.TextColumn("Contract", width="medium"),
-                        "entry_price": st.column_config.NumberColumn("Spot Entry", format="₹%.2f"),
-                        "exit_price": st.column_config.NumberColumn("Spot Exit", format="₹%.2f"),
-                        "pnl_pts": st.column_config.NumberColumn("Spot PnL (pts)", format="%+.1f"),
-                        "max_spot_gain": st.column_config.NumberColumn("Max Spot Gain", format="+%.1f pts"),
-                        "opt_entry_ltp": st.column_config.NumberColumn("Option Entry LTP", format="₹%.2f"),
-                        "opt_exit_ltp": st.column_config.NumberColumn("Option Exit LTP", format="₹%.2f"),
-                        "opt_pnl_pts": st.column_config.NumberColumn("Option PnL (pts)", format="%+.2f"),
-                        "max_opt_gain": st.column_config.NumberColumn("Max Opt Gain", format="+%.2f pts"),
-                        "t1_milestone": st.column_config.TextColumn("Target 1 (+15)", width="small"),
-                        "t2_milestone": st.column_config.TextColumn("Target 2 (+30)", width="small"),
-                        "exit_reason": st.column_config.TextColumn("Exit Reason / Result", width="medium"),
-                    }
-                )
-            else:
-                st.caption(f"No completed trades recorded yet today for {selected_index}.")
+            )
         else:
-            st.caption("No completed trades recorded yet today.")
+            st.caption(f"No completed trades recorded yet today for {selected_index}.")
+    else:
+        st.caption("No completed trades recorded yet today.")
 
-        st.subheader(f"📈 Live Market Track & Opening Range Bounds ({selected_index})")
-        # Official 09:15 to 09:45 Opening Range Bounds
-        or_map = get_official_or_bounds()
-        active_chart_idx = "NIFTY" if selected_index in {"All", "NIFTY"} else selected_index
-        or_high_val = or_map.get(active_chart_idx, {}).get("high", 23610.70)
-        or_low_val = or_map.get(active_chart_idx, {}).get("low", 23482.80)
+    st.subheader(f"📈 Live Market Candlestick & Opening Range Track ({selected_index})")
+    # Official 09:15 to 09:45 Opening Range Bounds
+    or_map = get_official_or_bounds()
+    active_chart_idx = "NIFTY" if selected_index in {"All", "NIFTY"} else selected_index
+    or_high_val = or_map.get(active_chart_idx, {}).get("high", 23610.70)
+    or_low_val = or_map.get(active_chart_idx, {}).get("low", 23482.80)
 
-        # Plot live track from df_rows or intraday 1m candles from Upstox
-        fig = go.Figure()
+    # Plot live candlestick chart like Upstox / TradingView covering full day from 09:15 AM
+    fig = go.Figure()
 
-        # If df_rows has streaming data, plot it; otherwise fetch intraday 1m candles directly
+    # Fetch today's official 1m candlestick history from Upstox API
+    has_candles = False
+    try:
+        token = os.getenv("UPSTOX_ACCESS_TOKEN", "").strip()
+        if token:
+            import urllib.parse
+            inst_key = "NSE_INDEX|Nifty 50" if active_chart_idx == "NIFTY" else ("BSE_INDEX|SENSEX" if active_chart_idx == "SENSEX" else "NSE_INDEX|Nifty Bank")
+            enc_key = urllib.parse.quote(inst_key)
+            c_url = f"https://api.upstox.com/v2/historical-candle/intraday/{enc_key}/1minute"
+            c_res = requests.get(
+                c_url,
+                headers={"Authorization": f"Bearer {token}", "Accept": "application/json", "User-Agent": "TradeBot/Sentinel"},
+                timeout=4,
+            )
+            if c_res.status_code == 200:
+                c_list = c_res.json().get("data", {}).get("candles", [])
+                if c_list:
+                    c_df = pd.DataFrame(c_list, columns=["ts", "o", "h", "l", "c", "v", "oi"]).iloc[::-1].reset_index(drop=True)
+                    # Extract local HH:MM time strings so x-axis is clean like Upstox
+                    c_df["time_label"] = c_df["ts"].str[11:16]
+                    
+                    # Full Day Candlestick Chart matching Upstox styling
+                    fig.add_trace(go.Candlestick(
+                        x=c_df["time_label"],
+                        open=c_df["o"],
+                        high=c_df["h"],
+                        low=c_df["l"],
+                        close=c_df["c"],
+                        name=f"{active_chart_idx} (1m)",
+                        increasing_line_color="#089981",
+                        decreasing_line_color="#F23645",
+                        increasing_fillcolor="#089981",
+                        decreasing_fillcolor="#F23645",
+                    ))
+                    has_candles = True
+    except Exception:
+        pass
+
+    # Fallback to scatter line if candles failed
+    if not has_candles:
         if not df_rows.empty and "spot_price" in df_rows.columns:
             chart_df = df_rows[df_rows["index"] == active_chart_idx] if "index" in df_rows.columns and (df_rows["index"] == active_chart_idx).any() else df_rows
             chart_y = chart_df["spot_price"] if "spot_price" in chart_df.columns else chart_df.get("spot_nifty")
             if chart_y is not None and not chart_df.empty:
                 fig.add_trace(go.Scatter(
-                    x=chart_df["timestamp"],
+                    x=chart_df["timestamp"].str[11:16] if chart_df["timestamp"].str.len().max() > 10 else chart_df["timestamp"],
                     y=chart_y,
                     mode="lines+markers",
                     name=f"{active_chart_idx} Spot",
                     line=dict(color="#29B6F6", width=2)
                 ))
-        else:
-            # Fallback: fetch today's actual 1m candle series so chart is always drawn
-            try:
-                token = os.getenv("UPSTOX_ACCESS_TOKEN", "").strip()
-                if token and active_chart_idx == "NIFTY":
-                    import urllib.parse
-                    enc_key = urllib.parse.quote("NSE_INDEX|Nifty 50")
-                    c_url = f"https://api.upstox.com/v2/historical-candle/intraday/{enc_key}/1minute"
-                    c_res = requests.get(c_url, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"}, timeout=3)
-                    if c_res.status_code == 200:
-                        c_list = c_res.json().get("data", {}).get("candles", [])
-                        if c_list:
-                            c_df = pd.DataFrame(c_list, columns=["ts", "o", "h", "l", "c", "v", "oi"]).iloc[::-1]
-                            fig.add_trace(go.Scatter(
-                                x=c_df["ts"].str[11:19],
-                                y=c_df["c"],
-                                mode="lines+markers",
-                                name=f"{active_chart_idx} Spot",
-                                line=dict(color="#29B6F6", width=2)
-                            ))
-            except Exception:
-                pass
 
-        # Opening Range Bounds
-        fig.add_hline(y=or_high_val, line_dash="dash", line_color="#81C784", annotation_text=f"OR High {or_high_val:.2f}")
-        fig.add_hline(y=or_low_val, line_dash="dash", line_color="#E57373", annotation_text=f"OR Low {or_low_val:.2f}")
+    # Opening Range Bounds
+    fig.add_hline(y=or_high_val, line_dash="dash", line_color="#81C784", annotation_text=f"OR High {or_high_val:.2f}")
+    fig.add_hline(y=or_low_val, line_dash="dash", line_color="#E57373", annotation_text=f"OR Low {or_low_val:.2f}")
 
-        # RBFN Trend Decider & Reversal Price Lines (Option Mate Dynamic Grid)
-        rbfn_bounds = get_official_rbfn_boundaries()
-        if active_chart_idx in rbfn_bounds:
-            idx_rbfn = rbfn_bounds[active_chart_idx]
-            t_dec = idx_rbfn.get("trend_decider")
-            rp1_u = idx_rbfn.get("rp1_upper")
-            rp2_u = idx_rbfn.get("rp2_upper")
-            rp1_l = idx_rbfn.get("rp1_lower")
-            rp2_l = idx_rbfn.get("rp2_lower")
-            tgt_k = idx_rbfn.get("target_strike")
+    # RBFN Trend Decider & Reversal Price Lines (Option Mate Dynamic Grid)
+    rbfn_bounds = get_official_rbfn_boundaries()
+    if active_chart_idx in rbfn_bounds:
+        idx_rbfn = rbfn_bounds[active_chart_idx]
+        t_dec = idx_rbfn.get("trend_decider")
+        rp1_u = idx_rbfn.get("rp1_upper")
+        rp2_u = idx_rbfn.get("rp2_upper")
+        rp1_l = idx_rbfn.get("rp1_lower")
+        rp2_l = idx_rbfn.get("rp2_lower")
 
-            if t_dec:
-                fig.add_hline(y=t_dec, line_dash="dashdot", line_color="#42A5F5", annotation_text=f"Trend Decider (TD) {t_dec:.2f}", annotation_position="top right")
-            if rp1_u:
-                fig.add_hline(y=rp1_u, line_dash="dot", line_color="#FF7043", annotation_text=f"RP1 Upper {rp1_u:.2f}", annotation_position="top left")
-            if rp2_u:
-                fig.add_hline(y=rp2_u, line_dash="dot", line_color="#D32F2F", annotation_text=f"RP2 Upper {rp2_u:.2f}", annotation_position="top left")
-            if rp1_l:
-                fig.add_hline(y=rp1_l, line_dash="dot", line_color="#66BB6A", annotation_text=f"RP1 Lower {rp1_l:.2f}", annotation_position="bottom left")
-            if rp2_l:
-                fig.add_hline(y=rp2_l, line_dash="dot", line_color="#388E3C", annotation_text=f"RP2 Lower {rp2_l:.2f}", annotation_position="bottom left")
-        fig.update_layout(
-            template="plotly_dark",
+        if t_dec:
+            fig.add_hline(y=t_dec, line_dash="dashdot", line_color="#42A5F5", annotation_text=f"Trend Decider (TD) {t_dec:.2f}", annotation_position="top right")
+        if rp1_u:
+            fig.add_hline(y=rp1_u, line_dash="dot", line_color="#FF7043", annotation_text=f"RP1 Upper {rp1_u:.2f}", annotation_position="top left")
+        if rp2_u:
+            fig.add_hline(y=rp2_u, line_dash="dot", line_color="#D32F2F", annotation_text=f"RP2 Upper {rp2_u:.2f}", annotation_position="top left")
+        if rp1_l:
+            fig.add_hline(y=rp1_l, line_dash="dot", line_color="#66BB6A", annotation_text=f"RP1 Lower {rp1_l:.2f}", annotation_position="bottom left")
+        if rp2_l:
+            fig.add_hline(y=rp2_l, line_dash="dot", line_color="#388E3C", annotation_text=f"RP2 Lower {rp2_l:.2f}", annotation_position="bottom left")
+    
+    fig.update_layout(
+        template="plotly_dark",
+        height=620,
+        margin=dict(l=25, r=25, t=30, b=30),
+        xaxis=dict(
+            title="Time (IST)",
+            type="category",
+            rangeslider=dict(visible=False),
+            showgrid=True,
+            gridcolor="rgba(255, 255, 255, 0.08)",
+        ),
+        yaxis=dict(
+            title=f"{active_chart_idx} Level",
+            showgrid=True,
+            gridcolor="rgba(255, 255, 255, 0.08)",
+            fixedrange=False,
+        ),
+        hovermode="x unified",
+        dragmode="pan",
+    )
+    st.plotly_chart(
+        fig,
+        use_container_width=True,
+        config={
+            "scrollZoom": True,
+            "displayModeBar": True,
+            "modeBarButtonsToAdd": ["drawline", "drawopenpath", "eraseshape"],
+        }
+    )
+
+    st.subheader(f"📝 Live Advisory & Audit Trail ({selected_index})")
+    if not df_rows.empty:
+        table_df = df_rows.copy()
+        if selected_index != "All" and "index" in table_df.columns:
+            table_df = table_df[table_df["index"] == selected_index]
+
+        display_cols = ["timestamp", "index", "symbol", "confidence_score", "confidence_grade", "spot_price", "option_ltp", "spread_pts", "spread_ratio", "advisory", "risk_flag", "candidate_status"]
+        valid_cols = [c for c in display_cols if c in table_df.columns]
+        reversed_df = table_df[valid_cols].iloc[::-1].reset_index(drop=True)
+        st.dataframe(
+            reversed_df,
+            use_container_width=True,
             height=320,
-            margin=dict(l=20, r=20, t=25, b=20),
-            xaxis_title="Time",
-            yaxis_title=f"{active_chart_idx} Level",
+            column_config={
+                "confidence_score": st.column_config.ProgressColumn(
+                    "Conviction Score",
+                    help="Bayesian Multi-Factor Institutional Score (0-100)",
+                    format="%d/100",
+                    min_value=0,
+                    max_value=100,
+                    width="medium",
+                ),
+                "confidence_grade": st.column_config.TextColumn("Grade", width="small"),
+                "advisory": st.column_config.TextColumn("Advisory Signal", width="medium"),
+                "symbol": st.column_config.TextColumn("Contract Symbol", width="medium"),
+                "index": st.column_config.TextColumn("Index", width="small"),
+                "spot_price": st.column_config.NumberColumn("Spot Price", format="₹%.2f"),
+                "option_ltp": st.column_config.NumberColumn("Option LTP", format="₹%.2f"),
+                "spread_pts": st.column_config.NumberColumn("Spread (pts)", format="₹%.2f"),
+                "spread_ratio": st.column_config.NumberColumn("Spread %", format="%.2f%%"),
+                "risk_flag": st.column_config.TextColumn("Risk Gate Flag", width="medium"),
+                "candidate_status": st.column_config.TextColumn("Status", width="small"),
+                "timestamp": st.column_config.TextColumn("Time", width="small"),
+            }
         )
-        st.plotly_chart(fig, use_container_width=True)
 
-        st.subheader(f"📝 Live Advisory & Audit Trail ({selected_index})")
-        if not df_rows.empty:
-            table_df = df_rows.copy()
-            if selected_index != "All" and "index" in table_df.columns:
-                table_df = table_df[table_df["index"] == selected_index]
+    # Multi-Index Cockpit & Gate Cards
+    st.markdown("---")
+    col_bottom_left, col_bottom_right = st.columns([1, 1])
 
-            display_cols = ["timestamp", "index", "symbol", "confidence_score", "confidence_grade", "spot_price", "option_ltp", "spread_pts", "spread_ratio", "advisory", "risk_flag", "candidate_status"]
-            valid_cols = [c for c in display_cols if c in table_df.columns]
-            reversed_df = table_df[valid_cols].iloc[::-1].reset_index(drop=True)
-            st.dataframe(
-                reversed_df,
-                use_container_width=True,
-                height=320,
-                column_config={
-                    "confidence_score": st.column_config.ProgressColumn(
-                        "Conviction Score",
-                        help="Bayesian Multi-Factor Institutional Score (0-100)",
-                        format="%d/100",
-                        min_value=0,
-                        max_value=100,
-                        width="medium",
-                    ),
-                    "confidence_grade": st.column_config.TextColumn("Grade", width="small"),
-                    "advisory": st.column_config.TextColumn("Advisory Signal", width="medium"),
-                    "symbol": st.column_config.TextColumn("Contract Symbol", width="medium"),
-                    "index": st.column_config.TextColumn("Index", width="small"),
-                    "spot_price": st.column_config.NumberColumn("Spot Price", format="₹%.2f"),
-                    "option_ltp": st.column_config.NumberColumn("Option LTP", format="₹%.2f"),
-                    "spread_pts": st.column_config.NumberColumn("Spread (pts)", format="₹%.2f"),
-                    "spread_ratio": st.column_config.NumberColumn("Spread %", format="%.2f%%"),
-                    "risk_flag": st.column_config.TextColumn("Risk Gate Flag", width="medium"),
-                    "candidate_status": st.column_config.TextColumn("Status", width="small"),
-                    "timestamp": st.column_config.TextColumn("Time", width="small"),
-                }
-            )
-
-    with col_right:
+    with col_bottom_left:
         # 🛡️ Dual Side-by-Side Cockpit: NIFTY & SENSEX APM Cards
         st.subheader("🛡️ Multi-Index APM Cockpit")
 
@@ -1159,6 +1157,7 @@ with tab_live:
         with apm_tabs[2]:
             render_apm_card("BANKNIFTY", wal_data_banknifty)
 
+    with col_bottom_right:
         # 🛑 Glassmorphic Gate Veto Card
         st.subheader("🛑 Gate Veto Precedence")
         st.markdown("""
