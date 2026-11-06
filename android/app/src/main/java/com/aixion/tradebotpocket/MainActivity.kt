@@ -224,7 +224,7 @@ fun MainNavigationScaffold(viewModel: MainViewModel = viewModel()) {
                                     color = TextGlassPrimary
                                 )
                                 Text(
-                                    "PR #987 OptionMate • Tailscale",
+                                    "Live Telemetry & Execution",
                                     fontSize = 9.sp,
                                     color = TextGlassMuted
                                 )
@@ -363,7 +363,7 @@ fun MainNavigationScaffold(viewModel: MainViewModel = viewModel()) {
                             OutlinedTextField(
                                 value = viewModel.serverUrl,
                                 onValueChange = { viewModel.serverUrl = it },
-                                label = { Text("Tailscale Endpoint URL") },
+                                label = { Text("Companion Endpoint URL") },
                                 singleLine = true
                             )
                             Spacer(modifier = Modifier.height(12.dp))
@@ -635,7 +635,7 @@ fun DrawnLevelsCard(chart: ChartResponse) {
     ) {
         Column(modifier = Modifier.padding(18.dp)) {
             Text(
-                "SENTINEL OPTIONMATE LEVELS",
+                "SENTINEL ADVISOR LEVELS",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp,
