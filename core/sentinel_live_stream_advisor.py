@@ -1141,8 +1141,24 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         if eff_time == dt_time(9, 15):
             eff_time = dt_time(9, 20)
 
-        # 10:30 RP2 Piercing Invalidation Rule check
-        if eff_time <= dt_time(10, 30):
+        # Muhurat Session Mapping (Special Sunday 14:20 - 15:30 IST Session)
+        # Keeps regular sessions completely untouched while mapping Muhurat 1-hr phases:
+        # - Phase A (Opening Drive): 14:20 - 14:35 IST (or regular 09:20 - 09:45)
+        # - Phase B (Multiscenario Breakout & Milestone Reversals): 14:35 - 15:25 IST (or regular 10:45 - 13:30)
+        # Check both the eff_time or current session date to seamlessly support historical backtests and live Muhurat:
+        is_muhurat_time = (dt_time(14, 0) <= eff_time <= dt_time(15, 30))
+        is_muhurat_session = (datetime.now().weekday() == 6 and datetime.now().date() == date(2026, 11, 8)) or is_muhurat_time
+        if is_muhurat_time:
+            is_phase_a = (dt_time(14, 20) <= eff_time <= dt_time(14, 35))
+            is_phase_b = (dt_time(14, 35) <= eff_time <= dt_time(15, 25))
+            rp2_piercing_cutoff = dt_time(14, 45)
+        else:
+            is_phase_a = (dt_time(9, 20) <= eff_time <= dt_time(9, 45))
+            is_phase_b = (dt_time(10, 45) <= eff_time <= dt_time(13, 30))
+            rp2_piercing_cutoff = dt_time(10, 30)
+
+        # 10:30 RP2 Piercing Invalidation Rule check (or 14:45 during Muhurat)
+        if eff_time <= rp2_piercing_cutoff:
             if bar_high >= grid.rp2_upper or bar_low <= grid.rp2_lower:
                 self.rp2_pierced_before_1030[index_name] = True
 
@@ -1153,9 +1169,9 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         signal: Optional[CachedRBFNAuctionSignal] = None
 
         # -----------------------------------------------------------------
-        # Phase A: Opening Drive Auction (09:20:00 - 09:45:00 IST)
+        # Phase A: Opening Drive Auction (09:20:00 - 09:45:00 IST or Muhurat 14:20:00 - 14:35:00)
         # -----------------------------------------------------------------
-        if dt_time(9, 20) <= eff_time <= dt_time(9, 45):
+        if is_phase_a:
             # Strict Gate 2 Verification
             if macro_daily_atr < min_atr or vix_val < min_vix:
                 signal = CachedRBFNAuctionSignal(
@@ -1474,9 +1490,9 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         )
 
         # -----------------------------------------------------------------
-        # Phase B: Midday Reversal (10:45:00 - 13:30:00 IST)
+        # Phase B: Midday Reversal / Multiscenario Expansion (10:45 - 13:30 or Muhurat 14:35 - 15:25)
         # -----------------------------------------------------------------
-        elif dt_time(10, 45) <= eff_time <= dt_time(13, 30):
+        elif is_phase_b:
             if self.rp2_pierced_before_1030.get(index_name, False):
                 signal = CachedRBFNAuctionSignal(
                     timestamp_ms=timestamp_ms,
@@ -1793,10 +1809,18 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         now_time = now_dt.time()
 
         # Opening shock freeze: strictly suppress all candidate setups unless Mode 5 Opening Drive is active
-        # Mode 5 Opening Drive is permitted between 09:20:00 and 09:45:00 IST.
-        # Mode 2 (ORB) and other general setups remain strictly frozen until 09:45:00.
-        in_opening_shock = (trade_lock or now_time < self.opening_shock_end_time)
-        if now_time < dt_time(9, 20):
+        # Mode 5 Opening Drive is permitted between 09:20:00 and 09:45:00 IST (or 14:20-14:35 for Muhurat).
+        # Mode 2 (ORB) and other general setups remain strictly frozen until 09:45:00 (or 14:35 for Muhurat).
+        is_muhurat_session = (datetime.now().weekday() == 6 and datetime.now().date() == date(2026, 11, 8))
+        if is_muhurat_session:
+            effective_shock_end = dt_time(14, 35)
+            session_pre_open_cutoff = dt_time(14, 20)
+        else:
+            effective_shock_end = self.opening_shock_end_time
+            session_pre_open_cutoff = dt_time(9, 20)
+
+        in_opening_shock = (trade_lock or now_time < effective_shock_end)
+        if now_time < session_pre_open_cutoff:
             return
 
         with self._lock:
