@@ -29,6 +29,7 @@ import threading
 import signal
 import logging
 import fcntl
+from typing import Optional
 from datetime import datetime, timezone, time as dt_time
 from pathlib import Path
 
@@ -56,8 +57,7 @@ from core.sentinel_inmem_adapter import InMemorySentinelAdapter
 from core.sentinel_live_stream_advisor import SentinelLiveStreamAdvisor
 
 PRIMARY_BASE_DIRS = [
-    Path("/Volumes/TradeBot/live market capture"),
-    Path("/Volumes/TradeBotData/live market capture"),
+    ROOT / ".runtime" / "market_data",
     Path("/Volumes/TradeBotFast/live market capture"),
 ]
 FALLBACK_BASE_DIR = ROOT / ".runtime" / "market_data"
@@ -195,17 +195,41 @@ def get_options_subscriptions(df_inst: pd.DataFrame, underlying_prices: dict[str
     subs["BSE_INDEX|SENSEX"] = "SENSEX"
     return subs
 
+PER_ASSET_TOKEN_CEILINGS = {
+    "NIFTY": 36,
+    "SENSEX": 26,
+    "BANKNIFTY": 26,
+}
+GLOBAL_MAX_TOTAL_TOKENS = 88
+
+def count_asset_tokens(subscriptions: dict[str, str] | set[str], index_name: str) -> int:
+    """Counts active option strike subscriptions belonging to a specific underlying asset."""
+    idx_upper = index_name.upper()
+    count = 0
+    if isinstance(subscriptions, dict):
+        for k, sym in subscriptions.items():
+            if sym.startswith(idx_upper + " "):
+                count += 1
+    elif isinstance(subscriptions, (set, list)):
+        for item in subscriptions:
+            # item may be symbol or instrument key
+            if item.startswith(idx_upper + " ") or f"|{idx_upper}_" in item:
+                count += 1
+    return count
+
 def recenter_premarket_option_subscriptions(
     streamer,
     subscriptions: dict[str, str],
     df_inst: pd.DataFrame,
     premarket_spot: float,
     index_name: str = "NIFTY",
-    max_total_tokens: int = 60,
+    max_total_tokens: int = 85,
+    per_asset_max_tokens: Optional[int] = None,
 ) -> int:
-    """Calculates updated ATM strike from pre-market 09:08:45-09:09:30 spot auction,
-    identifies ATM +- 10 strikes, adds union of new contracts up to max_total_tokens,
+    """Calculates updated ATM strike from pre-market (or 09:15 JIT) spot auction,
+    identifies ATM +- 10 strikes, adds union of new contracts up to token quota ceilings,
     prioritizing nearest to ATM outward. Calls streamer.subscribe in 'full' mode.
+    Enforces per-asset quota partitioning to prevent one gapping asset from starving others.
     Returns count of newly added strikes.
     """
     if df_inst is None or df_inst.empty or not premarket_spot or premarket_spot <= 0.0 or streamer is None:
@@ -245,15 +269,25 @@ def recenter_premarket_option_subscriptions(
             sym = row["trading_symbol"]
             candidate_keys_ordered.append((k, sym, strike))
 
-    # Add-only / Union subscription: filter out already subscribed keys
+    # Add-only / Union subscription with quota partitioning
     new_keys_to_add = []
     current_tokens_count = len(subscriptions)
-    available_slots = max(0, max_total_tokens - current_tokens_count)
+    global_available = max(0, max_total_tokens - current_tokens_count)
+
+    # Per-asset token ceiling check
+    asset_ceiling = per_asset_max_tokens if per_asset_max_tokens is not None else PER_ASSET_TOKEN_CEILINGS.get(index_name.upper(), 36)
+    current_asset_tokens = count_asset_tokens(subscriptions, index_name)
+    asset_available = max(0, asset_ceiling - current_asset_tokens)
+
+    available_slots = min(global_available, asset_available)
 
     for k, sym, strike in candidate_keys_ordered:
         if k not in subscriptions:
             if len(new_keys_to_add) < available_slots:
-                subscriptions[k] = sym
+                if isinstance(subscriptions, dict):
+                    subscriptions[k] = sym
+                elif isinstance(subscriptions, set):
+                    subscriptions.add(k)
                 new_keys_to_add.append(k)
 
     if new_keys_to_add:
@@ -261,12 +295,59 @@ def recenter_premarket_option_subscriptions(
             streamer.subscribe(new_keys_to_add, mode="full")
             logger.info(
                 f"[Pre-Market Re-Centering ({index_name})] Spot: ₹{premarket_spot:.1f} | ATM: ₹{atm:.0f} | "
-                f"Subscribed {len(new_keys_to_add)} new strikes (Total tokens: {len(subscriptions)}/{max_total_tokens})."
+                f"Subscribed {len(new_keys_to_add)} new strikes (Asset tokens: {current_asset_tokens + len(new_keys_to_add)}/{asset_ceiling}, "
+                f"Total tokens: {len(subscriptions)}/{max_total_tokens})."
             )
         except Exception as e:
             logger.error(f"[Pre-Market Re-Centering ({index_name})] Subscription failed: {e}")
 
     return len(new_keys_to_add)
+
+def check_and_recenter_intraday_drift(
+    streamer,
+    subscriptions: dict[str, str],
+    df_inst: pd.DataFrame,
+    current_spot: float,
+    last_subscribed_atm: float,
+    index_name: str = "NIFTY",
+    max_total_tokens: int = 88,
+    per_asset_max_tokens: Optional[int] = None,
+) -> tuple[int, float]:
+    """Watches intraday spot drift against last subscribed ATM strike.
+    If spot drifts >= 2 strikes from last subscribed ATM:
+      - NIFTY: >= 100 pts drift
+      - SENSEX: >= 200 pts drift
+      - BANKNIFTY: >= 200 pts drift
+    Expands subscription basket around new ATM up to per-asset and global token budget caps.
+    Returns (added_count, updated_last_subscribed_atm).
+    """
+    if not current_spot or current_spot <= 0 or not last_subscribed_atm or last_subscribed_atm <= 0:
+        return 0, last_subscribed_atm
+
+    idx_intervals = {"NIFTY": 50, "SENSEX": 100, "BANKNIFTY": 100}
+    interval = idx_intervals.get(index_name.upper(), 50)
+    drift_threshold = 2 * interval
+
+    drift_pts = abs(current_spot - last_subscribed_atm)
+    if drift_pts < drift_threshold:
+        return 0, last_subscribed_atm
+
+    new_atm = round(current_spot / interval) * interval
+    logger.info(
+        f"[Intraday Strike Drift Detected ({index_name})] Current Spot: ₹{current_spot:.1f} drifted {drift_pts:.1f}pts "
+        f"from Last ATM ₹{last_subscribed_atm:.0f} (Threshold: {drift_threshold}pts). Re-centering to new ATM ₹{new_atm:.0f}..."
+    )
+
+    added = recenter_premarket_option_subscriptions(
+        streamer=streamer,
+        subscriptions=subscriptions,
+        df_inst=df_inst,
+        premarket_spot=current_spot,
+        index_name=index_name,
+        max_total_tokens=max_total_tokens,
+        per_asset_max_tokens=per_asset_max_tokens,
+    )
+    return added, new_atm
 
 def format_depth(market_level) -> str:
     depth = {"bids": [], "asks": []}
@@ -570,7 +651,26 @@ def main():
     last_flush_time = time.time()
     market_close_time = dt_time(15, 41)  # Collect CAS data through 15:40 PM, stop stream and stitch at 15:41 IST
     premarket_recenter_done = False
+    jit_opening_expansion_done = False
     late_day_refresh_done = False
+
+    # Muhurat Session Awareness: Today is Sunday Diwali Muhurat (14:05 pre-open, 14:20 market open)
+    is_sunday_muhurat = (datetime.now().weekday() == 6)
+    pm_window_start = dt_time(14, 8, 45) if is_sunday_muhurat else dt_time(9, 8, 45)
+    pm_window_end = dt_time(14, 15, 0) if is_sunday_muhurat else dt_time(9, 9, 30)
+    jit_window_start = dt_time(14, 20, 5) if is_sunday_muhurat else dt_time(9, 15, 5)
+    jit_window_end = dt_time(14, 21, 30) if is_sunday_muhurat else dt_time(9, 15, 30)
+    drift_window_start = dt_time(14, 20, 0) if is_sunday_muhurat else dt_time(9, 30, 0)
+    if is_sunday_muhurat:
+        logger.info("🪔 [MUHURAT TRADING CONFIG] Pre-Open: 14:05 - 14:15 IST | Re-Centering: 14:08 - 14:15 IST | JIT Open: 14:20 IST.")
+
+    # Track last subscribed ATM strikes per index for dynamic intraday drift watcher
+    last_subscribed_atms: dict[str, float] = {
+        "NIFTY": round(prices.get("NIFTY", 24500.0) / 50.0) * 50.0,
+        "SENSEX": round(prices.get("SENSEX", 80000.0) / 100.0) * 100.0,
+        "BANKNIFTY": round(prices.get("BANKNIFTY", 52200.0) / 100.0) * 100.0,
+    }
+    last_drift_check_time = time.time()
 
     while running:
         now = datetime.now()
@@ -581,41 +681,105 @@ def main():
             logger.info("Market close & CAS complete (15:41 IST). Ending streaming session...")
             break
 
-        # Dynamic Pre-Market Re-Centering Hook at 09:08:45 - 09:09:30 IST
-        if not premarket_recenter_done and dt_time(9, 8, 45) <= now.time() < dt_time(9, 9, 30):
+        # Dynamic Multi-Asset Pre-Market Re-Centering Hook (09:08:45-09:09:30 or Muhurat 14:08:45-14:15:00)
+        if not premarket_recenter_done and pm_window_start <= now.time() < pm_window_end:
             try:
                 pm_quotes = get_underlying_prices(access_token)
-                pm_spot = pm_quotes.get("NIFTY", 0.0)
-                nifty_levels = sentinel_advisor.prior_day_levels.get("NIFTY")
-                prev_close = nifty_levels.pdc if (nifty_levels and nifty_levels.pdc > 0) else prices.get("NIFTY", 0.0)
-                atr_20 = nifty_levels.atr_20 if (nifty_levels and nifty_levels.atr_20 > 0) else 0.0
-                gap_threshold = (0.25 * atr_20) if atr_20 > 0 else 50.0
+                total_pm_added = 0
+                for idx_key in ["NIFTY", "SENSEX", "BANKNIFTY"]:
+                    pm_spot = pm_quotes.get(idx_key, 0.0)
+                    idx_levels = sentinel_advisor.prior_day_levels.get(idx_key)
+                    prev_close = idx_levels.pdc if (idx_levels and idx_levels.pdc > 0) else prices.get(idx_key, 0.0)
+                    atr_20 = idx_levels.atr_20 if (idx_levels and idx_levels.atr_20 > 0) else 0.0
+                    default_gap_thresh = 50.0 if idx_key == "NIFTY" else (150.0 if idx_key == "BANKNIFTY" else 200.0)
+                    gap_threshold = (0.25 * atr_20) if atr_20 > 0 else default_gap_thresh
 
-                if pm_spot > 0:
-                    gap_pts = abs(pm_spot - prev_close)
-                    if gap_pts >= gap_threshold:
-                        logger.info(
-                            f"[Pre-Market Re-Centering Triggered] NIFTY PM Spot: ₹{pm_spot:.1f}, Prev Close: ₹{prev_close:.1f}, "
-                            f"Gap: {gap_pts:.1f}pts >= Threshold: {gap_threshold:.1f}pts (0.25 * ATR={atr_20:.1f})."
-                        )
-                        added = recenter_premarket_option_subscriptions(
-                            streamer=streamer,
-                            subscriptions=subscriptions,
-                            df_inst=df_inst,
-                            premarket_spot=pm_spot,
-                            index_name="NIFTY",
-                            max_total_tokens=60,
-                        )
-                        logger.info(f"[Pre-Market Re-Centering] Subscribed {added} new option strikes.")
-                    else:
-                        logger.info(
-                            f"[Pre-Market Re-Centering] Gap {gap_pts:.1f}pts < Threshold {gap_threshold:.1f}pts. Retaining initial basket."
-                        )
-                    premarket_recenter_done = True
+                    if pm_spot > 0:
+                        gap_pts = abs(pm_spot - prev_close)
+                        if gap_pts >= gap_threshold:
+                            logger.info(
+                                f"[Pre-Market Re-Centering Triggered ({idx_key})] PM Spot: ₹{pm_spot:.1f}, Prev Close: ₹{prev_close:.1f}, "
+                                f"Gap: {gap_pts:.1f}pts >= Threshold: {gap_threshold:.1f}pts (0.25 * ATR={atr_20:.1f})."
+                            )
+                            added = recenter_premarket_option_subscriptions(
+                                streamer=streamer,
+                                subscriptions=subscriptions,
+                                df_inst=df_inst,
+                                premarket_spot=pm_spot,
+                                index_name=idx_key,
+                                max_total_tokens=85,
+                            )
+                            total_pm_added += added
+                            logger.info(f"[Pre-Market Re-Centering ({idx_key})] Subscribed {added} new option strikes.")
+                        else:
+                            logger.info(
+                                f"[Pre-Market Re-Centering ({idx_key})] Gap {gap_pts:.1f}pts < Threshold {gap_threshold:.1f}pts. Retaining initial basket."
+                            )
+                premarket_recenter_done = True
+                logger.info(f"[Pre-Market Re-Centering Complete] Subscribed {total_pm_added} total new strikes across indices.")
             except Exception as e:
                 logger.warning(f"[Pre-Market Re-Centering Warning] Encountered non-fatal error: {e}")
                 # Guard to avoid tight retry loop during error
                 premarket_recenter_done = True
+
+        # JIT Opening Strike Expansion Hook (09:15:05-09:15:30 or Muhurat 14:20:05-14:21:30)
+        # If open tick spot gaps beyond pre-market range, expand strike basket immediately
+        if not jit_opening_expansion_done and jit_window_start <= now.time() < jit_window_end:
+            try:
+                jit_added = 0
+                for idx_key in ["NIFTY", "SENSEX", "BANKNIFTY"]:
+                    live_spot = prices.get(idx_key, 0.0) or sentinel_advisor.spots.get(idx_key, 0.0)
+                    idx_levels = sentinel_advisor.prior_day_levels.get(idx_key)
+                    prev_close = idx_levels.pdc if (idx_levels and idx_levels.pdc > 0) else 0.0
+                    atr_20 = idx_levels.atr_20 if (idx_levels and idx_levels.atr_20 > 0) else 0.0
+                    default_thresh = 40.0 if idx_key == "NIFTY" else (120.0 if idx_key == "BANKNIFTY" else 150.0)
+                    gap_threshold = (0.20 * atr_20) if atr_20 > 0 else default_thresh
+
+                    if live_spot > 0 and prev_close > 0:
+                        gap_pts = abs(live_spot - prev_close)
+                        if gap_pts >= gap_threshold:
+                            logger.info(
+                                f"[JIT Opening Expansion ({idx_key})] Live Spot: ₹{live_spot:.1f}, Prev Close: ₹{prev_close:.1f}, "
+                                f"Gap: {gap_pts:.1f}pts >= Threshold: {gap_threshold:.1f}pts."
+                            )
+                            added = recenter_premarket_option_subscriptions(
+                                streamer=streamer,
+                                subscriptions=subscriptions,
+                                df_inst=df_inst,
+                                premarket_spot=live_spot,
+                                index_name=idx_key,
+                                max_total_tokens=95,
+                            )
+                            jit_added += added
+                jit_opening_expansion_done = True
+                if jit_added > 0:
+                    logger.info(f"[JIT Opening Expansion Complete] Subscribed {jit_added} JIT strikes at market open.")
+            except Exception as e:
+                logger.warning(f"[JIT Opening Expansion Warning] Non-fatal error: {e}")
+                jit_opening_expansion_done = True
+
+        # Dynamic Intraday Strike Drift Watcher (09:30-15:20 or Muhurat 14:20-15:30)
+        # Evaluates spot drift every 30 seconds and dynamically expands subscription if spot drifts >= 2 strikes
+        if drift_window_start <= now.time() < dt_time(15, 30) and (now_ts - last_drift_check_time >= 30.0):
+            last_drift_check_time = now_ts
+            try:
+                for idx_key in ["NIFTY", "SENSEX", "BANKNIFTY"]:
+                    cur_spot = prices.get(idx_key, 0.0) or sentinel_advisor.spots.get(idx_key, 0.0)
+                    last_atm = last_subscribed_atms.get(idx_key, 0.0)
+                    if cur_spot > 0 and last_atm > 0:
+                        added, updated_atm = check_and_recenter_intraday_drift(
+                            streamer=streamer,
+                            subscriptions=subscriptions,
+                            df_inst=df_inst,
+                            current_spot=cur_spot,
+                            last_subscribed_atm=last_atm,
+                            index_name=idx_key,
+                            max_total_tokens=GLOBAL_MAX_TOTAL_TOKENS,
+                        )
+                        if added > 0:
+                            last_subscribed_atms[idx_key] = updated_atm
+            except Exception as e:
+                logger.warning(f"[Intraday Drift Watcher Warning] Error: {e}")
 
         # Dynamic late-day option refresh at 15:23:00 - 15:24:00 IST
         # Subscribes ATM and ATM +/- 100 strikes around current spot to ensure 15:26 depth availability
