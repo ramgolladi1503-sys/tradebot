@@ -61,6 +61,8 @@ from strategies.optionmate_rbfn_strategy import (
     OptionMateGrid,
     OptionMateSignal,
 )
+from core.sentinel_execution_router import SentinelExecutionRouter
+from core.sentinel_automated_order_dispatcher import SentinelAutomatedOrderDispatcher
 from strategies.sensex_optionmate_rbfn_strategy import (
     SensexOptionMateRBFNStrategy,
     SensexOptionMateGrid,
@@ -243,10 +245,20 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         wal_path: str = "runtime/sentinel_apm_wal.json",
         journal: Optional[SentinelRealtimeJournal] = None,
         advisory_capital: float = 200000.0,
+        enable_automated_dispatch: bool = False,
+        enable_nifty_live: bool = False,
+        broker_adapter: Optional[any] = None,
     ) -> None:
         self.adapter = adapter if adapter is not None else InMemorySentinelAdapter()
         self.spread_veto_threshold = float(spread_veto_threshold)
         self.advisory_capital = float(advisory_capital)
+        self.enable_automated_dispatch = enable_automated_dispatch
+        self.enable_nifty_live = enable_nifty_live
+        self.execution_router = SentinelExecutionRouter(enable_nifty_live=enable_nifty_live)
+        self.automated_dispatcher = SentinelAutomatedOrderDispatcher(
+            router=self.execution_router,
+            broker_adapter=broker_adapter,
+        ) if enable_automated_dispatch else None
         self.market_open_time = market_open_time
         self.opening_shock_end_time = opening_shock_end_time
         self.eod_entry_freeze_time = eod_entry_freeze_time
@@ -2639,6 +2651,18 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                                 exec_reason = f"[{shadow_tier}] {setup_reason}"
                                 if strategy_name == "OPTIONMATE_RBFN_AUCTION" and rbfn_sig and rbfn_sig.sustainable_anchor_price > 0:
                                     exec_reason = f"{exec_reason} [ANCHOR: ₹{rbfn_sig.sustainable_anchor_price:.1f}]"
+
+                                # Pure Algo Automated Order Dispatching
+                                if self.automated_dispatcher:
+                                    self.automated_dispatcher.on_apm_entry(
+                                        index_name=index_name,
+                                        symbol=depth.symbol,
+                                        option_type=required_option_type,
+                                        entry_price=fill_price,
+                                        target_pts=target_pts,
+                                        sl_pts=sl_pts,
+                                        setup_reason=exec_reason,
+                                    )
                                 self.journal.record_execution(
                                     position_id=pos_id,
                                     index_name=index_name,
@@ -2716,6 +2740,15 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                                 timestamp_ms=depth.exchange_timestamp_ms,
                                 wall_time_str=now_time.strftime("%H:%M:%S"),
                             )
+
+                            # Pure Algo Automated Order Dispatching on Exit
+                            if self.automated_dispatcher:
+                                self.automated_dispatcher.on_apm_exit(
+                                    index_name=index_name,
+                                    symbol=depth.symbol,
+                                    exit_price=float(lt_dict.get("opt_exit_ltp") or ltp),
+                                    reason=str(lt_dict.get("exit_reason") or "LIQUIDATED"),
+                                )
 
         # Feed option depth tick to Shadow Barrier Path Evaluator
         self.journal.on_option_tick(
