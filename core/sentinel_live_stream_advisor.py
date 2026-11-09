@@ -244,14 +244,16 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         enable_stdout: bool = True,
         wal_path: str = "runtime/sentinel_apm_wal.json",
         journal: Optional[SentinelRealtimeJournal] = None,
-        advisory_capital: float = 200000.0,
+        advisory_capital: float = 30000.0,
         enable_automated_dispatch: bool = False,
         enable_nifty_live: bool = False,
         broker_adapter: Optional[any] = None,
     ) -> None:
         self.adapter = adapter if adapter is not None else InMemorySentinelAdapter()
         self.spread_veto_threshold = float(spread_veto_threshold)
-        self.advisory_capital = float(advisory_capital)
+        # Configurable capital: fallback to env or standard 30k allocation
+        env_cap = os.getenv("ALLOCATED_TRADING_CAPITAL")
+        self.advisory_capital = float(env_cap) if env_cap else float(advisory_capital)
         self.enable_automated_dispatch = enable_automated_dispatch
         self.enable_nifty_live = enable_nifty_live
         self.execution_router = SentinelExecutionRouter(enable_nifty_live=enable_nifty_live)
@@ -2523,6 +2525,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 opt_sl_pts = max(15.0, round(ltp * 0.20, 2))
 
                 # Gate 1: Capital Discretization & Integer Lot Math (Floor-or-Reject Model)
+                # allow_single_lot_floor enabled for accounts with ₹30k - ₹50k to guarantee 1 lot execution
                 computed_lots, sizing_tier = calculate_discrete_lots(
                     total_capital=self.advisory_capital,
                     risk_budget_pct=0.02,
@@ -2530,6 +2533,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     sl_points=opt_sl_pts,
                     index_name=index_name,
                     sizing_recommendation=conf_eval.sizing_recommendation,
+                    allow_single_lot_floor=True,
                 )
 
                 # Strict Lot Caps enforcement per index

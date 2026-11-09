@@ -50,6 +50,7 @@ def calculate_discrete_lots(
     sl_points: float,
     index_name: str,
     sizing_recommendation: str = "FULL_SIZE",  # "FULL_SIZE", "HALF_SIZE", "ZERO_SUPPRESS"
+    allow_single_lot_floor: bool = False,
 ) -> Tuple[int, str]:
     """Computes discrete lot count. Enforces Floor-or-Reject.
     
@@ -78,7 +79,12 @@ def calculate_discrete_lots(
 
     lots = min(lots_by_risk, lots_by_margin)
 
-    # Floor-or-Reject: Never round up
+    # Base 1-Lot Guarantee Floor (opt-in for micro-capital accounts >= 25k):
+    # When enabled, permits 1 lot if account margin suffices, even if risk budget rounds down to 0.
+    if lots < 1 and allow_single_lot_floor and total_capital >= margin_per_lot and total_capital >= 25000.0:
+        return 1, "BASE_SINGLE_LOT_FLOOR"
+
+    # Floor-or-Reject: Never round up if capital is genuinely insufficient
     if lots < 1:
         return 0, "REJECT_INSUFFICIENT_MARGIN"
 
