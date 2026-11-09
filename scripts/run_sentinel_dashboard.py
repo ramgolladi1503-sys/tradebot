@@ -24,6 +24,8 @@ if str(ROOT) not in sys.path:
 load_dotenv(ROOT / ".env", override=True)
 
 from datetime import datetime
+import requests
+import urllib.parse
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
@@ -961,9 +963,9 @@ with tab_live:
     # Fetch today's official 1m candlestick history from Upstox API
     has_candles = False
     try:
+        load_dotenv("/Users/madhuram/tradebot/.env", override=True)
         token = os.getenv("UPSTOX_ACCESS_TOKEN", "").strip()
         if token:
-            import urllib.parse
             inst_key = "NSE_INDEX|Nifty 50" if active_chart_idx == "NIFTY" else ("BSE_INDEX|SENSEX" if active_chart_idx == "SENSEX" else "NSE_INDEX|Nifty Bank")
             enc_key = urllib.parse.quote(inst_key)
             c_url = f"https://api.upstox.com/v2/historical-candle/intraday/{enc_key}/1minute"
@@ -993,8 +995,8 @@ with tab_live:
                         decreasing_fillcolor="#F23645",
                     ))
                     has_candles = True
-    except Exception:
-        pass
+    except Exception as e:
+        st.warning(f"Candlestick fetch exception: {e}")
 
     # Fallback to scatter line if candles failed
     if not has_candles:
@@ -1035,6 +1037,32 @@ with tab_live:
         if rp2_l:
             fig.add_hline(y=rp2_l, line_dash="dot", line_color="#388E3C", annotation_text=f"RP2 Lower {rp2_l:.2f}", annotation_position="bottom left")
     
+    # Auto-frame y-axis around actual candles / spot levels instead of defaulting to 0
+    y_min, y_max = None, None
+    if has_candles and not c_df.empty:
+        c_low = c_df["l"].min()
+        c_high = c_df["h"].max()
+        padding = max(30.0, (c_high - c_low) * 0.15)
+        y_min = c_low - padding
+        y_max = c_high + padding
+    elif not has_candles and not df_rows.empty and "spot_price" in df_rows.columns:
+        s_vals = df_rows[df_rows["index"] == active_chart_idx]["spot_price"]
+        if not s_vals.empty:
+            s_low = s_vals.min()
+            s_high = s_vals.max()
+            padding = max(30.0, (s_high - s_low) * 0.15)
+            y_min = s_low - padding
+            y_max = s_high + padding
+
+    y_axis_config = dict(
+        title=f"{active_chart_idx} Level",
+        showgrid=True,
+        gridcolor="rgba(255, 255, 255, 0.08)",
+        fixedrange=False,
+    )
+    if y_min is not None and y_max is not None:
+        y_axis_config["range"] = [y_min, y_max]
+
     fig.update_layout(
         template="plotly_dark",
         height=620,
@@ -1046,12 +1074,7 @@ with tab_live:
             showgrid=True,
             gridcolor="rgba(255, 255, 255, 0.08)",
         ),
-        yaxis=dict(
-            title=f"{active_chart_idx} Level",
-            showgrid=True,
-            gridcolor="rgba(255, 255, 255, 0.08)",
-            fixedrange=False,
-        ),
+        yaxis=y_axis_config,
         hovermode="x unified",
         dragmode="pan",
     )
