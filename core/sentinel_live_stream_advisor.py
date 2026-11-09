@@ -1676,18 +1676,27 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         # -------------------------------------------------------------
         elif is_phase_retest and len(history) >= 2:
             step = 100 if index_name in {"SENSEX", "BANKNIFTY"} else 50
+            # Scale buffer and minimum profit/SL by index volatility scale
+            # SENSEX (~80,000) uses 30 pts buffer / 45 pts min target; NIFTY uses 10 pts / 15 pts
+            td_buffer = 30.0 if index_name == "SENSEX" else (20.0 if index_name == "BANKNIFTY" else 10.0)
+            min_target_retest = 45.0 if index_name == "SENSEX" else (30.0 if index_name == "BANKNIFTY" else 15.0)
+            min_sl_retest = 35.0 if index_name == "SENSEX" else (25.0 if index_name == "BANKNIFTY" else 12.0)
+
             # Check for pullback holding at Trend Decider after opening drive
-            holding_at_td_bull = (history[-2]["low"] <= (grid.trend_decider + 10.0) and bar_close >= grid.trend_decider and bar_close > bar_open)
-            holding_at_td_bear = (history[-2]["high"] >= (grid.trend_decider - 10.0) and bar_close <= grid.trend_decider and bar_close < bar_open)
+            holding_at_td_bull = (history[-2].get("low", 0.0) <= (grid.trend_decider + td_buffer) and bar_close >= grid.trend_decider and bar_close > bar_open)
+            holding_at_td_bear = (history[-2].get("high", math.inf) >= (grid.trend_decider - td_buffer) and bar_close <= grid.trend_decider and bar_close < bar_open)
+            call_k = getattr(grid, "call_strike", getattr(grid, "target_call_strike", round(grid.rp1_upper / step) * step))
+            put_k = getattr(grid, "put_strike", getattr(grid, "target_put_strike", round(grid.rp1_lower / step) * step))
+
             if holding_at_td_bull:
-                t_pts = max(15.0, abs(grid.rp1_upper - bar_close))
-                s_pts = max(12.0, abs(bar_close - (grid.trend_decider - 15.0)))
+                t_pts = max(min_target_retest, abs(grid.rp1_upper - bar_close))
+                s_pts = max(min_sl_retest, abs(bar_close - (grid.trend_decider - td_buffer * 1.5)))
                 signal = CachedRBFNAuctionSignal(
                     timestamp_ms=timestamp_ms,
                     index_name=index_name,
                     action="BUY_CALL",
                     direction="CE",
-                    target_strike=float(grid.call_strike),
+                    target_strike=float(call_k),
                     target_pts=round(t_pts, 2),
                     sl_pts=round(s_pts, 2),
                     setup_reason="TD_PULLBACK_REENTRY_BULL",
@@ -1699,14 +1708,14 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     veto_reason="",
                 )
             elif holding_at_td_bear:
-                t_pts = max(15.0, abs(bar_close - grid.rp1_lower))
-                s_pts = max(12.0, abs((grid.trend_decider + 15.0) - bar_close))
+                t_pts = max(min_target_retest, abs(bar_close - grid.rp1_lower))
+                s_pts = max(min_sl_retest, abs((grid.trend_decider + td_buffer * 1.5) - bar_close))
                 signal = CachedRBFNAuctionSignal(
                     timestamp_ms=timestamp_ms,
                     index_name=index_name,
                     action="BUY_PUT",
                     direction="PE",
-                    target_strike=float(grid.put_strike),
+                    target_strike=float(put_k),
                     target_pts=round(t_pts, 2),
                     sl_pts=round(s_pts, 2),
                     setup_reason="TD_PULLBACK_REENTRY_BEAR",
@@ -1723,14 +1732,17 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         # -------------------------------------------------------------
         elif is_phase_c and len(history) >= 2:
             step = 100 if index_name in {"SENSEX", "BANKNIFTY"} else 50
-            c_prev = history[-2]["close"]
-            c_curr = history[-1]["close"]
+            min_target_pm = 60.0 if index_name == "SENSEX" else (40.0 if index_name == "BANKNIFTY" else 20.0)
+            min_sl_pm = 45.0 if index_name == "SENSEX" else (30.0 if index_name == "BANKNIFTY" else 15.0)
+
+            c_prev = history[-2].get("close", history[-2].get("high", bar_close))
+            c_curr = history[-1].get("close", history[-1].get("high", bar_close))
             is_pm_breakout_upper = (c_prev >= grid.rp1_upper and c_curr >= grid.rp1_upper)
             is_pm_breakdown_lower = (c_prev <= grid.rp1_lower and c_curr <= grid.rp1_lower)
             if is_pm_breakout_upper and bar_close < grid.rp2_upper:
                 target_k = round(grid.rp2_upper / step) * step
-                t_pts = max(20.0, abs(grid.rp2_upper - bar_close))
-                s_pts = max(15.0, abs(bar_close - (grid.rp1_upper - 15.0)))
+                t_pts = max(min_target_pm, abs(grid.rp2_upper - bar_close))
+                s_pts = max(min_sl_pm, abs(bar_close - (grid.rp1_upper - (min_sl_pm))))
                 signal = CachedRBFNAuctionSignal(
                     timestamp_ms=timestamp_ms,
                     index_name=index_name,
@@ -1749,8 +1761,8 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 )
             elif is_pm_breakdown_lower and bar_close > grid.rp2_lower:
                 target_k = round(grid.rp2_lower / step) * step
-                t_pts = max(20.0, abs(bar_close - grid.rp2_lower))
-                s_pts = max(15.0, abs((grid.rp1_lower + 15.0) - bar_close))
+                t_pts = max(min_target_pm, abs(bar_close - grid.rp2_lower))
+                s_pts = max(min_sl_pm, abs((grid.rp1_lower + min_sl_pm) - bar_close))
                 signal = CachedRBFNAuctionSignal(
                     timestamp_ms=timestamp_ms,
                     index_name=index_name,
