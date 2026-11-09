@@ -505,6 +505,23 @@ def main():
                 last_session_dir = date_dirs[-1]
                 compact_date = last_session_dir.name.replace("-", "")
                 idx_file = last_session_dir / f"indices_1m_{compact_date}.parquet"
+
+                # Check if previous session was a special short Muhurat trading session (e.g. 2026-11-08)
+                # For baseline daily ATR volatility hurdles, retrieve the last full regular session
+                regular_dirs = [d for d in date_dirs if d.name != "2026-11-08"]
+                reg_atr_map = {}
+                if regular_dirs:
+                    reg_dir = regular_dirs[-1]
+                    reg_compact = reg_dir.name.replace("-", "")
+                    reg_idx_file = reg_dir / f"indices_1m_{reg_compact}.parquet"
+                    if reg_idx_file.exists():
+                        import pandas as pd
+                        df_reg = pd.read_parquet(reg_idx_file)
+                        for target, src_sym in {"NIFTY": "NIFTY 50", "BANKNIFTY": "BANKNIFTY", "SENSEX": "SENSEX"}.items():
+                            reg_sub = df_reg[df_reg["symbol"] == src_sym]
+                            if not reg_sub.empty:
+                                reg_atr_map[target] = float(reg_sub["high"].max() - reg_sub["low"].min())
+
                 if idx_file.exists():
                     import pandas as pd
                     df_idx = pd.read_parquet(idx_file)
@@ -515,7 +532,8 @@ def main():
                             pdh = float(sub["high"].max())
                             pdl = float(sub["low"].min())
                             pdc = float(sub.iloc[-1]["close"])
-                            pdr = float(pdh - pdl)
+                            # Use full-day baseline ATR if available so short Muhurat sessions do not distort macro daily ATR hurdles
+                            pdr = reg_atr_map.get(target, float(pdh - pdl))
                             sentinel_advisor.seed_prior_day_levels(
                                 index_name=target,
                                 pdh=pdh,
