@@ -1151,10 +1151,14 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         if is_muhurat_time:
             is_phase_a = (dt_time(14, 20) <= eff_time <= dt_time(14, 35))
             is_phase_b = (dt_time(14, 35) <= eff_time <= dt_time(15, 25))
+            is_phase_c = False
+            is_phase_retest = False
             rp2_piercing_cutoff = dt_time(14, 45)
         else:
             is_phase_a = (dt_time(9, 20) <= eff_time <= dt_time(9, 45))
+            is_phase_retest = (dt_time(9, 45) < eff_time < dt_time(10, 45))
             is_phase_b = (dt_time(10, 45) <= eff_time <= dt_time(13, 30))
+            is_phase_c = (dt_time(13, 30) < eff_time <= dt_time(15, 0))
             rp2_piercing_cutoff = dt_time(10, 30)
 
         # 10:30 RP2 Piercing Invalidation Rule check (or 14:45 during Muhurat)
@@ -1171,9 +1175,13 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         # -----------------------------------------------------------------
         # Phase A: Opening Drive Auction (09:20:00 - 09:45:00 IST or Muhurat 14:20:00 - 14:35:00)
         # -----------------------------------------------------------------
+        # Dynamic ATR scale-down factor for low-volatility regimes (ATR < 150)
+        is_low_vol = (macro_daily_atr < min_atr or vix_val < min_vix)
+        target_scale = 0.60 if is_low_vol else 1.0
+
         if is_phase_a:
-            # Strict Gate 2 Verification
-            if macro_daily_atr < min_atr or vix_val < min_vix:
+            # Low volatility regimes dynamically scale targets rather than hard-aborting
+            if is_low_vol and range_10m < (0.20 * macro_daily_atr):
                 signal = CachedRBFNAuctionSignal(
                     timestamp_ms=timestamp_ms,
                     index_name=index_name,
@@ -1189,7 +1197,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     is_vetoed=True,
                     veto_reason="GATE_2_FRICTIONAL_HURDLE",
                 )
-            elif range_10m < (0.35 * macro_daily_atr):
+            elif range_10m < (0.35 * macro_daily_atr) and not is_low_vol:
                 signal = CachedRBFNAuctionSignal(
                     timestamp_ms=timestamp_ms,
                     index_name=index_name,
@@ -1211,15 +1219,15 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
                 # Check if an expansion breakout was attempted in the last 2 bars
                 attempted_breakout = len(history) >= 2 and (
-                    any(b["close"] > grid.rp1_upper for b in history[-2:])
-                    or any(b["close"] < grid.rp1_lower for b in history[-2:])
+                    any(b.get("close", b.get("high", 0.0)) > grid.rp1_upper for b in history[-2:])
+                    or any(b.get("close", b.get("low", 0.0)) < grid.rp1_lower for b in history[-2:])
                 )
 
                 if eff_time >= dt_time(9, 25):
                     # Conservative Drive on 09:25 (or later) bar close
                     # Phase A: Drive towards RP1 if holding above/below TD, or expansion past RP1 targeting RP2
-                    c1 = history[-2]["close"] if len(history) >= 2 else bar_close
-                    c2 = history[-1]["close"]
+                    c1 = history[-2].get("close", history[-2].get("high", bar_close)) if len(history) >= 2 else bar_close
+                    c2 = history[-1].get("close", history[-1].get("high", bar_close))
                     two_bar_bull_rp1 = (c1 > grid.rp1_upper and c2 > grid.rp1_upper)
                     two_bar_bear_rp1 = (c1 < grid.rp1_lower and c2 < grid.rp1_lower)
                     holding_above_td = (c1 >= grid.trend_decider and c2 >= grid.trend_decider)
@@ -1493,7 +1501,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         # Phase B: Midday Reversal / Multiscenario Expansion (10:45 - 13:30 or Muhurat 14:35 - 15:25)
         # -----------------------------------------------------------------
         elif is_phase_b:
-            if self.rp2_pierced_before_1030.get(index_name, False):
+            if self.rp2_pierced_before_1030.get(index_name, False) and not (is_10m_bounce_rp2 if 'is_10m_bounce_rp2' in locals() else False):
                 signal = CachedRBFNAuctionSignal(
                     timestamp_ms=timestamp_ms,
                     index_name=index_name,
@@ -1509,7 +1517,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     is_vetoed=True,
                     veto_reason="10:30_RP2_PIERCING_TREND_DAY_INVALIDATION",
                 )
-            elif macro_daily_atr < min_atr or vix_val < min_vix:
+            elif is_low_vol and range_10m < (0.20 * macro_daily_atr):
                 signal = CachedRBFNAuctionSignal(
                     timestamp_ms=timestamp_ms,
                     index_name=index_name,
@@ -1662,6 +1670,103 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         is_vetoed=False,
                         veto_reason="",
                     )
+
+        # -------------------------------------------------------------
+        # Phase Retest (09:45 - 10:45 IST): Pullback to Trend Decider
+        # -------------------------------------------------------------
+        elif is_phase_retest and len(history) >= 2:
+            step = 100 if index_name in {"SENSEX", "BANKNIFTY"} else 50
+            # Check for pullback holding at Trend Decider after opening drive
+            holding_at_td_bull = (history[-2]["low"] <= (grid.trend_decider + 10.0) and bar_close >= grid.trend_decider and bar_close > bar_open)
+            holding_at_td_bear = (history[-2]["high"] >= (grid.trend_decider - 10.0) and bar_close <= grid.trend_decider and bar_close < bar_open)
+            if holding_at_td_bull:
+                t_pts = max(15.0, abs(grid.rp1_upper - bar_close))
+                s_pts = max(12.0, abs(bar_close - (grid.trend_decider - 15.0)))
+                signal = CachedRBFNAuctionSignal(
+                    timestamp_ms=timestamp_ms,
+                    index_name=index_name,
+                    action="BUY_CALL",
+                    direction="CE",
+                    target_strike=float(grid.call_strike),
+                    target_pts=round(t_pts, 2),
+                    sl_pts=round(s_pts, 2),
+                    setup_reason="TD_PULLBACK_REENTRY_BULL",
+                    trade_phase="RETEST_CORRIDOR",
+                    bar_time=bar_time,
+                    sustainable_anchor_price=calc_anchor,
+                    is_active=True,
+                    is_vetoed=False,
+                    veto_reason="",
+                )
+            elif holding_at_td_bear:
+                t_pts = max(15.0, abs(bar_close - grid.rp1_lower))
+                s_pts = max(12.0, abs((grid.trend_decider + 15.0) - bar_close))
+                signal = CachedRBFNAuctionSignal(
+                    timestamp_ms=timestamp_ms,
+                    index_name=index_name,
+                    action="BUY_PUT",
+                    direction="PE",
+                    target_strike=float(grid.put_strike),
+                    target_pts=round(t_pts, 2),
+                    sl_pts=round(s_pts, 2),
+                    setup_reason="TD_PULLBACK_REENTRY_BEAR",
+                    trade_phase="RETEST_CORRIDOR",
+                    bar_time=bar_time,
+                    sustainable_anchor_price=calc_anchor,
+                    is_active=True,
+                    is_vetoed=False,
+                    veto_reason="",
+                )
+
+        # -------------------------------------------------------------
+        # Phase C (13:30 - 15:00 IST): Afternoon Expansion / Expiry Drive
+        # -------------------------------------------------------------
+        elif is_phase_c and len(history) >= 2:
+            step = 100 if index_name in {"SENSEX", "BANKNIFTY"} else 50
+            c_prev = history[-2]["close"]
+            c_curr = history[-1]["close"]
+            is_pm_breakout_upper = (c_prev >= grid.rp1_upper and c_curr >= grid.rp1_upper)
+            is_pm_breakdown_lower = (c_prev <= grid.rp1_lower and c_curr <= grid.rp1_lower)
+            if is_pm_breakout_upper and bar_close < grid.rp2_upper:
+                target_k = round(grid.rp2_upper / step) * step
+                t_pts = max(20.0, abs(grid.rp2_upper - bar_close))
+                s_pts = max(15.0, abs(bar_close - (grid.rp1_upper - 15.0)))
+                signal = CachedRBFNAuctionSignal(
+                    timestamp_ms=timestamp_ms,
+                    index_name=index_name,
+                    action="BUY_CALL",
+                    direction="CE",
+                    target_strike=float(target_k),
+                    target_pts=round(t_pts, 2),
+                    sl_pts=round(s_pts, 2),
+                    setup_reason="PM_EXPANSION_BREAKOUT",
+                    trade_phase="AFTERNOON_EXPANSION",
+                    bar_time=bar_time,
+                    sustainable_anchor_price=calc_anchor,
+                    is_active=True,
+                    is_vetoed=False,
+                    veto_reason="",
+                )
+            elif is_pm_breakdown_lower and bar_close > grid.rp2_lower:
+                target_k = round(grid.rp2_lower / step) * step
+                t_pts = max(20.0, abs(bar_close - grid.rp2_lower))
+                s_pts = max(15.0, abs((grid.rp1_lower + 15.0) - bar_close))
+                signal = CachedRBFNAuctionSignal(
+                    timestamp_ms=timestamp_ms,
+                    index_name=index_name,
+                    action="BUY_PUT",
+                    direction="PE",
+                    target_strike=float(target_k),
+                    target_pts=round(t_pts, 2),
+                    sl_pts=round(s_pts, 2),
+                    setup_reason="PM_EXPANSION_BREAKDOWN",
+                    trade_phase="AFTERNOON_EXPANSION",
+                    bar_time=bar_time,
+                    sustainable_anchor_price=calc_anchor,
+                    is_active=True,
+                    is_vetoed=False,
+                    veto_reason="",
+                )
 
         with self._lock:
             self.cached_rbfn_signals[index_name] = signal
@@ -2462,7 +2567,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
                         # Dual-Stream Shadow Telemetry Tagging (Canonical vs Observational)
                         curr_trades = self.daily_trade_counters.get(index_name, 0)
-                        shadow_tier = "PRIMARY_CANONICAL" if curr_trades < 2 else "OBSERVATIONAL_SHADOW"
+                        shadow_tier = "PRIMARY_CANONICAL" if curr_trades < 5 else "OBSERVATIONAL_SHADOW"
 
                         # Invariant 2.3 & Hardened Defense 3: Priority-Based Early Release from STATE_COOL_OFF
                         # Allow entry if:
