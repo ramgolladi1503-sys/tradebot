@@ -115,3 +115,52 @@ def test_valid_2bar_td_touch_triggers_entry():
     assert sig.action == "BUY_PUT"
     assert sig.direction == "PE"
     assert sig.setup_reason == "TD_PULLBACK_REENTRY_BEAR_CONFIRMED_2BAR"
+
+def test_midday_phase_b_td_touch_triggers_entry():
+    """Prove that Phase B (10:45 - 13:30) triggers TD rejection drive toward RP1."""
+    adapter = InMemorySentinelAdapter()
+    advisor = SentinelLiveStreamAdvisor(adapter=adapter, enable_stdout=False)
+    
+    advisor.prior_day_levels["NIFTY"] = PriorDayReferenceLevels(
+        index_name="NIFTY", pdh=25500.0, pdl=25300.0, pdc=25400.0, session_date=date(2026, 11, 9), verified=True, atr_20=200.0
+    )
+    
+    grid = OptionMateGrid(
+        date="2026-11-11",
+        spot_open=25400.0,
+        trend_decider=25400.0,
+        rp1_upper=25550.0,
+        rp2_upper=25700.0,
+        rp1_lower=25250.0,
+        rp2_lower=25100.0,
+        call_strike=25550.0,
+        put_strike=25250.0,
+        recommended_bias="RANGE",
+        target_strike=25550.0,
+    )
+    advisor.cached_rbfn_grids["NIFTY"] = grid
+    advisor.rbfn_grids_frozen["NIFTY"] = True
+    
+    # Bar 1 at 11:25 tests TD at 25402
+    advisor.bars_5m_history["NIFTY"] = [
+        {"open": 25380.0, "high": 25402.0, "low": 25375.0, "close": 25390.0, "volume": 1000, "time": dt_time(11, 25), "timestamp_ms": 1000, "epoch_5min": 1},
+    ]
+    
+    # Bar 2 at 11:30 closes bearish at 25392 confirming hold below TD
+    sig = advisor._on_5m_bar_close(
+        index_name="NIFTY",
+        bar_open=25395.0,
+        bar_high=25398.0,
+        bar_low=25385.0,
+        bar_close=25392.0,
+        bar_volume=1000.0,
+        bar_time=dt_time(11, 30), # Midday Phase B
+        timestamp_ms=2000,
+        epoch_5min=2,
+    )
+    
+    assert sig is not None
+    assert sig.is_active is True
+    assert sig.action == "BUY_PUT"
+    assert sig.direction == "PE"
+    assert sig.setup_reason == "TD_PULLBACK_REENTRY_BEAR_CONFIRMED_2BAR"

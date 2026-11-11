@@ -1679,29 +1679,88 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         veto_reason="",
                     )
                 # -------------------------------------------------------------
-                # 5. SCENARIO 8 (S8): RP1_LOWER Reversal Fade (Capped Target)
+                # 6. SCENARIO TD-RETEST: Continuous Trend Decider Retest & Rejection (Active Throughout Session)
+                # Evaluated after extreme boundary scenarios so boundary bounces take precedence,
+                # but whenever spot pulls back to TD and confirms 2-bar directional rejection,
+                # it drives toward RP1 (Upper for Bull, Lower for Bear).
                 # -------------------------------------------------------------
-                elif any(b["low"] <= grid.rp1_lower for b in history[-3:]) and all(b["close"] >= (grid.rp1_lower + buf) for b in history[-2:]) and bar_close < grid.trend_decider:
-                    t_strike = round(grid.trend_decider / step) * step
-                    # Hardened: Cap reversal target to +20 pts milestone to eliminate midday theta bleed
-                    t_pts = min(20.0 if index_name != "SENSEX" else 50.0, max(15.0, abs(grid.trend_decider - bar_close)))
-                    s_pts = max(12.0 if index_name != "SENSEX" else 35.0, abs(bar_close - (grid.rp1_lower - (30.0 if index_name == "SENSEX" else 20.0))))
-                    signal = CachedRBFNAuctionSignal(
-                        timestamp_ms=timestamp_ms,
-                        index_name=index_name,
-                        action="BUY_CALL",
-                        direction="CE",
-                        target_strike=float(t_strike),
-                        target_pts=round(t_pts, 2),
-                        sl_pts=round(s_pts, 2),
-                        setup_reason="RP1_LOWER_REVERSAL_CONFIRMED",
-                        trade_phase="MIDDAY_REVERSAL",
-                        bar_time=bar_time,
-                        sustainable_anchor_price=calc_anchor,
-                        is_active=True,
-                        is_vetoed=False,
-                        veto_reason="",
-                    )
+                elif len(history) >= 2:
+                    td_touch_tolerance = 15.0 if index_name == "SENSEX" else (10.0 if index_name == "BANKNIFTY" else 5.0)
+                    max_midway_dist = 45.0 if index_name == "SENSEX" else (30.0 if index_name == "BANKNIFTY" else 15.0)
+                    min_target_retest = 45.0 if index_name == "SENSEX" else (30.0 if index_name == "BANKNIFTY" else 15.0)
+                    min_sl_retest = 35.0 if index_name == "SENSEX" else (25.0 if index_name == "BANKNIFTY" else 12.0)
+
+                    prev_bar = history[-2]
+                    curr_bar = history[-1]
+
+                    # Candle 1 (previous bar) tested Trend Decider
+                    c1_tested_td_bull = prev_bar.get("low", 0.0) <= (grid.trend_decider + td_touch_tolerance)
+                    c1_tested_td_bear = prev_bar.get("high", math.inf) >= (grid.trend_decider - td_touch_tolerance)
+
+                    # Candle 2 (current bar) confirms sustained directional rejection at TD without running away midway
+                    c2_holds_near_td = abs(bar_close - grid.trend_decider) <= max_midway_dist
+                    c2_confirmed_bull = (curr_bar.get("close", 0.0) > curr_bar.get("open", 0.0)) and (curr_bar.get("close", 0.0) >= grid.trend_decider)
+                    c2_confirmed_bear = (curr_bar.get("close", 0.0) < curr_bar.get("open", 0.0)) and (curr_bar.get("close", 0.0) <= grid.trend_decider)
+
+                    holding_at_td_bull = c1_tested_td_bull and c2_confirmed_bull and c2_holds_near_td
+                    holding_at_td_bear = c1_tested_td_bear and c2_confirmed_bear and c2_holds_near_td
+                    call_k = getattr(grid, "call_strike", getattr(grid, "target_call_strike", round(grid.rp1_upper / step) * step))
+                    put_k = getattr(grid, "put_strike", getattr(grid, "target_put_strike", round(grid.rp1_lower / step) * step))
+
+                    if holding_at_td_bull:
+                        t_pts = max(min_target_retest, abs(grid.rp1_upper - bar_close))
+                        s_pts = max(min_sl_retest, abs(bar_close - (grid.trend_decider - td_touch_tolerance * 2.0)))
+                        signal = CachedRBFNAuctionSignal(
+                            timestamp_ms=timestamp_ms,
+                            index_name=index_name,
+                            action="BUY_CALL",
+                            direction="CE",
+                            target_strike=float(call_k),
+                            target_pts=round(t_pts, 2),
+                            sl_pts=round(s_pts, 2),
+                            setup_reason="TD_PULLBACK_REENTRY_BULL_CONFIRMED_2BAR",
+                            trade_phase="MIDDAY_REVERSAL",
+                            bar_time=bar_time,
+                            sustainable_anchor_price=calc_anchor,
+                            is_active=True,
+                            is_vetoed=False,
+                            veto_reason="",
+                        )
+                    elif holding_at_td_bear:
+                        t_pts = max(min_target_retest, abs(bar_close - grid.rp1_lower))
+                        s_pts = max(min_sl_retest, abs((grid.trend_decider + td_touch_tolerance * 2.0) - bar_close))
+                        signal = CachedRBFNAuctionSignal(
+                            timestamp_ms=timestamp_ms,
+                            index_name=index_name,
+                            action="BUY_PUT",
+                            direction="PE",
+                            target_strike=float(put_k),
+                            target_pts=round(t_pts, 2),
+                            sl_pts=round(s_pts, 2),
+                            setup_reason="TD_PULLBACK_REENTRY_BEAR_CONFIRMED_2BAR",
+                            trade_phase="MIDDAY_REVERSAL",
+                            bar_time=bar_time,
+                            sustainable_anchor_price=calc_anchor,
+                            is_active=True,
+                            is_vetoed=False,
+                            veto_reason="",
+                        )
+                    else:
+                        signal = CachedRBFNAuctionSignal(
+                            timestamp_ms=timestamp_ms,
+                            index_name=index_name,
+                            action="ABSTAIN",
+                            direction="",
+                            target_strike=0.0,
+                            target_pts=0.0,
+                            sl_pts=0.0,
+                            setup_reason="NO_CONFIRMED_TD_TEST_OR_MIDWAY",
+                            trade_phase="MIDDAY_REVERSAL",
+                            bar_time=bar_time,
+                            is_active=False,
+                            is_vetoed=False,
+                            veto_reason="",
+                        )
 
         # -------------------------------------------------------------
         # Phase Retest (09:45 - 10:45 IST): Pullback to Trend Decider
