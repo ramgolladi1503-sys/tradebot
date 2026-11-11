@@ -35,6 +35,9 @@ class SentinelAutomatedOrderDispatcher:
     Subscribes to APM actions and dispatches execution orders:
     - NIFTY triggers live execution if enabled in router; otherwise PAPER.
     - SENSEX and BANKNIFTY are strictly forced to PAPER execution.
+    - Strict Invariants:
+      * Anti-Overtrading: Hard stop at max 5 trades per session.
+      * Idempotency & Anti-Duplicate: Disallows concurrent live positions or duplicate orders.
     """
 
     def __init__(
@@ -42,10 +45,14 @@ class SentinelAutomatedOrderDispatcher:
         router: Optional[SentinelExecutionRouter] = None,
         broker_adapter: Optional[BrokerAdapter] = None,
         paper_event_writer: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+        max_daily_live_trades: int = 5,
     ):
         self.router = router or SentinelExecutionRouter(enable_nifty_live=False)
         self.broker = broker_adapter
         self.paper_writer = paper_event_writer
+        self.max_daily_live_trades = max_daily_live_trades
+        self.daily_live_trade_count: Dict[str, int] = {}
+        self.active_live_position: Dict[str, Optional[str]] = {}  # index_name -> symbol
 
     def on_apm_entry(
         self,
@@ -75,6 +82,33 @@ class SentinelAutomatedOrderDispatcher:
         routed = self.router.route_execution_intent(index_name, intent)
 
         if routed["mode"] == ExecutionMode.LIVE.value:
+            # 1. Anti-Duplicate Order & Active Position Guard
+            if self.active_live_position.get(index_name) is not None:
+                return AutomatedExecutionResult(
+                    index_name=index_name,
+                    symbol=symbol,
+                    action="VETOED_CONCURRENT_POSITION",
+                    mode="LIVE",
+                    message=f"Duplicate entry blocked: already holding active live position in {self.active_live_position[index_name]}",
+                    read_only=True,
+                    is_order_action=False,
+                    broker_api_called=False,
+                )
+
+            # 2. Hard Anti-Overtrading Daily Cap (Max 5 trades)
+            current_count = self.daily_live_trade_count.get(index_name, 0)
+            if current_count >= self.max_daily_live_trades:
+                return AutomatedExecutionResult(
+                    index_name=index_name,
+                    symbol=symbol,
+                    action="VETOED_OVERTRADING_CAP",
+                    mode="LIVE",
+                    message=f"Daily trade cap reached ({current_count}/{self.max_daily_live_trades}). No more live orders.",
+                    read_only=True,
+                    is_order_action=False,
+                    broker_api_called=False,
+                )
+
             # LIVE automated execution for NIFTY
             if self.broker is None:
                 return AutomatedExecutionResult(
@@ -94,6 +128,10 @@ class SentinelAutomatedOrderDispatcher:
                 client_order_id=f"SENTINEL-ENTRY-{int(datetime.now().timestamp()*1000)}",
             )
             resp = self.broker.place_order(req)
+            if resp.ok:
+                self.daily_live_trade_count[index_name] = current_count + 1
+                self.active_live_position[index_name] = symbol
+
             return AutomatedExecutionResult(
                 index_name=index_name,
                 symbol=symbol,
@@ -102,7 +140,7 @@ class SentinelAutomatedOrderDispatcher:
                 order_id=resp.broker_order_id,
                 target_price=entry_price,
                 qty=routed["lot_size"],
-                message=resp.reason or "LIVE order dispatched",
+                message=resp.reason or f"LIVE order #{self.daily_live_trade_count.get(index_name, 1)} dispatched",
                 read_only=False,
                 is_order_action=True,
                 broker_api_called=True,
@@ -158,6 +196,8 @@ class SentinelAutomatedOrderDispatcher:
                 client_order_id=f"SENTINEL-EXIT-{int(datetime.now().timestamp()*1000)}",
             )
             resp = self.broker.place_order(req)
+            if resp.ok:
+                self.active_live_position[index_name] = None
             return AutomatedExecutionResult(
                 index_name=index_name,
                 symbol=symbol,

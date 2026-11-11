@@ -489,10 +489,17 @@ def main():
     )
 
     # 3. Embedded Sentinel Live Advisory Engine (< 1ms live paper evaluation)
+    from core.broker.upstox_broker_adapter import UpstoxBrokerAdapter
+    upstox_broker = UpstoxBrokerAdapter(access_token=access_token, is_live_enabled=True)
+
     sentinel_advisor = SentinelLiveStreamAdvisor(
         adapter=sentinel_adapter,
         spread_veto_threshold=0.04,
         enable_stdout=True,
+        advisory_capital=30000.0,
+        enable_automated_dispatch=True,
+        enable_nifty_live=True,
+        broker_adapter=upstox_broker,
     )
 
     # 3b. Automatic Prior-Day Reference Level Seeding (Dynamic fail-closed reference bounds)
@@ -500,27 +507,37 @@ def main():
         primary_dir = next((p for p in PRIMARY_BASE_DIRS if p.exists()), None)
         search_dir = primary_dir if primary_dir is not None else FALLBACK_BASE_DIR
         if search_dir.exists():
-            date_dirs = sorted([d for d in search_dir.iterdir() if d.is_dir() and d.name.startswith("2026-") and d.name < today_str])
-            if date_dirs:
-                last_session_dir = date_dirs[-1]
+            # Find the most recent session directory that actually contains stitched indices_1m parquet file
+            valid_dirs = []
+            for d in sorted([x for x in search_dir.iterdir() if x.is_dir() and x.name.startswith("2026-") and x.name < today_str]):
+                c_date = d.name.replace("-", "")
+                if (d / f"indices_1m_{c_date}.parquet").exists():
+                    valid_dirs.append(d)
+
+            if valid_dirs:
+                last_session_dir = valid_dirs[-1]
                 compact_date = last_session_dir.name.replace("-", "")
                 idx_file = last_session_dir / f"indices_1m_{compact_date}.parquet"
 
                 # Check if previous session was a special short Muhurat trading session (e.g. 2026-11-08)
-                # For baseline daily ATR volatility hurdles, retrieve the last full regular session
-                regular_dirs = [d for d in date_dirs if d.name != "2026-11-08"]
+                # For baseline daily ATR volatility hurdles, compute rolling median ATR across regular sessions
+                regular_dirs = [d for d in valid_dirs if d.name != "2026-11-08"]
                 reg_atr_map = {}
                 if regular_dirs:
-                    reg_dir = regular_dirs[-1]
-                    reg_compact = reg_dir.name.replace("-", "")
-                    reg_idx_file = reg_dir / f"indices_1m_{reg_compact}.parquet"
-                    if reg_idx_file.exists():
-                        import pandas as pd
-                        df_reg = pd.read_parquet(reg_idx_file)
-                        for target, src_sym in {"NIFTY": "NIFTY 50", "BANKNIFTY": "BANKNIFTY", "SENSEX": "SENSEX"}.items():
-                            reg_sub = df_reg[df_reg["symbol"] == src_sym]
-                            if not reg_sub.empty:
-                                reg_atr_map[target] = float(reg_sub["high"].max() - reg_sub["low"].min())
+                    import pandas as pd
+                    import numpy as np
+                    for target, src_sym in {"NIFTY": "NIFTY 50", "BANKNIFTY": "BANKNIFTY", "SENSEX": "SENSEX"}.items():
+                        ranges = []
+                        for r_dir in regular_dirs[-5:]:
+                            r_compact = r_dir.name.replace("-", "")
+                            r_idx_file = r_dir / f"indices_1m_{r_compact}.parquet"
+                            if r_idx_file.exists():
+                                df_r = pd.read_parquet(r_idx_file)
+                                sub_r = df_r[df_r["symbol"] == src_sym]
+                                if not sub_r.empty:
+                                    ranges.append(float(sub_r["high"].max() - sub_r["low"].min()))
+                        if ranges:
+                            reg_atr_map[target] = float(np.median(ranges))
 
                 if idx_file.exists():
                     import pandas as pd

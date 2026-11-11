@@ -1247,6 +1247,19 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     holding_above_td = (c1 >= grid.trend_decider and c2 >= grid.trend_decider)
                     holding_below_td = (c1 <= grid.trend_decider and c2 <= grid.trend_decider)
 
+                    # Strict TD Test Check for Opening Drive:
+                    # To prevent entering midway in no-man's-land between TD and RP1,
+                    # price must have actually tested or originated near Trend Decider.
+                    td_max_drive_dist = 15.0 if index_name == "NIFTY" else (45.0 if index_name == "SENSEX" else 30.0)
+                    tested_td_opening = (
+                        abs(c2 - grid.trend_decider) <= td_max_drive_dist
+                        or abs(history[-1].get("low", c2) - grid.trend_decider) <= 10.0
+                    )
+                    tested_td_opening_bear = (
+                        abs(c2 - grid.trend_decider) <= td_max_drive_dist
+                        or abs(history[-1].get("high", c2) - grid.trend_decider) <= 10.0
+                    )
+
                     if attempted_breakout and not (two_bar_bull_rp1 or two_bar_bear_rp1):
                         # Attempted breakout outside RP1 that failed 2-candle confirmation -> VETO
                         signal = CachedRBFNAuctionSignal(
@@ -1298,7 +1311,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                             is_vetoed=False,
                             veto_reason="",
                         )
-                    elif holding_above_td and bar_close < grid.rp1_upper:
+                    elif holding_above_td and bar_close < grid.rp1_upper and tested_td_opening:
                         # TD to RP1 Drive: Holding above TD, targeting RP1 Upper
                         is_bull = True
                         action = "BUY_CALL"
@@ -1330,7 +1343,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                             is_vetoed=False,
                             veto_reason="",
                         )
-                    elif holding_below_td and bar_close > grid.rp1_lower:
+                    elif holding_below_td and bar_close > grid.rp1_lower and tested_td_opening_bear:
                         # TD to RP1 Drive: Holding below TD, targeting RP1 Lower
                         is_bull = False
                         action = "BUY_PUT"
@@ -1382,6 +1395,11 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     # Aggressive Drive on 09:20 bar close:
                     # Case 1: Outside RP1 (strong expansion candle outside RP1) -> targets RP2
                     # Case 2: Above/Below TD holding (opening drive towards RP1)
+                    # 09:20 Aggressive Drive: requires testing TD level within 10 pts before driving
+                    td_max_aggr_dist = 10.0 if index_name == "NIFTY" else (30.0 if index_name == "SENSEX" else 20.0)
+                    tested_td_aggr_bull = (abs(bar_open - grid.trend_decider) <= td_max_aggr_dist or abs(history[-1].get("low", bar_open) - grid.trend_decider) <= td_max_aggr_dist)
+                    tested_td_aggr_bear = (abs(bar_open - grid.trend_decider) <= td_max_aggr_dist or abs(history[-1].get("high", bar_open) - grid.trend_decider) <= td_max_aggr_dist)
+
                     if is_bullish or is_bearish:
                         strong_expansion = (is_bullish and bar_close > bar_open) or (is_bearish and bar_close < bar_open)
                         if not strong_expansion:
@@ -1432,7 +1450,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                                 is_vetoed=False,
                                 veto_reason="",
                             )
-                    elif bar_close > grid.trend_decider and bar_close > bar_open:
+                    elif bar_close > grid.trend_decider and bar_close > bar_open and tested_td_aggr_bull:
                         # Opening Drive: Bullish bar holding above TD, targeting RP1 Upper
                         action = "BUY_CALL"
                         direction = "CE"
@@ -1463,7 +1481,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                             is_vetoed=False,
                             veto_reason="",
                         )
-                    elif bar_close < grid.trend_decider and bar_close < bar_open:
+                    elif bar_close < grid.trend_decider and bar_close < bar_open and tested_td_aggr_bear:
                         # Opening Drive: Bearish bar holding below TD, targeting RP1 Lower
                         action = "BUY_PUT"
                         direction = "PE"
@@ -1687,24 +1705,39 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
         # -------------------------------------------------------------
         # Phase Retest (09:45 - 10:45 IST): Pullback to Trend Decider
+        # Strict OptionMate Rule:
+        # 1. Level Touch: Must genuinely touch the Trend Decider level within strict tolerance (not midway in no-man's land).
+        # 2. 2-Bar Confirmation: Candle 1 must test/reject TD (wick), and Candle 2 must close confirming direction.
+        # 3. Midway Ban: Candle close must be near TD (<= 15 pts NIFTY, <= 45 pts SENSEX), never floating midway to RP1.
         # -------------------------------------------------------------
         elif is_phase_retest and len(history) >= 2:
             step = 100 if index_name in {"SENSEX", "BANKNIFTY"} else 50
-            # Scale buffer and minimum profit/SL by index volatility scale
-            # SENSEX (~80,000) uses 30 pts buffer / 45 pts min target; NIFTY uses 10 pts / 15 pts
-            td_buffer = 30.0 if index_name == "SENSEX" else (20.0 if index_name == "BANKNIFTY" else 10.0)
+            # Strict level touch tolerance: must reach within 5 pts of TD for NIFTY, 15 pts for SENSEX
+            td_touch_tolerance = 15.0 if index_name == "SENSEX" else (10.0 if index_name == "BANKNIFTY" else 5.0)
+            max_midway_dist = 45.0 if index_name == "SENSEX" else (30.0 if index_name == "BANKNIFTY" else 15.0)
             min_target_retest = 45.0 if index_name == "SENSEX" else (30.0 if index_name == "BANKNIFTY" else 15.0)
             min_sl_retest = 35.0 if index_name == "SENSEX" else (25.0 if index_name == "BANKNIFTY" else 12.0)
 
-            # Check for pullback holding at Trend Decider after opening drive
-            holding_at_td_bull = (history[-2].get("low", 0.0) <= (grid.trend_decider + td_buffer) and bar_close >= grid.trend_decider and bar_close > bar_open)
-            holding_at_td_bear = (history[-2].get("high", math.inf) >= (grid.trend_decider - td_buffer) and bar_close <= grid.trend_decider and bar_close < bar_open)
+            prev_bar = history[-2]
+            curr_bar = history[-1]
+
+            # Candle 1 (previous bar) tested Trend Decider
+            c1_tested_td_bull = prev_bar.get("low", 0.0) <= (grid.trend_decider + td_touch_tolerance)
+            c1_tested_td_bear = prev_bar.get("high", math.inf) >= (grid.trend_decider - td_touch_tolerance)
+
+            # Candle 2 (current bar) confirms sustained hold at TD without running away midway
+            c2_holds_near_td = abs(bar_close - grid.trend_decider) <= max_midway_dist
+            c2_confirmed_bull = (curr_bar.get("close", 0.0) > curr_bar.get("open", 0.0)) and (curr_bar.get("close", 0.0) >= grid.trend_decider)
+            c2_confirmed_bear = (curr_bar.get("close", 0.0) < curr_bar.get("open", 0.0)) and (curr_bar.get("close", 0.0) <= grid.trend_decider)
+
+            holding_at_td_bull = c1_tested_td_bull and c2_confirmed_bull and c2_holds_near_td
+            holding_at_td_bear = c1_tested_td_bear and c2_confirmed_bear and c2_holds_near_td
             call_k = getattr(grid, "call_strike", getattr(grid, "target_call_strike", round(grid.rp1_upper / step) * step))
             put_k = getattr(grid, "put_strike", getattr(grid, "target_put_strike", round(grid.rp1_lower / step) * step))
 
             if holding_at_td_bull:
                 t_pts = max(min_target_retest, abs(grid.rp1_upper - bar_close))
-                s_pts = max(min_sl_retest, abs(bar_close - (grid.trend_decider - td_buffer * 1.5)))
+                s_pts = max(min_sl_retest, abs(bar_close - (grid.trend_decider - td_touch_tolerance * 2.0)))
                 signal = CachedRBFNAuctionSignal(
                     timestamp_ms=timestamp_ms,
                     index_name=index_name,
@@ -1713,7 +1746,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     target_strike=float(call_k),
                     target_pts=round(t_pts, 2),
                     sl_pts=round(s_pts, 2),
-                    setup_reason="TD_PULLBACK_REENTRY_BULL",
+                    setup_reason="TD_PULLBACK_REENTRY_BULL_CONFIRMED_2BAR",
                     trade_phase="RETEST_CORRIDOR",
                     bar_time=bar_time,
                     sustainable_anchor_price=calc_anchor,
@@ -1723,7 +1756,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 )
             elif holding_at_td_bear:
                 t_pts = max(min_target_retest, abs(bar_close - grid.rp1_lower))
-                s_pts = max(min_sl_retest, abs((grid.trend_decider + td_buffer * 1.5) - bar_close))
+                s_pts = max(min_sl_retest, abs((grid.trend_decider + td_touch_tolerance * 2.0) - bar_close))
                 signal = CachedRBFNAuctionSignal(
                     timestamp_ms=timestamp_ms,
                     index_name=index_name,
@@ -1732,11 +1765,27 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     target_strike=float(put_k),
                     target_pts=round(t_pts, 2),
                     sl_pts=round(s_pts, 2),
-                    setup_reason="TD_PULLBACK_REENTRY_BEAR",
+                    setup_reason="TD_PULLBACK_REENTRY_BEAR_CONFIRMED_2BAR",
                     trade_phase="RETEST_CORRIDOR",
                     bar_time=bar_time,
                     sustainable_anchor_price=calc_anchor,
                     is_active=True,
+                    is_vetoed=False,
+                    veto_reason="",
+                )
+            else:
+                signal = CachedRBFNAuctionSignal(
+                    timestamp_ms=timestamp_ms,
+                    index_name=index_name,
+                    action="ABSTAIN",
+                    direction="",
+                    target_strike=0.0,
+                    target_pts=0.0,
+                    sl_pts=0.0,
+                    setup_reason="NO_CONFIRMED_TD_TEST_OR_MIDWAY",
+                    trade_phase="RETEST_CORRIDOR",
+                    bar_time=bar_time,
+                    is_active=False,
                     is_vetoed=False,
                     veto_reason="",
                 )
@@ -2178,23 +2227,49 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             elif strategy_name == "OPTIONMATE_RBFN_AUCTION" and rbfn_sig is not None:
                 # Mode 5 Golden Strategy strictly targets the OTM Slingshot corridor strike (RP1).
                 # Live stream quotes must match the exact strike (zero tolerance) to prevent ATM drift.
-                quote_strike = float(atm_strike)
-                for part in depth.symbol.upper().split():
-                    if part.isdigit() and len(part) >= 4:
-                        quote_strike = float(part)
-                        break
-                opt_quote_sample = [{
-                    "symbol": depth.symbol,
-                    "strike": quote_strike,
-                    "ltp": ltp,
-                    "direction": required_option_type,
-                }]
+                # In order to select the genuine OTM Slingshot strike in the accumulation band [0.50, 0.75] * anchor,
+                # we query all live option depths currently coalesced in InMemorySentinelAdapter.
+                all_depths = self.adapter.get_all_depth()
+                opt_quote_candidates = []
+                for d_rec in all_depths.values():
+                    d_sym = d_rec.symbol.upper()
+                    if index_name not in d_sym:
+                        continue
+                    if (required_option_type == "CE" and "CE" not in d_sym) or (required_option_type == "PE" and "PE" not in d_sym):
+                        continue
+                    # Extract strike from token/symbol
+                    d_stk = 0.0
+                    for part in d_sym.split():
+                        if part.isdigit() and len(part) >= 4:
+                            d_stk = float(part)
+                            break
+                    if d_stk > 0 and (d_rec.ltp or d_rec.bid_p1) > 0:
+                        opt_quote_candidates.append({
+                            "symbol": d_rec.symbol,
+                            "strike": d_stk,
+                            "ltp": float(d_rec.ltp or d_rec.bid_p1),
+                            "direction": required_option_type,
+                        })
+
+                if not opt_quote_candidates:
+                    quote_strike = float(atm_strike)
+                    for part in depth.symbol.upper().split():
+                        if part.isdigit() and len(part) >= 4:
+                            quote_strike = float(part)
+                            break
+                    opt_quote_candidates = [{
+                        "symbol": depth.symbol,
+                        "strike": quote_strike,
+                        "ltp": ltp,
+                        "direction": required_option_type,
+                    }]
+
                 m5_strike_res = SentinelOptionStrikeResolver.resolve_mode5_strike(
                     index_name=index_name,
                     direction=required_option_type,
                     anchor_price=rbfn_sig.sustainable_anchor_price,
                     geometric_strike=rbfn_sig.target_strike,
-                    live_quotes=opt_quote_sample,
+                    live_quotes=opt_quote_candidates,
                 )
                 target_strike_to_match = m5_strike_res.target_strike
                 tolerance_to_use = 0  # Strict zero-tolerance for Golden Slingshot strike
