@@ -689,15 +689,11 @@ def main():
     jit_opening_expansion_done = False
     late_day_refresh_done = False
 
-    # Muhurat Session Awareness: Today is Sunday Diwali Muhurat (14:05 pre-open, 14:20 market open)
-    is_sunday_muhurat = (datetime.now().weekday() == 6)
-    pm_window_start = dt_time(14, 8, 45) if is_sunday_muhurat else dt_time(9, 8, 45)
-    pm_window_end = dt_time(14, 15, 0) if is_sunday_muhurat else dt_time(9, 9, 30)
-    jit_window_start = dt_time(14, 20, 5) if is_sunday_muhurat else dt_time(9, 15, 5)
-    jit_window_end = dt_time(14, 21, 30) if is_sunday_muhurat else dt_time(9, 15, 30)
-    drift_window_start = dt_time(14, 20, 0) if is_sunday_muhurat else dt_time(9, 30, 0)
-    if is_sunday_muhurat:
-        logger.info("🪔 [MUHURAT TRADING CONFIG] Pre-Open: 14:05 - 14:15 IST | Re-Centering: 14:08 - 14:15 IST | JIT Open: 14:20 IST.")
+    pm_window_start = dt_time(9, 8, 45)
+    pm_window_end = dt_time(9, 9, 30)
+    jit_window_start = dt_time(9, 15, 5)
+    jit_window_end = dt_time(9, 15, 30)
+    drift_window_start = dt_time(9, 30, 0)
 
     # Track last subscribed ATM strikes per index for dynamic intraday drift watcher
     last_subscribed_atms: dict[str, float] = {
