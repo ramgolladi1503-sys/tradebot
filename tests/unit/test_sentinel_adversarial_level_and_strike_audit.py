@@ -164,3 +164,82 @@ def test_midday_phase_b_td_touch_triggers_entry():
     assert sig.action == "BUY_PUT"
     assert sig.direction == "PE"
     assert sig.setup_reason == "TD_PULLBACK_REENTRY_BEAR_CONFIRMED_2BAR"
+
+
+def test_sensex_otm_slingshot_avoids_false_exhaustion_veto():
+    """Prove that SENSEX OptionMate RBFN measures displacement against Trend Decider,
+    preventing genuine OTM Slingshot PE strikes (< 250 LTP) from false EXHAUSTED_EXPANSION vetoes.
+    """
+    from core.sentinel_live_stream_advisor import UpstoxLevel5DepthRecord, CachedRBFNAuctionSignal
+    from strategies.sensex_optionmate_rbfn_strategy import SensexOptionMateGrid
+    
+    adapter = InMemorySentinelAdapter()
+    advisor = SentinelLiveStreamAdvisor(adapter=adapter, enable_stdout=False)
+    
+    advisor.prior_day_levels["SENSEX"] = PriorDayReferenceLevels(
+        index_name="SENSEX", pdh=81339.41, pdl=80519.31, pdc=81106.65, session_date=date(2026, 11, 9), verified=True, atr_20=805.64
+    )
+    
+    grid = SensexOptionMateGrid(
+        date="2026-11-11",
+        spot_open=82520.40,
+        prev_close=81106.65,
+        atr_14=805.64,
+        vix=14.0,
+        trend_decider=82500.0,
+        rp1_upper=82900.0,
+        rp2_upper=83300.0,
+        rp1_lower=82100.0,
+        rp2_lower=81700.0,
+        target_call_strike=83300.0,
+        target_put_strike=81700.0,
+        sustainable_price_anchor=340.0,
+        dte=2,
+    )
+    advisor.cached_rbfn_grids["SENSEX"] = grid
+    advisor.rbfn_grids_frozen["SENSEX"] = True
+    
+    advisor.cached_rbfn_signals["SENSEX"] = CachedRBFNAuctionSignal(
+        timestamp_ms=1000,
+        index_name="SENSEX",
+        action="BUY_PUT",
+        direction="PE",
+        target_strike=81400.0,
+        target_pts=50.0,
+        sl_pts=35.0,
+        setup_reason="TD_PULLBACK_REENTRY_BEAR_CONFIRMED_2BAR",
+        trade_phase="MIDDAY_REVERSAL",
+        bar_time=dt_time(13, 25),
+        is_active=True,
+    )
+    
+    tick = UpstoxLevel5DepthRecord(
+        token="BSE_FO|81400PE",
+        symbol="SENSEX 81400 PE 12 NOV 26",
+        exchange_timestamp_ms=2000,
+        ingress_monotonic_ns=0,
+        ingress_wall_utc="2026-11-11T13:25:00Z",
+        sequence_id=1,
+        ltp=199.80,
+        volume=10000,
+        open_interest=500000,
+        bid_p1=199.50, bid_q1=1000, bid_o1=5,
+        bid_p2=199.40, bid_q2=1000, bid_o2=5,
+        bid_p3=199.30, bid_q3=1000, bid_o3=5,
+        bid_p4=199.20, bid_q4=1000, bid_o4=5,
+        bid_p5=199.10, bid_q5=1000, bid_o5=5,
+        ask_p1=200.10, ask_q1=1000, ask_o1=5,
+        ask_p2=200.20, ask_q2=1000, ask_o2=5,
+        ask_p3=200.30, ask_q3=1000, ask_o3=5,
+        ask_p4=200.40, ask_q4=1000, ask_o4=5,
+        ask_p5=200.50, ask_q5=1000, ask_o5=5,
+    )
+    adapter.on_depth(tick)
+    
+    advisor.spots["SENSEX"] = 81995.2
+    advisor.spots_ts_ms["SENSEX"] = 2000
+    advisor.on_depth(tick)
+    
+    recent_vetoes = [v for v in advisor.journal.veto_history if v.symbol == "SENSEX 81400 PE 12 NOV 26"]
+    exhaustion_vetoes = [v for v in recent_vetoes if v.veto_reason == "VOLATILITY_EXHAUSTED"]
+    assert len(exhaustion_vetoes) == 0, f"False exhaustion veto triggered: {exhaustion_vetoes}"

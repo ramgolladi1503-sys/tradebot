@@ -2268,7 +2268,9 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             depth_bids = depth.bid_q1 + depth.bid_q2 + depth.bid_q3 + depth.bid_q4 + depth.bid_q5
             depth_asks = depth.ask_q1 + depth.ask_q2 + depth.ask_q3 + depth.ask_q4 + depth.ask_q5
             if strategy_name == "OPTIONMATE_RBFN_AUCTION" and rbfn_sig is not None:
-                displacement = abs(spot - rbfn_sig.target_strike)
+                cached_g = self.cached_rbfn_grids.get(index_name)
+                td_anchor = getattr(cached_g, "trend_decider", 0.0) if cached_g is not None else 0.0
+                displacement = abs(spot - td_anchor) if td_anchor > 0.0 else abs(spot - rbfn_sig.target_strike)
             elif required_option_type == "CE":
                 displacement = (spot - or_high) if or_high > -math.inf else 0.0
             else:
