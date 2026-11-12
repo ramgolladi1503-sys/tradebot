@@ -44,8 +44,9 @@ if [ ! -f "$REPO_DIR/.env" ]; then
     exit 1
 fi
 
-# 4. Remove any stale lock files
-rm -f /tmp/upstox_daily_pipeline.lock
+# 4. Lock file management: Do NOT remove /tmp/upstox_daily_pipeline.lock.
+# flock uses kernel file locks atomically; removing the lock file breaks mutex isolation
+# for concurrently starting or running instances. Preserving the lock file ensures safe atomic mutual exclusion.
 
 # 5. Launch Sentinel Dashboard on port 8503 if not already running
 STREAMLIT_BIN="/opt/anaconda3/bin/streamlit"

@@ -403,6 +403,11 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             "SENSEX": Synthetic5mBarBucket(),
             "BANKNIFTY": Synthetic5mBarBucket(),
         }
+        self.evaluated_5m_epochs: dict[str, set[int]] = {
+            "NIFTY": set(),
+            "SENSEX": set(),
+            "BANKNIFTY": set(),
+        }
         self.bars_5m_history: dict[str, list[dict[str, Any]]] = {
             "NIFTY": [],
             "SENSEX": [],
@@ -723,128 +728,184 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
     def on_tick(self, tick: UpstoxTickRecord) -> None:
         """Handle incoming tick for NIFTY, SENSEX, and BANKNIFTY."""
-        token = tick.token
-        idx_key = None
-        if "Nifty 50" in token:
-            idx_key = "NIFTY"
-        elif "SENSEX" in token:
-            idx_key = "SENSEX"
-        elif "Nifty Bank" in token:
-            idx_key = "BANKNIFTY"
-
-        # Check for Front-Month Futures ticks
-        if "FUT" in token or "FUTIDX" in token:
-            if "NIFTY" in token and "BANK" not in token:
-                self.futures_history["NIFTY"].append(tick.ltp)
-            elif "BANKNIFTY" in token or "Nifty Bank" in token:
-                self.futures_history["BANKNIFTY"].append(tick.ltp)
+        with self._lock:
+            token = tick.token
+            idx_key = None
+            if "Nifty 50" in token:
+                idx_key = "NIFTY"
             elif "SENSEX" in token:
-                self.futures_history["SENSEX"].append(tick.ltp)
+                idx_key = "SENSEX"
+            elif "Nifty Bank" in token:
+                idx_key = "BANKNIFTY"
 
-        if idx_key is not None:
-            self._update_spot(idx_key, tick.ltp, tick.exchange_timestamp_ms)
-            # Update upstream regime router ring buffer and state via discrete 1-minute SyntheticBarBucket
-            router = self.regime_routers.get(idx_key)
-            bucket = self.bar_buckets.get(idx_key)
-            if router is not None and bucket is not None:
-                ts_ms = tick.exchange_timestamp_ms
-                epoch_sec = (ts_ms / 1000.0) if ts_ms > 0 else time.time()
-                epoch_min = int(epoch_sec // 60)
+            # Check for Front-Month Futures ticks
+            if "FUT" in token or "FUTIDX" in token:
+                if "NIFTY" in token and "BANK" not in token:
+                    self.futures_history["NIFTY"].append(tick.ltp)
+                elif "BANKNIFTY" in token or "Nifty Bank" in token:
+                    self.futures_history["BANKNIFTY"].append(tick.ltp)
+                elif "SENSEX" in token:
+                    self.futures_history["SENSEX"].append(tick.ltp)
 
-                if bucket.bucket_epoch_min == -1:
-                    # Initialize first bucket
-                    bucket.bucket_epoch_min = epoch_min
-                    bucket.open = tick.ltp
-                    bucket.high = tick.ltp
-                    bucket.low = tick.ltp
-                    bucket.close = tick.ltp
-                    bucket.volume = float(tick.volume)
-                    bucket.tick_count = 1
-                    bucket.last_timestamp_ms = ts_ms
-                elif epoch_min > bucket.bucket_epoch_min:
-                    # Minute boundary crossed: finalize completed bar into router
-                    bar_time = datetime.fromtimestamp(bucket.bucket_epoch_min * 60).time()
-                    router.on_bar_close(
-                        bar_close=bucket.close,
-                        bar_volume=bucket.volume,
-                        cvd_delta=0.0,
-                        timestamp_ms=bucket.last_timestamp_ms,
-                        bar_time=bar_time,
-                    )
-                    # Wire dynamic 1-minute synthetic bar range updates into bar_true_ranges and observer ATR
-                    bar_tr = max(1.0, bucket.high - bucket.low)
-                    if idx_key in self.bar_true_ranges:
-                        self.bar_true_ranges[idx_key].append(bar_tr)
-                        obs = self.wall_observers.get(idx_key)
-                        if obs is not None:
-                            avg_tr = sum(self.bar_true_ranges[idx_key]) / len(self.bar_true_ranges[idx_key])
-                            obs.update_atr(max(1.0, round(avg_tr, 2)))
-                    # Start new bucket for the new minute
-                    bucket.bucket_epoch_min = epoch_min
-                    bucket.open = tick.ltp
-                    bucket.high = tick.ltp
-                    bucket.low = tick.ltp
-                    bucket.close = tick.ltp
-                    bucket.volume = float(tick.volume)
-                    bucket.tick_count = 1
-                    bucket.last_timestamp_ms = ts_ms
-                else:
-                    # Accumulate within current minute
-                    bucket.high = max(bucket.high, tick.ltp)
-                    bucket.low = min(bucket.low, tick.ltp)
-                    bucket.close = tick.ltp
-                    bucket.volume += float(tick.volume)
-                    bucket.tick_count += 1
-                    bucket.last_timestamp_ms = ts_ms
+            if idx_key is not None:
+                self._update_spot(idx_key, tick.ltp, tick.exchange_timestamp_ms)
+                # Update upstream regime router ring buffer and state via discrete 1-minute SyntheticBarBucket
+                router = self.regime_routers.get(idx_key)
+                bucket = self.bar_buckets.get(idx_key)
+                if router is not None and bucket is not None:
+                    ts_ms = tick.exchange_timestamp_ms
+                    epoch_sec = (ts_ms / 1000.0) if ts_ms > 0 else time.time()
+                    epoch_min = int(epoch_sec // 60)
 
-            # Mode 5: Discrete 5-minute bar accumulator for RBFN Auction Engine
-            bucket_5m = self.bar_buckets_5m.get(idx_key)
-            if bucket_5m is not None:
-                ts_ms = tick.exchange_timestamp_ms
-                epoch_sec = (ts_ms / 1000.0) if ts_ms > 0 else time.time()
-                epoch_5min = int(epoch_sec // 300)
+                    if bucket.bucket_epoch_min == -1:
+                        # Initialize first bucket
+                        bucket.bucket_epoch_min = epoch_min
+                        bucket.open = tick.ltp
+                        bucket.high = tick.ltp
+                        bucket.low = tick.ltp
+                        bucket.close = tick.ltp
+                        bucket.volume = float(tick.volume)
+                        bucket.tick_count = 1
+                        bucket.last_timestamp_ms = ts_ms
+                    elif epoch_min > bucket.bucket_epoch_min:
+                        # Minute boundary crossed: finalize completed bar into router
+                        bar_time = datetime.fromtimestamp(bucket.bucket_epoch_min * 60).time()
+                        router.on_bar_close(
+                            bar_close=bucket.close,
+                            bar_volume=bucket.volume,
+                            cvd_delta=0.0,
+                            timestamp_ms=bucket.last_timestamp_ms,
+                            bar_time=bar_time,
+                        )
+                        # Wire dynamic 1-minute synthetic bar range updates into bar_true_ranges and observer ATR
+                        bar_tr = max(1.0, bucket.high - bucket.low)
+                        if idx_key in self.bar_true_ranges:
+                            self.bar_true_ranges[idx_key].append(bar_tr)
+                            obs = self.wall_observers.get(idx_key)
+                            if obs is not None:
+                                avg_tr = sum(self.bar_true_ranges[idx_key]) / len(self.bar_true_ranges[idx_key])
+                                obs.update_atr(max(1.0, round(avg_tr, 2)))
+                        # Start new bucket for the new minute
+                        bucket.bucket_epoch_min = epoch_min
+                        bucket.open = tick.ltp
+                        bucket.high = tick.ltp
+                        bucket.low = tick.ltp
+                        bucket.close = tick.ltp
+                        bucket.volume = float(tick.volume)
+                        bucket.tick_count = 1
+                        bucket.last_timestamp_ms = ts_ms
+                    else:
+                        # Accumulate within current minute
+                        bucket.high = max(bucket.high, tick.ltp)
+                        bucket.low = min(bucket.low, tick.ltp)
+                        bucket.close = tick.ltp
+                        bucket.volume += float(tick.volume)
+                        bucket.tick_count += 1
+                        bucket.last_timestamp_ms = ts_ms
 
-                if bucket_5m.bucket_epoch_5min == -1:
-                    # Initialize first 5m bucket
-                    bucket_5m.bucket_epoch_5min = epoch_5min
-                    bucket_5m.open = tick.ltp
-                    bucket_5m.high = tick.ltp
-                    bucket_5m.low = tick.ltp
-                    bucket_5m.close = tick.ltp
-                    bucket_5m.volume = float(tick.volume)
-                    bucket_5m.tick_count = 1
-                    bucket_5m.last_timestamp_ms = ts_ms
-                elif epoch_5min > bucket_5m.bucket_epoch_5min:
-                    # 5-minute boundary crossed: finalize completed bar
-                    bar_time = datetime.fromtimestamp((bucket_5m.bucket_epoch_5min + 1) * 300).time()
-                    self._on_5m_bar_close(
-                        index_name=idx_key,
-                        bar_open=bucket_5m.open,
-                        bar_high=bucket_5m.high,
-                        bar_low=bucket_5m.low,
-                        bar_close=bucket_5m.close,
-                        bar_volume=bucket_5m.volume,
-                        bar_time=bar_time,
-                        timestamp_ms=bucket_5m.last_timestamp_ms,
-                        epoch_5min=bucket_5m.bucket_epoch_5min,
-                    )
-                    # Start new 5m bucket
-                    bucket_5m.bucket_epoch_5min = epoch_5min
-                    bucket_5m.open = tick.ltp
-                    bucket_5m.high = tick.ltp
-                    bucket_5m.low = tick.ltp
-                    bucket_5m.close = tick.ltp
-                    bucket_5m.volume = float(tick.volume)
-                    bucket_5m.tick_count = 1
-                    bucket_5m.last_timestamp_ms = ts_ms
-                else:
-                    # Accumulate within current 5-minute bar
-                    bucket_5m.high = max(bucket_5m.high, tick.ltp)
-                    bucket_5m.low = min(bucket_5m.low, tick.ltp)
-                    bucket_5m.close = tick.ltp
-                    bucket_5m.volume += float(tick.volume)
-                    bucket_5m.tick_count += 1
-                    bucket_5m.last_timestamp_ms = ts_ms
+                # Mode 5: Discrete 5-minute bar accumulator for RBFN Auction Engine
+                bucket_5m = self.bar_buckets_5m.get(idx_key)
+                if bucket_5m is not None:
+                    ts_ms = tick.exchange_timestamp_ms
+                    epoch_sec = (ts_ms / 1000.0) if ts_ms > 0 else time.time()
+                    epoch_5min = int(epoch_sec // 300)
+
+                    if idx_key not in self.evaluated_5m_epochs:
+                        self.evaluated_5m_epochs[idx_key] = set()
+
+                    if bucket_5m.bucket_epoch_5min == -1:
+                        # Initialize first 5m bucket
+                        bucket_5m.bucket_epoch_5min = epoch_5min
+                        bucket_5m.open = tick.ltp
+                        bucket_5m.high = tick.ltp
+                        bucket_5m.low = tick.ltp
+                        bucket_5m.close = tick.ltp
+                        bucket_5m.volume = float(tick.volume)
+                        bucket_5m.tick_count = 1
+                        bucket_5m.last_timestamp_ms = ts_ms
+                    elif epoch_5min > bucket_5m.bucket_epoch_5min:
+                        # 5-minute boundary crossed: finalize completed bar
+                        completed_epoch = bucket_5m.bucket_epoch_5min
+                        if completed_epoch not in self.evaluated_5m_epochs[idx_key]:
+                            bar_time = datetime.fromtimestamp((completed_epoch + 1) * 300).time()
+                            self._on_5m_bar_close(
+                                index_name=idx_key,
+                                bar_open=bucket_5m.open,
+                                bar_high=bucket_5m.high,
+                                bar_low=bucket_5m.low,
+                                bar_close=bucket_5m.close,
+                                bar_volume=bucket_5m.volume,
+                                bar_time=bar_time,
+                                timestamp_ms=bucket_5m.last_timestamp_ms,
+                                epoch_5min=completed_epoch,
+                            )
+                            self.evaluated_5m_epochs[idx_key].add(completed_epoch)
+                        # Start new 5m bucket
+                        bucket_5m.bucket_epoch_5min = epoch_5min
+                        bucket_5m.open = tick.ltp
+                        bucket_5m.high = tick.ltp
+                        bucket_5m.low = tick.ltp
+                        bucket_5m.close = tick.ltp
+                        bucket_5m.volume = float(tick.volume)
+                        bucket_5m.tick_count = 1
+                        bucket_5m.last_timestamp_ms = ts_ms
+                    else:
+                        # Accumulate within current 5-minute bar
+                        if bucket_5m.bucket_epoch_5min not in self.evaluated_5m_epochs[idx_key]:
+                            bucket_5m.high = max(bucket_5m.high, tick.ltp)
+                            bucket_5m.low = min(bucket_5m.low, tick.ltp)
+                            bucket_5m.close = tick.ltp
+                            bucket_5m.volume += float(tick.volume)
+                            bucket_5m.tick_count += 1
+                            bucket_5m.last_timestamp_ms = ts_ms
+
+    def reconcile_5m_bars(self, wall_clock_time: Optional[datetime] = None) -> list[int]:
+        """Clock-driven reconciler for 5-minute bars to handle low-tick/stale stream periods.
+
+        Checks all tracked indices under self._lock. If wall_clock_time has crossed into a new
+        5-minute epoch (current_epoch_5min > bucket_5m.bucket_epoch_5min), finalizes the pending bar
+        and evaluates Mode 5 (OPTIONMATE_RBFN_AUCTION) idempotently, ensuring zero duplicate
+        evaluations via self.evaluated_5m_epochs.
+
+        Args:
+            wall_clock_time: Optional reference datetime. Defaults to datetime.now().
+
+        Returns:
+            list[int]: List of unique completed 5-minute epoch IDs that were reconciled in this pass.
+        """
+        with self._lock:
+            if wall_clock_time is None:
+                wall_clock_time = datetime.now()
+
+            wall_clock_sec = wall_clock_time.timestamp()
+            current_epoch_5min = int(wall_clock_sec // 300)
+            reconciled_epochs: list[int] = []
+
+            for idx_key, bucket_5m in self.bar_buckets_5m.items():
+                if bucket_5m.bucket_epoch_5min != -1 and bucket_5m.tick_count > 0:
+                    if current_epoch_5min > bucket_5m.bucket_epoch_5min:
+                        completed_epoch = bucket_5m.bucket_epoch_5min
+                        if idx_key not in self.evaluated_5m_epochs:
+                            self.evaluated_5m_epochs[idx_key] = set()
+
+                        if completed_epoch not in self.evaluated_5m_epochs[idx_key]:
+                            bar_time = datetime.fromtimestamp((completed_epoch + 1) * 300).time()
+                            self._on_5m_bar_close(
+                                index_name=idx_key,
+                                bar_open=bucket_5m.open,
+                                bar_high=bucket_5m.high,
+                                bar_low=bucket_5m.low,
+                                bar_close=bucket_5m.close,
+                                bar_volume=bucket_5m.volume,
+                                bar_time=bar_time,
+                                timestamp_ms=bucket_5m.last_timestamp_ms,
+                                epoch_5min=completed_epoch,
+                            )
+                            self.evaluated_5m_epochs[idx_key].add(completed_epoch)
+                            if completed_epoch not in reconciled_epochs:
+                                reconciled_epochs.append(completed_epoch)
+
+            return reconciled_epochs
 
     def on_depth(self, depth: UpstoxLevel5DepthRecord) -> None:
         """Handle incoming Level-5 depth snapshot."""

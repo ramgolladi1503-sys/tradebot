@@ -70,14 +70,14 @@ def get_today_data_dir() -> Path:
     d.mkdir(parents=True, exist_ok=True)
     return d
 
-def ensure_single_instance():
-    lock_file_path = "/tmp/upstox_daily_pipeline.lock"
-    lock_file = open(lock_file_path, "w")
+def ensure_single_instance(lock_file_path: str = "/tmp/upstox_daily_pipeline.lock"):
     try:
+        fd = os.open(lock_file_path, os.O_CREAT | os.O_RDWR, 0o644)
+        lock_file = open(fd, "r+")
         fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        logger.error("Another instance of upstox_daily_pipeline is already running. Exiting.")
-        sys.exit(0)
+    except (BlockingIOError, OSError) as e:
+        logger.error(f"Another instance of upstox_daily_pipeline is already running or flock failed: {e}. Exiting.")
+        sys.exit(1)
     return lock_file
 
 def get_access_token() -> str:
@@ -706,6 +706,9 @@ def main():
     while running:
         now = datetime.now()
         now_ts = time.time()
+
+        # Reconcile discrete 5-minute bars driven by wall-clock time
+        sentinel_advisor.reconcile_5m_bars(wall_clock_time=now)
 
         # Check market close threshold (15:41 IST after CAS completes)
         if now.time() >= market_close_time:
