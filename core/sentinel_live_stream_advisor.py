@@ -1240,6 +1240,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         target_scale = 0.60 if is_low_vol else 1.0
 
         if is_session_active:
+            phase_label = "OPENING_DRIVE" if eff_time <= dt_time(9, 45) else "CONTINUOUS_STATE_MACHINE"
             # Low volatility regimes dynamically scale targets rather than hard-aborting
             if is_low_vol and range_10m < (0.20 * macro_daily_atr):
                 signal = CachedRBFNAuctionSignal(
@@ -1251,7 +1252,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     target_pts=0.0,
                     sl_pts=0.0,
                     setup_reason="GATE_2_FRICTIONAL_HURDLE",
-                    trade_phase="CONTINUOUS_STATE_MACHINE",
+                    trade_phase=phase_label,
                     bar_time=bar_time,
                     is_active=False,
                     is_vetoed=True,
@@ -1267,7 +1268,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     target_pts=0.0,
                     sl_pts=0.0,
                     setup_reason="GATE_2_COMPRESSION_CHOP",
-                    trade_phase="CONTINUOUS_STATE_MACHINE",
+                    trade_phase=phase_label,
                     bar_time=bar_time,
                     is_active=False,
                     is_vetoed=True,
@@ -1283,7 +1284,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     target_pts=0.0,
                     sl_pts=0.0,
                     setup_reason="10:30_RP2_PIERCING_TREND_DAY_INVALIDATION",
-                    trade_phase="CONTINUOUS_STATE_MACHINE",
+                    trade_phase=phase_label,
                     bar_time=bar_time,
                     is_active=False,
                     is_vetoed=True,
@@ -1310,7 +1311,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                             target_pts=0.0,
                             sl_pts=0.0,
                             setup_reason="GATE_2_UNCONFIRMED_BREAKOUT",
-                            trade_phase="CONTINUOUS_STATE_MACHINE",
+                            trade_phase=phase_label,
                             bar_time=bar_time,
                             is_active=False,
                             is_vetoed=True,
@@ -1341,7 +1342,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                             target_pts=round(t_pts, 2),
                             sl_pts=round(s_pts, 2),
                             setup_reason=setup_str,
-                            trade_phase="CONTINUOUS_STATE_MACHINE",
+                            trade_phase=phase_label,
                             bar_time=bar_time,
                             sustainable_anchor_price=calc_anchor,
                             is_active=True,
@@ -1371,7 +1372,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         target_pts=round(t_pts, 2),
                         sl_pts=round(s_pts, 2),
                         setup_reason=setup_str,
-                        trade_phase="CONTINUOUS_STATE_MACHINE",
+                        trade_phase=phase_label,
                         bar_time=bar_time,
                         sustainable_anchor_price=calc_anchor,
                         is_active=True,
@@ -1401,7 +1402,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         target_pts=round(t_pts, 2),
                         sl_pts=round(s_pts, 2),
                         setup_reason=setup_str,
-                        trade_phase="CONTINUOUS_STATE_MACHINE",
+                        trade_phase=phase_label,
                         bar_time=bar_time,
                         sustainable_anchor_price=calc_anchor,
                         is_active=True,
@@ -1418,7 +1419,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         target_pts=0.0,
                         sl_pts=0.0,
                         setup_reason="IN_CORRIDOR_BETWEEN_RP1",
-                        trade_phase="CONTINUOUS_STATE_MACHINE",
+                        trade_phase=phase_label,
                         bar_time=bar_time,
                         is_active=False,
                         is_vetoed=False,
@@ -1429,8 +1430,8 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 buf = 15.0 if index_name == "SENSEX" else 5.0
                 step = 100 if index_name in {"SENSEX", "BANKNIFTY"} else 50
 
-                c_prev = history[-2]["close"]
-                c_curr = history[-1]["close"]
+                c_prev = history[-2].get("close", history[-2].get("high", 0.0))
+                c_curr = history[-1].get("close", history[-1].get("high", 0.0))
                 is_10m_breakout_upper = (c_prev >= grid.rp1_upper and c_curr >= grid.rp1_upper)
                 is_10m_breakdown_lower = (c_prev <= grid.rp1_lower and c_curr <= grid.rp1_lower)
 
@@ -1540,7 +1541,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 # -------------------------------------------------------------
                 elif any(b["high"] >= grid.rp1_upper for b in history[-3:]) and all(b["close"] <= (grid.rp1_upper - buf) for b in history[-2:]) and bar_close > grid.trend_decider:
                     t_strike = round(grid.trend_decider / step) * step
-                    t_pts = min(20.0 if index_name != "SENSEX" else 50.0, max(15.0, abs(bar_close - grid.trend_decider)))
+                    t_pts = max(18.0 if index_name != "SENSEX" else 50.0, round(abs(bar_close - grid.trend_decider), 2))
                     s_pts = max(12.0 if index_name != "SENSEX" else 35.0, abs((grid.rp1_upper + (30.0 if index_name == "SENSEX" else 20.0)) - bar_close))
                     signal = CachedRBFNAuctionSignal(
                         timestamp_ms=timestamp_ms,
@@ -1564,7 +1565,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 # -------------------------------------------------------------
                 elif any(b["low"] <= grid.rp1_lower for b in history[-3:]) and all(b["close"] >= (grid.rp1_lower + buf) for b in history[-2:]) and bar_close < grid.trend_decider:
                     t_strike = round(grid.trend_decider / step) * step
-                    t_pts = min(20.0 if index_name != "SENSEX" else 50.0, max(15.0, abs(grid.trend_decider - bar_close)))
+                    t_pts = max(18.0 if index_name != "SENSEX" else 50.0, round(abs(grid.trend_decider - bar_close), 2))
                     s_pts = max(12.0 if index_name != "SENSEX" else 35.0, abs(bar_close - (grid.rp1_lower - (30.0 if index_name == "SENSEX" else 20.0))))
                     signal = CachedRBFNAuctionSignal(
                         timestamp_ms=timestamp_ms,
@@ -2091,7 +2092,9 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     live_quotes=opt_quote_candidates,
                 )
                 target_strike_to_match = m5_strike_res.target_strike
-                tolerance_to_use = 0  # Strict zero-tolerance for Golden Slingshot strike
+                # Tier-1 exact match preferred; if exact strike absent from active stream quotes, allow Tier-2 adjacent liquid depth match (tolerance = 1)
+                exact_depth_present = any(abs(c["strike"] - target_strike_to_match) < 1.0 for c in opt_quote_candidates)
+                tolerance_to_use = 0 if exact_depth_present else 1
                 itm_res = self.strike_resolver.resolve_target_strike(
                     spot=spot,
                     direction=required_option_type,
@@ -2113,7 +2116,18 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 strike_interval=strike_interval,
             )
 
-            if strategy_name == "OPTIONMATE_RBFN_AUCTION":
+            is_mode5_reversal = (
+                strategy_name == "OPTIONMATE_RBFN_AUCTION"
+                and rbfn_sig is not None
+                and (
+                    rbfn_sig.trade_phase in {"MIDDAY_REVERSAL", "EXTREME_EXHAUSTION_REVERSAL"}
+                    or any(k in rbfn_sig.setup_reason for k in ("REVERSAL", "FADE", "BOUNCE", "FLOOR", "CEILING", "PULLBACK"))
+                )
+            )
+            if is_mode5_reversal:
+                macro_ok = True
+                macro_reason = "MODE_5_REVERSAL_AUTONOMOUS"
+            elif strategy_name == "OPTIONMATE_RBFN_AUCTION":
                 comp_index = "SENSEX" if index_name == "NIFTY" else "NIFTY"
                 comp_s = self.spots.get(comp_index, 0.0)
                 comp_b = self.or_bounds.get(comp_index, {})
@@ -2177,7 +2191,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 depth_bid_q_sum=depth_bids,
                 depth_ask_q_sum=depth_asks,
                 displacement_pts=displacement,
-                eff_atr=eff_atr_15m,
+                eff_atr=(max(float(self.prior_day_levels.get(index_name, {}).get("atr_20", 150.0) or 150.0), 150.0) if strategy_name == "OPTIONMATE_RBFN_AUCTION" and self.prior_day_levels.get(index_name) else eff_atr_15m),
                 is_target_itm=is_target_strike,
                 spread_ratio=spread_ratio,
                 is_expiry_session=is_exp,
@@ -2498,10 +2512,8 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         #    the signal direction inverts (e.g. PE after stopped CE), preventing false lock.
                         can_bypass_cool_off = (
                             idx_apm.state == STATE_COOL_OFF
-                            and (
-                                strat_priority >= 0.90
-                                or (getattr(idx_apm, "cool_off_direction", None) is not None and getattr(idx_apm, "cool_off_direction") != required_option_type)
-                            )
+                            and getattr(idx_apm, "cool_off_direction", None) is not None
+                            and getattr(idx_apm, "cool_off_direction") != required_option_type
                         )
 
                         if idx_apm.state in {STATE_IN_FLIGHT, STATE_TRAIL_LOCK, STATE_EXIT_PENDING}:

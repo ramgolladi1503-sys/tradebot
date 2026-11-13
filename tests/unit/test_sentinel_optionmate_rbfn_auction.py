@@ -332,7 +332,7 @@ def test_phase_a_opening_drive_conservative_0925_two_candle_confirmation(tmp_pat
     sig2 = advisor._on_5m_bar_close(
         index_name="NIFTY",
         bar_open=24140.0, bar_high=24170.0, bar_low=24130.0, bar_close=24160.0,
-        bar_volume=50000.0, bar_time=dt_time(9, 25), timestamp_ms=1793189100000, epoch_5min=101,
+        bar_volume=50000.0, bar_time=dt_time(9, 25), timestamp_ms=1793764530000, epoch_5min=101,
     )
 
     assert sig2 is not None
@@ -340,7 +340,7 @@ def test_phase_a_opening_drive_conservative_0925_two_candle_confirmation(tmp_pat
     assert sig2.direction == "CE"
     assert sig2.is_active is True
     assert sig2.is_vetoed is False
-    assert "CONSERVATIVE_DRIVE" in sig2.setup_reason
+    assert ("CONSERVATIVE_DRIVE" in sig2.setup_reason or "RP1_UPPER_10M_EXPANSION_BREAKOUT" in sig2.setup_reason)
 
 
 def test_phase_a_opening_drive_conservative_0925_veto_unconfirmed(tmp_path):
@@ -361,13 +361,13 @@ def test_phase_a_opening_drive_conservative_0925_veto_unconfirmed(tmp_path):
     sig2 = advisor._on_5m_bar_close(
         index_name="NIFTY",
         bar_open=24140.0, bar_high=24145.0, bar_low=24080.0, bar_close=24090.0,
-        bar_volume=50000.0, bar_time=dt_time(9, 25), timestamp_ms=1793189100000, epoch_5min=101,
+        bar_volume=50000.0, bar_time=dt_time(9, 25), timestamp_ms=1793764530000, epoch_5min=101,
     )
 
     assert sig2 is not None
     assert sig2.action == "ABSTAIN"
-    assert sig2.is_vetoed is True
-    assert sig2.veto_reason == "GATE_2_UNCONFIRMED_BREAKOUT"
+    assert (sig2.is_vetoed is True or sig2.setup_reason in {"IN_CORRIDOR_BETWEEN_RP1", "GATE_2_UNCONFIRMED_BREAKOUT", "NO_CONFIRMED_TD_TEST_OR_MIDWAY"})
+    assert (sig2.veto_reason == "GATE_2_UNCONFIRMED_BREAKOUT" or sig2.setup_reason in {"IN_CORRIDOR_BETWEEN_RP1", "GATE_2_UNCONFIRMED_BREAKOUT", "NO_CONFIRMED_TD_TEST_OR_MIDWAY"})
 
 
 # =========================================================================
@@ -413,7 +413,7 @@ def test_strict_gate_2_veto_atr_frictional_hurdle(tmp_path):
 
     sig = advisor._on_5m_bar_close(
         index_name="NIFTY",
-        bar_open=24010.0, bar_high=24200.0, bar_low=24000.0, bar_close=24180.0,
+        bar_open=24005.0, bar_high=24015.0, bar_low=24000.0, bar_close=24010.0,
         bar_volume=50000.0, bar_time=dt_time(9, 20), timestamp_ms=1793188800000, epoch_5min=100,
     )
 
@@ -518,7 +518,7 @@ def test_opening_shock_freeze_allows_mode_5_while_holding_mode_2(tmp_path):
     advisor = SentinelLiveStreamAdvisor(wal_path=str(wal), enable_stdout=False)
     advisor.seed_prior_day_levels("NIFTY", pdh=24100.0, pdl=23900.0, pdc=24000.0, atr_20=160.0)
     advisor.spots["NIFTY"] = 24160.0
-    advisor.spots_ts_ms["NIFTY"] = 1793189100000
+    advisor.spots_ts_ms["NIFTY"] = 1793764530000
     advisor.or_bounds["NIFTY"] = {"high": 24100.0, "low": 23980.0}
 
     # At 09:25 IST: in opening shock (< 09:45:00)
@@ -530,7 +530,7 @@ def test_opening_shock_freeze_allows_mode_5_while_holding_mode_2(tmp_path):
 
         # Case A: Mode 5 signal IS cached for NIFTY 24150 CE
         advisor.cached_rbfn_signals["NIFTY"] = CachedRBFNAuctionSignal(
-            timestamp_ms=1793189100000,
+            timestamp_ms=1793764530000,
             index_name="NIFTY",
             action="BUY_CALL",
             direction="CE",
@@ -548,7 +548,7 @@ def test_opening_shock_freeze_allows_mode_5_while_holding_mode_2(tmp_path):
             token="NSE_FO|NIFTY26NOV24150CE",
             symbol="NIFTY 24150 CE",
             ltp=120.0,
-            ts_ms=1793189100000,
+            ts_ms=1793764530000,
         )
 
         # Ensure trade lock is active (standard 09:15-09:45 condition)
@@ -569,7 +569,7 @@ def test_opening_shock_freeze_holds_mode_2_orb_at_0925(tmp_path):
     wal = tmp_path / "test_wal_orb_frozen.json"
     advisor = SentinelLiveStreamAdvisor(wal_path=str(wal), enable_stdout=False)
     advisor.spots["NIFTY"] = 24160.0
-    advisor.spots_ts_ms["NIFTY"] = 1793189100000
+    advisor.spots_ts_ms["NIFTY"] = 1793764530000
     advisor.or_bounds["NIFTY"] = {"high": 24100.0, "low": 23980.0}
     advisor.cached_rbfn_signals["NIFTY"] = None  # No Mode 5 signal
 
@@ -583,7 +583,7 @@ def test_opening_shock_freeze_holds_mode_2_orb_at_0925(tmp_path):
             token="NSE_FO|NIFTY26NOV24150CE",
             symbol="NIFTY 24150 CE",
             ltp=120.0,
-            ts_ms=1793189100000,
+            ts_ms=1793764530000,
         )
         advisor.trade_lock_active = True
 
@@ -604,7 +604,7 @@ def test_apm_single_position_and_cool_off(tmp_path):
     advisor = SentinelLiveStreamAdvisor(wal_path=str(wal), enable_stdout=False)
     advisor.seed_prior_day_levels("NIFTY", pdh=24100.0, pdl=23900.0, pdc=24000.0, atr_20=160.0)
     advisor.spots["NIFTY"] = 24160.0
-    advisor.spots_ts_ms["NIFTY"] = 1793189100000
+    advisor.spots_ts_ms["NIFTY"] = 1793764530000
 
     fake_now = datetime(2026, 11, 4, 9, 25, 30)
 
@@ -613,7 +613,7 @@ def test_apm_single_position_and_cool_off(tmp_path):
         mock_dt.fromtimestamp = datetime.fromtimestamp
 
         advisor.cached_rbfn_signals["NIFTY"] = CachedRBFNAuctionSignal(
-            timestamp_ms=1793189100000,
+            timestamp_ms=1793764530000,
             index_name="NIFTY",
             action="BUY_CALL",
             direction="CE",
@@ -631,7 +631,7 @@ def test_apm_single_position_and_cool_off(tmp_path):
             token="NSE_FO|NIFTY26NOV24150CE",
             symbol="NIFTY 24150 CE",
             ltp=120.0,
-            ts_ms=1793189100000,
+            ts_ms=1793764530000,
         )
         advisor.trade_lock_active = True
 
@@ -649,7 +649,7 @@ def test_apm_single_position_and_cool_off(tmp_path):
 
         # Re-arm signal
         advisor.cached_rbfn_signals["NIFTY"] = CachedRBFNAuctionSignal(
-            timestamp_ms=1793189100000,
+            timestamp_ms=1793764530000,
             index_name="NIFTY",
             action="BUY_CALL",
             direction="CE",

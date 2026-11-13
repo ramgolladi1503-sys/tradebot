@@ -44,6 +44,59 @@ if [ ! -f "$REPO_DIR/.env" ]; then
     exit 1
 fi
 
+# 3A. BOD APM WAL Reset Preflight (08:55 AM IST)
+echo "[*] Executing BOD APM WAL reset preflight..." >> "$LOG_FILE"
+"$PYTHON_BIN" "$REPO_DIR/scripts/ops/reset_sentinel_wal_for_session.py" --force >> "$LOG_FILE" 2>&1 || true
+
+# 3B. Upstox Token Preflight Auth Guard (09:00 AM IST)
+echo "[*] Validating Upstox Access Token preflight authorization..." >> "$LOG_FILE"
+set +e
+"$PYTHON_BIN" -c '
+import os, sys, urllib.request, json
+from pathlib import Path
+env_path = Path(".env")
+token = ""
+if env_path.exists():
+    for line in env_path.read_text().splitlines():
+        if line.startswith("UPSTOX_ACCESS_TOKEN="):
+            token = line.split("=", 1)[1].strip().strip(""'''")
+            break
+if not token:
+    token = os.getenv("UPSTOX_ACCESS_TOKEN", "").strip()
+if not token:
+    print("[!] CRITICAL PREFLIGHT: UPSTOX_ACCESS_TOKEN is empty!")
+    sys.exit(1)
+
+req = urllib.request.Request(
+    "https://api.upstox.com/v2/user/profile",
+    headers={"Authorization": f"Bearer {token}", "Accept": "application/json"}
+)
+try:
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        if resp.status == 200:
+            data = json.loads(resp.read().decode())
+            user_name = data.get("data", {}).get("user_name", "Authorized User")
+            print(f"[✓] Upstox Access Token Preflight Validated ({user_name})")
+            sys.exit(0)
+        else:
+            print(f"[!] Preflight HTTP status: {resp.status}")
+            sys.exit(2)
+except urllib.error.HTTPError as he:
+    print(f"[!] CRITICAL AUTH FAILURE: Upstox Access Token Expired (HTTP {he.code}): {he.reason}")
+    sys.exit(2)
+except Exception as e:
+    print(f"[*] Network check skipped or unreachable: {e}")
+    sys.exit(0)
+' >> "$LOG_FILE" 2>&1
+AUTH_CODE=$?
+set -e
+
+if [ "$AUTH_CODE" -eq 2 ]; then
+    echo "[!] CRITICAL: Halting daily pipeline due to expired Upstox Access Token (HTTP 401/403)." >> "$LOG_FILE"
+    echo "[!] Please renew token in .env or run authentication helper before market open." >> "$LOG_FILE"
+    exit 2
+fi
+
 # 4. Lock file management: Do NOT remove /tmp/upstox_daily_pipeline.lock.
 # flock uses kernel file locks atomically; removing the lock file breaks mutex isolation
 # for concurrently starting or running instances. Preserving the lock file ensures safe atomic mutual exclusion.
