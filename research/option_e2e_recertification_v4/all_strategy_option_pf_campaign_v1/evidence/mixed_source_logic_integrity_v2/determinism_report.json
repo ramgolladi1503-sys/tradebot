@@ -1,0 +1,101 @@
+{
+  "all_completed_direct_archive_main_lane_outputs_byte_identical": true,
+  "all_directory_outputs_byte_identical": true,
+  "direct_archive_main_lane_results": {
+    "authority_backed_contract_inventory.csv": {
+      "byte_identical": true,
+      "sha256_direct_archive_run": "1c7a1af38a9598fc82b83ff8a7763b97a5e4c9f4b2af5311890831630cd4ae8d",
+      "sha256_extracted_directory_run": "1c7a1af38a9598fc82b83ff8a7763b97a5e4c9f4b2af5311890831630cd4ae8d"
+    },
+    "blocker_summary.csv": {
+      "byte_identical": true,
+      "sha256_direct_archive_run": "a9641b521ec8b15fdac99ac125a691041181860fe44f7403b10652e2afe253b2",
+      "sha256_extracted_directory_run": "a9641b521ec8b15fdac99ac125a691041181860fe44f7403b10652e2afe253b2"
+    },
+    "matched_unmatched_coverage.csv": {
+      "byte_identical": true,
+      "sha256_direct_archive_run": "a5c93ffea5c4899faf2cdd9c0173bc532ff622bc15c8f1fe398565049b82f0a0",
+      "sha256_extracted_directory_run": "a5c93ffea5c4899faf2cdd9c0173bc532ff622bc15c8f1fe398565049b82f0a0"
+    },
+    "option_replay_blockers.csv": {
+      "byte_identical": true,
+      "sha256_direct_archive_run": "7f24aabe8207d69317f18bbfcaf0c4ba26dd18f6c92b1f32a40e4ccbe6ac0841",
+      "sha256_extracted_directory_run": "7f24aabe8207d69317f18bbfcaf0c4ba26dd18f6c92b1f32a40e4ccbe6ac0841"
+    },
+    "option_trade_ledger.csv": {
+      "byte_identical": true,
+      "sha256_direct_archive_run": "aa49aa2b51349428f4fc80a3652d563d2e3ecec98aa5b75197ba575290179e9d",
+      "sha256_extracted_directory_run": "aa49aa2b51349428f4fc80a3652d563d2e3ecec98aa5b75197ba575290179e9d"
+    },
+    "strategy_friction_sensitivity.csv": {
+      "byte_identical": true,
+      "sha256_direct_archive_run": "3f61f98e1f79eef0737ff197d12e07caa2a25535d5bf9cfc698a5d3532ad2c44",
+      "sha256_extracted_directory_run": "3f61f98e1f79eef0737ff197d12e07caa2a25535d5bf9cfc698a5d3532ad2c44"
+    },
+    "strategy_option_metrics.csv": {
+      "byte_identical": true,
+      "sha256_direct_archive_run": "a29dde00499d03d295d914e1785ba7daf7d41f87b5f54e2ec388aa69e54557fa",
+      "sha256_extracted_directory_run": "a29dde00499d03d295d914e1785ba7daf7d41f87b5f54e2ec388aa69e54557fa"
+    },
+    "strategy_wfa_summary.csv": {
+      "byte_identical": true,
+      "sha256_direct_archive_run": "c47eb00d96affbd5dbf28f0b60c3ed142bcca481a1fb9cc64f08356725c29eb1",
+      "sha256_extracted_directory_run": "c47eb00d96affbd5dbf28f0b60c3ed142bcca481a1fb9cc64f08356725c29eb1"
+    }
+  },
+  "direct_archive_run_note": "The direct ZIP run was stopped after the exact-ATM main lane completed because the non-authoritative ATM\u00b150 sensitivity pass exceeded the execution window. Every completed authoritative main-lane file was byte-identical.",
+  "directory_run_file_results": {
+    "atm_plus_minus_50_sensitivity.csv": {
+      "byte_identical": true,
+      "sha256_run_a": "09bd2377395e6f692fc6bd200e36d94c98499f30447deea720758852b1bc8fe1",
+      "sha256_run_b": "09bd2377395e6f692fc6bd200e36d94c98499f30447deea720758852b1bc8fe1"
+    },
+    "authority_backed_contract_inventory.csv": {
+      "byte_identical": true,
+      "sha256_run_a": "1c7a1af38a9598fc82b83ff8a7763b97a5e4c9f4b2af5311890831630cd4ae8d",
+      "sha256_run_b": "1c7a1af38a9598fc82b83ff8a7763b97a5e4c9f4b2af5311890831630cd4ae8d"
+    },
+    "blocker_summary.csv": {
+      "byte_identical": true,
+      "sha256_run_a": "a9641b521ec8b15fdac99ac125a691041181860fe44f7403b10652e2afe253b2",
+      "sha256_run_b": "a9641b521ec8b15fdac99ac125a691041181860fe44f7403b10652e2afe253b2"
+    },
+    "manifest.json": {
+      "byte_identical": true,
+      "sha256_run_a": "0113146b29ec670fdb696029b589cb29f9f1e87ef313d3b55c057402e0c2733b",
+      "sha256_run_b": "0113146b29ec670fdb696029b589cb29f9f1e87ef313d3b55c057402e0c2733b"
+    },
+    "matched_unmatched_coverage.csv": {
+      "byte_identical": true,
+      "sha256_run_a": "a5c93ffea5c4899faf2cdd9c0173bc532ff622bc15c8f1fe398565049b82f0a0",
+      "sha256_run_b": "a5c93ffea5c4899faf2cdd9c0173bc532ff622bc15c8f1fe398565049b82f0a0"
+    },
+    "option_replay_blockers.csv": {
+      "byte_identical": true,
+      "sha256_run_a": "7f24aabe8207d69317f18bbfcaf0c4ba26dd18f6c92b1f32a40e4ccbe6ac0841",
+      "sha256_run_b": "7f24aabe8207d69317f18bbfcaf0c4ba26dd18f6c92b1f32a40e4ccbe6ac0841"
+    },
+    "option_trade_ledger.csv": {
+      "byte_identical": true,
+      "sha256_run_a": "aa49aa2b51349428f4fc80a3652d563d2e3ecec98aa5b75197ba575290179e9d",
+      "sha256_run_b": "aa49aa2b51349428f4fc80a3652d563d2e3ecec98aa5b75197ba575290179e9d"
+    },
+    "strategy_friction_sensitivity.csv": {
+      "byte_identical": true,
+      "sha256_run_a": "3f61f98e1f79eef0737ff197d12e07caa2a25535d5bf9cfc698a5d3532ad2c44",
+      "sha256_run_b": "3f61f98e1f79eef0737ff197d12e07caa2a25535d5bf9cfc698a5d3532ad2c44"
+    },
+    "strategy_option_metrics.csv": {
+      "byte_identical": true,
+      "sha256_run_a": "a29dde00499d03d295d914e1785ba7daf7d41f87b5f54e2ec388aa69e54557fa",
+      "sha256_run_b": "a29dde00499d03d295d914e1785ba7daf7d41f87b5f54e2ec388aa69e54557fa"
+    },
+    "strategy_wfa_summary.csv": {
+      "byte_identical": true,
+      "sha256_run_a": "c47eb00d96affbd5dbf28f0b60c3ed142bcca481a1fb9cc64f08356725c29eb1",
+      "sha256_run_b": "c47eb00d96affbd5dbf28f0b60c3ed142bcca481a1fb9cc64f08356725c29eb1"
+    }
+  },
+  "schema_version": "pr718_mixed_source_determinism_v1",
+  "verdict": "PASS_DETERMINISM_GATE"
+}

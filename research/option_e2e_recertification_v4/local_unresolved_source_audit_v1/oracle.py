@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import stat
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Sequence
@@ -16,6 +17,7 @@ from .root_scan import (
     UnsupportedFilesystemEntryError,
     classify_source_candidate,
     is_outcome_or_pnl_path,
+    _iter_entries,
 )
 from .trace_audit import (
     OutcomeBearingFieldError,
@@ -173,71 +175,53 @@ def oracle_root_facts(
                 )
         resolved_roots.append((spec, root))
 
-    for spec, root in resolved_roots:
-        for directory, dirnames, filenames in os.walk(root, followlinks=False):
-            dirnames.sort()
-            filenames.sort()
-            relative_directory = Path(directory).relative_to(root)
-            total_directories += len(dirnames)
-            retained_directories: list[str] = []
-            for name in dirnames:
-                child = Path(directory) / name
-                relative = (relative_directory / name).as_posix()
-                if name in _EXCLUDED_DIRECTORY_NAME_SET:
+    for spec, root in sorted(resolved_roots, key=lambda item: item[0].root_id):
+        for relative, entry, excluded_directory in _iter_entries(spec.root_id, root):
+            try:
+                stat_result = entry.stat(follow_symlinks=False)
+            except PermissionError as exc:
+                raise RootPermissionError(
+                    f"oracle_entry_stat_failed:{spec.root_id}:{relative}"
+                ) from exc
+            if stat.S_ISDIR(stat_result.st_mode):
+                total_directories += 1
+                if excluded_directory:
                     excluded_directory_count += 1
                     excluded_directory_manifest.update(
                         f"{spec.root_id}\0{relative}\n".encode("utf-8")
                     )
-                    continue
-                if child.is_symlink():
-                    raise UnsupportedFilesystemEntryError(
-                        f"oracle_symlink_directory:{spec.root_id}:{relative}"
-                    )
-                retained_directories.append(name)
-            dirnames[:] = retained_directories
-
-            for name in filenames:
-                candidate = Path(directory) / name
-                relative = candidate.relative_to(root).as_posix()
-                if candidate.is_symlink():
-                    raise UnsupportedFilesystemEntryError(
-                        f"oracle_symlink_file:{spec.root_id}:{relative}"
-                    )
+                continue
+            if not stat.S_ISREG(stat_result.st_mode):
+                raise UnsupportedFilesystemEntryError(
+                    f"oracle_non_regular:{spec.root_id}:{relative}"
+                )
+            candidate = root / Path(relative)
+            size = stat_result.st_size
+            all_file_manifest.update(
+                f"{spec.root_id}\0{relative}\0{size}\n".encode("utf-8")
+            )
+            total_files += 1
+            candidate_class = classify_source_candidate(relative)
+            if candidate_class is None:
+                continue
+            denied = is_outcome_or_pnl_path(relative)
+            digest: str | None = None
+            if denied:
+                denied_candidate_count += 1
+            else:
+                file_digest = hashlib.sha256()
                 try:
-                    if not candidate.is_file():
-                        raise UnsupportedFilesystemEntryError(
-                            f"oracle_non_regular:{spec.root_id}:{relative}"
-                        )
-                    size = candidate.stat().st_size
+                    with candidate.open("rb") as handle:
+                        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                            file_digest.update(chunk)
                 except PermissionError as exc:
                     raise RootPermissionError(
-                        f"oracle_unreadable:{spec.root_id}:{relative}"
+                        f"oracle_candidate_unreadable:{spec.root_id}:{relative}"
                     ) from exc
-                all_file_manifest.update(
-                    f"{spec.root_id}\0{relative}\0{size}\n".encode("utf-8")
-                )
-                total_files += 1
-                candidate_class = classify_source_candidate(relative)
-                if candidate_class is None:
-                    continue
-                denied = is_outcome_or_pnl_path(relative)
-                digest: str | None = None
-                if denied:
-                    denied_candidate_count += 1
-                else:
-                    file_digest = hashlib.sha256()
-                    try:
-                        with candidate.open("rb") as handle:
-                            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                                file_digest.update(chunk)
-                    except PermissionError as exc:
-                        raise RootPermissionError(
-                            f"oracle_candidate_unreadable:{spec.root_id}:{relative}"
-                        ) from exc
-                    digest = file_digest.hexdigest()
-                candidate_rows.append(
-                    (f"{spec.root_id}:{relative}", digest, candidate_class, denied)
-                )
+                digest = file_digest.hexdigest()
+            candidate_rows.append(
+                (f"{spec.root_id}:{relative}", digest, candidate_class, denied)
+            )
 
     candidate_manifest = hashlib.sha256()
     candidate_id_manifest = hashlib.sha256()
