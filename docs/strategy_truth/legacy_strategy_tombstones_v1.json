@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "generated_for": "legacy-strategy-decommission-v1",
+  "authority": "repository_cleanup_manifest",
+  "economic_claim": "NONE",
+  "notes": [
+    "Project owner reported the legacy closure campaign returned negative results.",
+    "This cleanup does not invent or restate performance statistics.",
+    "Historical evidence is retained; this manifest only removes current legacy registry authority.",
+    "Physical implementation deletion is deferred until a separate dependency-safe phase."
+  ],
+  "invalidated_evidence_generators": [
+    {
+      "path": "scripts/run_candidate_strategy_backtest.py",
+      "status": "INVALIDATED_SYNTHETIC_METRICS",
+      "reason": "Economic metrics were fixed constants conditional on shallow preconditions rather than recomputed from event/trade ledgers."
+    },
+    {
+      "path": "scripts/run_candidate_strategy_wfa.py",
+      "status": "INVALIDATED_SYNTHETIC_METRICS",
+      "reason": "WFA metrics and fold outputs were fixed constants conditional on shallow preconditions rather than recomputed from chronological trade ledgers."
+    }
+  ],
+  "strategies": [
+    "SIMPLE_ORB",
+    "HTF_OPENING_DRIVE_CONT",
+    "MEAN_REVERSION_EXTENSION",
+    "COMPRESSION_BREAKOUT",
+    "TREND_PULLBACK",
+    "VWAP_RECLAIM",
+    "OPENING_DRIVE",
+    "FAILED_BREAKOUT_TRAP",
+    "EXHAUSTION_REVERSAL",
+    "EVENT_VOLATILITY_EXPANSION",
+    "LATE_DAY_MOMENTUM",
+    "OPTION_PRESSURE",
+    "OPENING_RANGE_BREAKOUT",
+    "NO_TRADE_CHOP",
+    "PRO_STRATEGY_ENGINE",
+    "ENSEMBLE",
+    "TRADE_BUILDER",
+    "NIFTY_INTRADAY",
+    "BANKNIFTY_INTRADAY",
+    "SENSEX_INTRADAY",
+    "VWAP_ORB",
+    "ZERO_HERO",
+    "PAIRS_ARBITRAGE",
+    "VOLATILITY_TREND"
+  ],
+  "current_authority": {
+    "legacy_registry_authorized": false,
+    "paper_authorized": false,
+    "live_authorized": false,
+    "broker_write_authority": false,
+    "order_authority": false
+  },
+  "preserved_current_paths": [
+    "MARKET_EVENT_GRAPH_REVERSAL",
+    "C1",
+    "C2",
+    "CAS",
+    "INTRADAY_OPENING_DRIVE_V1",
+    "S1_MOMENTUM_OVERNIGHT_V1",
+    "S4_MONDAY_OVERNIGHT_V1",
+    "DAY_TO_NIGHT_MOMENTUM_V2_A_OPTION"
+  ]
+}
