@@ -1,0 +1,87 @@
+{
+  "campaign_id": "RPP_NIFTY_REVERSAL_STRUCTURE_V1",
+  "spec_version": "1.0.0",
+  "status": "FROZEN_BEFORE_EMPIRICAL_OUTCOME_ACCESS",
+  "source": {
+    "title": "Reversal Probability Profile [AlgoAlpha]",
+    "url": "https://www.tradingview.com/script/ZWLdxZtM-Reversal-Probability-Profile-AlgoAlpha/",
+    "source_type": "open_source_tradingview_indicator_description",
+    "reproduction_status": "CONCEPT_FAITHFUL_DERIVATION_NOT_EXACT_PINE_REPRODUCTION",
+    "reason": "The published description exposes the mechanism but the exact Pine source was not available through the research retrieval path used for this campaign."
+  },
+  "mechanism": {
+    "pivot_rule": "A swing high/low is admitted only after pivot_right future bars have elapsed; the pivot becomes available at confirmation time, never at pivot-center time.",
+    "profile_rule": "Confirmed pivot highs/lows are binned by price, neighboring bins receive triangular smoothing weight, and each bin's density is normalized by the densest bin.",
+    "interpretation": "Normalized density is historical reversal concentration, not a calibrated probability that the next move will reverse.",
+    "structure": "Smoothed pivot-low peaks define support candidates; smoothed pivot-high peaks define resistance candidates."
+  },
+  "data_contract": {
+    "instrument": "NIFTY index/spot price series",
+    "bar_frequency": "1 minute",
+    "required_columns": ["timestamp", "open", "high", "low", "close"],
+    "accepted_aliases": ["spot_open", "spot_high", "spot_low", "spot_close"],
+    "timezone": "Asia/Kolkata",
+    "session": "09:15-15:30"
+  },
+  "parameters": {
+    "pivot_left": 5,
+    "pivot_right": 5,
+    "calculation_lookback_bars": 1170,
+    "pivot_memory": 120,
+    "profile_bins": 64,
+    "smoothing_radius_bins": 2,
+    "min_profile_pivots": 20,
+    "atr_window": 30,
+    "momentum_minutes": 5,
+    "touch_radius_atr": 0.20,
+    "reclaim_margin_atr": 0.05,
+    "breakout_margin_atr": 0.10,
+    "approach_momentum_atr": 0.20,
+    "zone_search_distance_atr": 2.0
+  },
+  "candidate_family": [
+    {"candidate_id": "RPP_REVERSAL_D65", "mode": "REVERSAL", "min_density": 0.65},
+    {"candidate_id": "RPP_REVERSAL_D80", "mode": "REVERSAL", "min_density": 0.80},
+    {"candidate_id": "RPP_BREAKOUT_D65", "mode": "BREAKOUT", "min_density": 0.65},
+    {"candidate_id": "RPP_BREAKOUT_D80", "mode": "BREAKOUT", "min_density": 0.80}
+  ],
+  "outcomes": {
+    "decision_clock": "signal bar close",
+    "entry": "next exact 1-minute bar open, same session",
+    "primary_horizon_minutes": 15,
+    "secondary_horizons_minutes": [20, 30],
+    "round_trip_cost_proxy_bps": 5.0,
+    "event_deoverlap_minutes": 15
+  },
+  "walk_forward": {
+    "train_sessions": 189,
+    "test_sessions": 63,
+    "step_sessions": 63,
+    "candidate_selection": "train_only",
+    "minimum_oos_folds": 4,
+    "minimum_oos_events": 100,
+    "minimum_oos_sessions": 50,
+    "session_bootstrap_repetitions": 2000
+  },
+  "positive_verdict_gates": {
+    "session_bootstrap_95_ci_lower_net_bps": "> 0",
+    "positive_fold_fraction": ">= 0.60",
+    "gross_direction_hit_rate": ">= 0.52",
+    "incremental_bps_vs_same_event_momentum": ">= 0.50",
+    "shifted_time_negative_control_minutes": 30,
+    "minimum_shifted_control_events": 50,
+    "incremental_bps_vs_shifted_time_control": ">= 0.50",
+    "maximum_single_fold_positive_profit_share": "<= 0.60",
+    "mean_after_cost_proxy_bps": "> 0"
+  },
+  "claim_boundary": {
+    "maximum_positive_claim": "ROBUST_DIRECTIONAL_EDGE_AFTER_COST_PROXY",
+    "option_pnl_claimed": false,
+    "exact_execution_fillability_claimed": false,
+    "holdout_evaluated": false,
+    "broker_write_authority": false,
+    "order_authority": false,
+    "paper_authorized": false,
+    "live_execution_authorized": false
+  }
+}
