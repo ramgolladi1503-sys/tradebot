@@ -1,0 +1,50 @@
+name: Edge Factory Truth Layer V1 Guard
+
+on:
+  pull_request:
+    paths:
+      - "research/governance/edge_factory_truth_layer_v1.json"
+      - "docs/research_governance/EDGE_FACTORY_TRUTH_LAYER_V1.md"
+      - "docs/agent_reviews/edge_factory_truth_layer_v1.md"
+      - "scripts/check_edge_factory_truth_layer_v1.py"
+      - "tests/research/test_edge_factory_truth_layer_v1.py"
+      - ".github/workflows/edge-factory-truth-layer-v1.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  anti-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require dedicated governance branch for truth-layer changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "${GITHUB_BASE_REF}" --depth=1 || true
+          changed="$(git diff --name-only "origin/${GITHUB_BASE_REF}...HEAD" || git diff --name-only "${GITHUB_BASE_REF}...HEAD")"
+          echo "Changed governed files:"
+          echo "${changed}"
+
+          if echo "${changed}" | grep -Eq '(^research/governance/edge_factory_truth_layer_v1\.json$|^scripts/check_edge_factory_truth_layer_v1\.py$|^tests/research/test_edge_factory_truth_layer_v1\.py$|^\.github/workflows/edge-factory-truth-layer-v1\.yml$)'; then
+            case "${GITHUB_HEAD_REF}" in
+              governance/edge-factory-truth-layer-v*)
+                echo "Dedicated governance branch accepted: ${GITHUB_HEAD_REF}"
+                ;;
+              *)
+                echo "BLOCKED: V1 truth-layer semantics/guard files may only change on governance/edge-factory-truth-layer-v* branches."
+                exit 1
+                ;;
+            esac
+          fi
+
+      - name: Verify pinned V1 contract
+        run: python scripts/check_edge_factory_truth_layer_v1.py
+
+      - name: Verify anti-drift tests
+        run: python -m pytest -q tests/research/test_edge_factory_truth_layer_v1.py
