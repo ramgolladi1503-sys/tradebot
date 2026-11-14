@@ -1,0 +1,17 @@
+schema_version: 1
+invariants:
+  causal_timestamps_only: true
+  missing_is_not_zero: true
+  replay_fallback_synthetic_historical_never_live: true
+  broker_write_authority: false
+  order_authority: false
+  paper_authorized: false
+  live_authorized: false
+  frozen_prospective_models_immutable: true
+  provenance_sha_bound: true
+  artifact_identity_sha_bound: true
+  opening_gap_intraday_regime_separate: true
+  operational_validity_not_economic_edge: true
+  exact_sha_required_for_certification: true
+  silent_schema_reinterpretation_forbidden: true
+  semantic_changing_fallback_forbidden: true

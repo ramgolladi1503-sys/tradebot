@@ -1,0 +1,615 @@
+schema_version: 1
+architecture_version: TRADEBOT_THREE_INDEX_GLOBAL_CONTEXT_LOCKED_ARCHITECTURE_V2
+authority_base_sha: 694c2b106416c2b4bbb1093bbbffed28262a0ce9
+safety:
+  broker_write_authority: false
+  order_authority: false
+  paper_authorized: false
+  live_authorized: false
+autonomy:
+  continue_without_user: true
+  continue_after_task_seal: true
+  continue_after_repair: true
+  create_required_tasks_automatically: true
+  update_handbook_automatically: true
+  update_task_registry_automatically: true
+  explain_dynamic_task_rationale: true
+
+tasks:
+  T01:
+    task_id: T01
+    title: PR815 core evidence pipeline
+    architecture_version: V2
+    status: PENDING
+    priority: 1
+    depends_on: []
+    blocks: [T02]
+    objective: Three-index live evidence capture, completeness, provenance, immutable SHA, idempotency, MISSING!=ZERO and execution firewall.
+    external_ref: {type: github_pr, number: 815}
+    allowed_scope: [research prospective evidence, tests, read-only CI]
+    prohibited_scope: [TradeBuilder, ranking, strategy selection, risk limits, broker writes, orders, paper authority, live authority]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [OFFLINE_CERTIFIED]
+    stop_conditions: [BLOCKED_AUTH, BLOCKED_LIVE_WINDOW, BLOCKED_DATA]
+    evidence_paths: []
+    evidence: {}
+  T02:
+    task_id: T02
+    title: PR815 adversarial certification
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T01]
+    blocks: [T03]
+    objective: Attack incomplete/missing/duplicate/future/replay/fallback/mutation/sidecar/broker-order paths.
+    allowed_scope: [PR815 adversarial tests and evidence]
+    prohibited_scope: [execution authority, strategy behavior]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [OFFLINE_CERTIFIED]
+    stop_conditions: [BLOCKED_AUTH, BLOCKED_DATA]
+    evidence_paths: []
+    evidence: {}
+  T03:
+    task_id: T03
+    title: NIFTY frozen model preservation
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T02]
+    blocks: [T04]
+    objective: Bind frozen NIFTY Global Context V1 to common evidence adapter without refit or feature drift.
+    allowed_scope: [frozen-model binding, evidence adapters, tests]
+    prohibited_scope: [V1 refit, V1 feature mutation, execution authority]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [NIFTY_MODEL_FROZEN_VERIFIED]
+    stop_conditions: [BLOCKED_DATA]
+    evidence_paths: []
+    evidence: {}
+  T04:
+    task_id: T04
+    title: BANKNIFTY research specification
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T03]
+    blocks: [T05]
+    objective: Freeze target, cutoff, dev/OOS, candidate families, controls and search accounting.
+    allowed_scope: [BANKNIFTY research specification]
+    prohibited_scope: [execution authority, outcome-conditioned tuning]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [BANKNIFTY_SPEC_FROZEN]
+    stop_conditions: [BLOCKED_DATA]
+    evidence_paths: []
+    evidence: {}
+  T05:
+    task_id: T05
+    title: BANKNIFTY discovery and validation
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T04]
+    blocks: [T06]
+    objective: Governed discovery, leakage audit, controls, OOS/WFA, robustness and benchmarks.
+    allowed_scope: [BANKNIFTY governed research]
+    prohibited_scope: [execution authority, forced positive result]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [HISTORICAL_OOS_VERDICT]
+    stop_conditions: [BLOCKED_DATA]
+    evidence_paths: []
+    evidence: {}
+  T06:
+    task_id: T06
+    title: BANKNIFTY model freeze
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T05]
+    blocks: [T07]
+    objective: Freeze only if qualified; otherwise record NO_STRUCTURAL_EDGE_FOUND.
+    allowed_scope: [BANKNIFTY model freeze evidence]
+    prohibited_scope: [forced qualification, execution authority]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [MODEL_FROZEN_OR_NO_EDGE]
+    stop_conditions: [BLOCKED_DATA]
+    evidence_paths: []
+    evidence: {}
+  T07:
+    task_id: T07
+    title: BANKNIFTY independent certification
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T06]
+    blocks: [T08]
+    objective: Independent adversarial exact-candidate review.
+    allowed_scope: [BANKNIFTY verification evidence]
+    prohibited_scope: [implementation repair by verifier, execution authority]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [BANKNIFTY_OFFLINE_CERTIFIED]
+    stop_conditions: [BLOCKED_DATA]
+    evidence_paths: []
+    evidence: {}
+  T08:
+    task_id: T08
+    title: SENSEX research specification
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T07]
+    blocks: [T09]
+    objective: Freeze target, cutoff, dev/OOS, candidate families, controls and search accounting.
+    allowed_scope: [SENSEX research specification]
+    prohibited_scope: [execution authority, outcome-conditioned tuning]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [SENSEX_SPEC_FROZEN]
+    stop_conditions: [BLOCKED_DATA]
+    evidence_paths: []
+    evidence: {}
+  T09:
+    task_id: T09
+    title: SENSEX discovery and validation
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T08]
+    blocks: [T10]
+    objective: Governed discovery, leakage audit, controls, OOS/WFA, robustness and benchmarks.
+    allowed_scope: [SENSEX governed research]
+    prohibited_scope: [execution authority, forced positive result]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [HISTORICAL_OOS_VERDICT]
+    stop_conditions: [BLOCKED_DATA]
+    evidence_paths: []
+    evidence: {}
+  T10:
+    task_id: T10
+    title: SENSEX model freeze
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T09]
+    blocks: [T11]
+    objective: Freeze only if qualified; otherwise record NO_STRUCTURAL_EDGE_FOUND.
+    allowed_scope: [SENSEX model freeze evidence]
+    prohibited_scope: [forced qualification, execution authority]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [MODEL_FROZEN_OR_NO_EDGE]
+    stop_conditions: [BLOCKED_DATA]
+    evidence_paths: []
+    evidence: {}
+  T11:
+    task_id: T11
+    title: SENSEX independent certification
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T10]
+    blocks: [T12]
+    objective: Independent adversarial exact-candidate review.
+    allowed_scope: [SENSEX verification evidence]
+    prohibited_scope: [implementation repair by verifier, execution authority]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [SENSEX_OFFLINE_CERTIFIED]
+    stop_conditions: [BLOCKED_DATA]
+    evidence_paths: []
+    evidence: {}
+  T12:
+    task_id: T12
+    title: Global raw evidence collector
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T11]
+    blocks: [T13]
+    objective: Read-only DXY/SPX/NASDAQ/VIX collection with provenance, freshness and immutable artifacts.
+    allowed_scope: [global V1 raw evidence collection]
+    prohibited_scope: [broker writes, orders, execution authority]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [GLOBAL_COLLECTOR_OFFLINE_CERTIFIED]
+    stop_conditions: [BLOCKED_DATA, BLOCKED_AUTH]
+    evidence_paths: []
+    evidence: {}
+  T13:
+    task_id: T13
+    title: Causal global snapshot builder V1
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T12]
+    blocks: [T14]
+    objective: Shared target-session V1 snapshot rejecting stale, missing and future-leaking inputs.
+    allowed_scope: [global V1 snapshot builder]
+    prohibited_scope: [V1 economic mutation, execution authority]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [GLOBAL_SNAPSHOT_OFFLINE_CERTIFIED]
+    stop_conditions: [BLOCKED_DATA]
+    evidence_paths: []
+    evidence: {}
+  T14:
+    task_id: T14
+    title: Extended global research umbrella
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T13]
+    blocks: [T15]
+    objective: Research GIFT, USDINR, crude, yields and Asian markets incrementally without automatic V1 mutation.
+    allowed_scope: [extended global research]
+    prohibited_scope: [automatic V1 mutation, execution authority]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [KEEP_DISCARD_EVIDENCE]
+    stop_conditions: [BLOCKED_DATA]
+    evidence_paths: []
+    evidence: {}
+  T15:
+    task_id: T15
+    title: Indian after-close finalizer
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T14]
+    blocks: [T16]
+    objective: Finalize complete three-index session after close into immutable daily state.
+    allowed_scope: [Indian after-close evidence finalization]
+    prohibited_scope: [trading behavior, execution authority]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [AFTER_CLOSE_OFFLINE_CERTIFIED]
+    stop_conditions: [BLOCKED_DATA]
+    evidence_paths: []
+    evidence: {}
+  T16:
+    task_id: T16
+    title: Three-model scoring orchestrator
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T15]
+    blocks: [T17]
+    objective: Consume exact Indian state plus global snapshot plus frozen model SHAs; certified models only.
+    allowed_scope: [read-only scoring orchestration]
+    prohibited_scope: [strategy selection, orders, execution authority]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [SCORER_ORCHESTRATOR_OFFLINE_CERTIFIED]
+    stop_conditions: [BLOCKED_DATA]
+    evidence_paths: []
+    evidence: {}
+  T17:
+    task_id: T17
+    title: Pre-open report
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T16]
+    blocks: [T18]
+    objective: Emit prior close, predicted gap/open, model SHA/status, global context and cutoff/leakage status.
+    allowed_scope: [pre-open research reporting]
+    prohibited_scope: [execution authority]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [REPORT_OFFLINE_CERTIFIED]
+    stop_conditions: [BLOCKED_DATA]
+    evidence_paths: []
+    evidence: {}
+  T18:
+    task_id: T18
+    title: Actual-open recorder
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T17]
+    blocks: [T19]
+    objective: Record authoritative opens bound to prediction SHA without mutating predictions.
+    allowed_scope: [outcome recording]
+    prohibited_scope: [prediction mutation, execution authority]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [OUTCOME_RECORDER_OFFLINE_CERTIFIED]
+    stop_conditions: [BLOCKED_DATA]
+    evidence_paths: []
+    evidence: {}
+  T19:
+    task_id: T19
+    title: Prospective ledgers
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T18]
+    blocks: [T20]
+    objective: Append-only per-index prediction/outcome/error ledgers plus shared snapshot bindings.
+    allowed_scope: [prospective ledgers]
+    prohibited_scope: [prediction mutation, execution authority]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [LEDGER_OFFLINE_CERTIFIED]
+    stop_conditions: [BLOCKED_DATA]
+    evidence_paths: []
+    evidence: {}
+  T20:
+    task_id: T20
+    title: Daily scheduler and orchestration
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T19]
+    blocks: [T21]
+    objective: Automate capture, finalization, snapshot, scoring/report and outcome recording fail-closed.
+    allowed_scope: [research orchestration]
+    prohibited_scope: [broker writes, orders, paper authority, live authority]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [DAILY_AUTOMATION_OFFLINE_CERTIFIED]
+    stop_conditions: [BLOCKED_AUTH, BLOCKED_DATA]
+    evidence_paths: []
+    evidence: {}
+  T21:
+    task_id: T21
+    title: Repository-wide offline certification
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T20]
+    blocks: [T22]
+    objective: Focused, integration, adversarial, regression, code-quality and independent verifier on exact SHA.
+    allowed_scope: [offline certification evidence]
+    prohibited_scope: [gate weakening, execution authority]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [SYSTEM_OFFLINE_CERTIFIED]
+    stop_conditions: [BLOCKED_DATA]
+    evidence_paths: []
+    evidence: {}
+  T22:
+    task_id: T22
+    title: Shadow live validation
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T21]
+    blocks: [T23]
+    objective: Run exact offline-certified SHA in genuine live sessions with no trading-runtime effect.
+    allowed_scope: [observational live evidence]
+    prohibited_scope: [broker writes, orders, paper authority, live execution authority]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [SHADOW_LIVE_VALID]
+    stop_conditions: [BLOCKED_LIVE_WINDOW, BLOCKED_AUTH]
+    evidence_paths: []
+    evidence: {}
+  T23:
+    task_id: T23
+    title: Prospective observation program
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T22]
+    blocks: [T24]
+    objective: Accumulate untouched predictions and outcomes without outcome-conditioned tuning.
+    allowed_scope: [immutable prospective observation]
+    prohibited_scope: [outcome-conditioned tuning, execution authority]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [PROSPECTIVE_DATASET]
+    stop_conditions: [BLOCKED_LIVE_WINDOW, BLOCKED_DATA]
+    evidence_paths: []
+    evidence: {}
+  T24:
+    task_id: T24
+    title: Prospective model evaluation
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T23]
+    blocks: [T25]
+    objective: Evaluate each index independently against frozen baselines and predeclared gates.
+    allowed_scope: [prospective evaluation]
+    prohibited_scope: [outcome-conditioned refit, execution authority]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [SUPPORTED_OR_INVALIDATED]
+    stop_conditions: [BLOCKED_DATA]
+    evidence_paths: []
+    evidence: {}
+  T25:
+    task_id: T25
+    title: Structural-edge decision
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T24]
+    blocks: [T26]
+    objective: Decide structural-edge certification only after sufficient evidence; prediction quality is not tradable edge.
+    allowed_scope: [certification decision]
+    prohibited_scope: [forced edge claim, execution authority]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [CERTIFIED_OR_NOT_CERTIFIED]
+    stop_conditions: [BLOCKED_DATA]
+    evidence_paths: []
+    evidence: {}
+  T26:
+    task_id: T26
+    title: Separate trading-integration decision
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T25]
+    blocks: [T27]
+    objective: Preserve trading integration as a separate future-authority decision outside this architecture.
+    allowed_scope: [governance decision record]
+    prohibited_scope: [broker writes, orders, paper authority, live authority]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [SEPARATE_FUTURE_AUTHORITY]
+    stop_conditions: [BLOCKED_AUTH]
+    evidence_paths: []
+    evidence: {}
+  T27:
+    task_id: T27
+    title: V2 raw-source contracts
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T26]
+    blocks: [T28]
+    objective: Define authoritative provider, timestamps, causal cutoff, freshness and missingness for GIFT, USDINR, crude, yields, Asia, India VIX and permitted flow/news inputs.
+    allowed_scope: [Global Context V2 source specifications]
+    prohibited_scope: [automatic V1 mutation, execution authority]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [GLOBAL_V2_SOURCE_SPEC_FROZEN]
+    stop_conditions: [BLOCKED_DATA, BLOCKED_AUTH]
+    evidence_paths: []
+    evidence: {}
+  T28:
+    task_id: T28
+    title: V2 collector implementation
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T27]
+    blocks: [T29]
+    objective: Build read-only collectors with immutable raw artifacts, provenance and SHA binding.
+    allowed_scope: [Global Context V2 collectors]
+    prohibited_scope: [broker writes, orders, execution authority]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [GLOBAL_V2_COLLECTOR_IMPLEMENTATION_VALID]
+    stop_conditions: [BLOCKED_DATA, BLOCKED_AUTH]
+    evidence_paths: []
+    evidence: {}
+  T29:
+    task_id: T29
+    title: V2 causal builder
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T28]
+    blocks: [T30]
+    objective: Create deterministic target-session feature artifact preserving missingness and raw SHA lineage and rejecting future data.
+    allowed_scope: [Global Context V2 causal builder]
+    prohibited_scope: [V1 overwrite, execution authority]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [GLOBAL_V2_BUILDER_OFFLINE_CERTIFIED]
+    stop_conditions: [BLOCKED_DATA]
+    evidence_paths: []
+    evidence: {}
+  T30:
+    task_id: T30
+    title: Interaction hypothesis registry
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T29]
+    blocks: [T31]
+    objective: Predeclare economically justified interactions and track search pressure.
+    allowed_scope: [interaction hypothesis governance]
+    prohibited_scope: [broad combinatorial indicator mining, execution authority]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [INTERACTION_SPEC_FROZEN]
+    stop_conditions: [BLOCKED_DATA]
+    evidence_paths: []
+    evidence: {}
+  T31:
+    task_id: T31
+    title: Incremental OOS research
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T30]
+    blocks: [T32]
+    objective: Test each V2 family against frozen V1 baseline using leakage audits, negative/permutation controls, OOS/WFA and multiple-testing controls.
+    allowed_scope: [Global Context V2 governed research]
+    prohibited_scope: [V1 mutation, forced edge, execution authority]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [KEEP_DISCARD_OR_NO_EDGE]
+    stop_conditions: [BLOCKED_DATA]
+    evidence_paths: []
+    evidence: {}
+  T32:
+    task_id: T32
+    title: Global Context V2 freeze
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T31]
+    blocks: [T33]
+    objective: Freeze exact V2 features/transforms/coefficients/cutoffs/evidence SHA/model SHA only if incremental evidence qualifies; never overwrite V1.
+    allowed_scope: [Global Context V2 freeze evidence]
+    prohibited_scope: [V1 overwrite, forced qualification, execution authority]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [GLOBAL_CONTEXT_V2_MODEL_FROZEN_OR_NO_EDGE]
+    stop_conditions: [BLOCKED_DATA]
+    evidence_paths: []
+    evidence: {}
+  T33:
+    task_id: T33
+    title: V2 independent certification
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T32]
+    blocks: [T34]
+    objective: Adversarially verify exact V2 candidate, missing/future/provenance/tamper/idempotency paths and independence from execution.
+    allowed_scope: [Global Context V2 independent verification]
+    prohibited_scope: [verifier implementation repair, execution authority]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [GLOBAL_CONTEXT_V2_OFFLINE_CERTIFIED]
+    stop_conditions: [BLOCKED_DATA]
+    evidence_paths: []
+    evidence: {}
+  T34:
+    task_id: T34
+    title: Intraday regime research specification
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T33]
+    blocks: [T35]
+    objective: Define separate 30m/60m/120m post-open targets, causal pre-open inputs, baselines, controls and ledgers without gap-target relabeling.
+    allowed_scope: [intraday regime research specification]
+    prohibited_scope: [gap-target relabeling, execution authority]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [INTRADAY_REGIME_SPEC_FROZEN]
+    stop_conditions: [BLOCKED_DATA]
+    evidence_paths: []
+    evidence: {}
+  T35:
+    task_id: T35
+    title: Intraday regime discovery and prospective path
+    architecture_version: V2
+    status: PENDING
+    depends_on: [T34]
+    blocks: []
+    objective: Run governed historical/OOS validation; freeze only if qualified; then shadow/prospective observation under its own certification ladder.
+    allowed_scope: [intraday regime governed research and observational evidence]
+    prohibited_scope: [gap-target relabeling, forced edge, execution authority]
+    required_tests: {focused: [], adversarial: [], integration: [], regression: []}
+    independent_verification: {required: true}
+    ci: {required: true}
+    exit_gates: [INTRADAY_MODEL_FROZEN_OR_NO_EDGE]
+    stop_conditions: [BLOCKED_DATA, BLOCKED_LIVE_WINDOW]
+    evidence_paths: []
+    evidence: {}

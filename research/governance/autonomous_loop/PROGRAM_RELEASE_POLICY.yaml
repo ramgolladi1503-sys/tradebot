@@ -1,0 +1,18 @@
+schema_version: 1
+policy_id: AUTONOMOUS_LOOP_PROGRAM_RELEASE_POLICY_V1
+framework_certification_required: true
+main_merge_authorized: false
+merge_hold_through_task_id: T37
+require_all_tasks_through_hold_sealed: true
+require_hold_task_exists: true
+require_framework_exact_sha_certification: true
+require_program_exact_sha_independent_verification: true
+require_program_ci_green: true
+require_zero_unresolved_major_critical: true
+require_zero_mandatory_unknowns: true
+notes:
+  - The autonomous-loop framework may be independently certified before program completion.
+  - Certification of the framework does not authorize merge to main.
+  - Main merge remains fail-closed until T37 exists under governed dynamic-task law and every task T01 through T37 is SEALED.
+  - T36 and T37 must not be invented merely to satisfy numbering; each requires evidence-backed creation under the dynamic-task law.
+  - Feed, broker, order, paper, and live execution authority are outside this release-policy mechanism.

@@ -1,0 +1,69 @@
+schema_version: 1
+policy_id: AUTONOMOUS_LOOP_BATCHED_CERTIFICATION_V1
+architecture_version: TRADEBOT_THREE_INDEX_GLOBAL_CONTEXT_LOCKED_ARCHITECTURE_V2
+purpose: Reduce low-information repeated repository-wide CI while preserving exact-SHA seal evidence and final certification rigor.
+
+safety:
+  broker_write_authority: false
+  order_authority: false
+  paper_authorized: false
+  live_authorized: false
+
+per_task_execution:
+  required_before_progression:
+    - focused_tests
+    - adversarial_tests
+    - task_relevant_integration_tests
+    - compile_or_static_checks
+    - scope_and_authority_guards
+  broad_repository_ci_required_immediately: false
+  broad_repository_ci_required_before_seal: true
+  evidence_reuse_rule: A broad CI result may support multiple tasks only when all tasks are bound to the same exact candidate SHA and the CI scope covers the combined changed surface.
+  failure_rule: Any focused, adversarial, integration, safety, provenance, leakage, or authority failure blocks progression immediately; batching never converts a failed local gate into deferred PASS.
+
+checkpoints:
+  C01:
+    tasks: [T01, T02, T03]
+    objective: Prospective evidence foundation and frozen NIFTY preservation.
+  C02:
+    tasks: [T04, T05, T06, T07, T08, T09, T10, T11]
+    objective: BANKNIFTY and SENSEX specification, discovery, freeze/no-edge and independent certification.
+  C03:
+    tasks: [T12, T13, T14, T15, T16, T17, T18, T19, T20]
+    objective: Global evidence, causal snapshot, Indian finalization, scoring, reporting, ledgers and daily orchestration.
+  C04:
+    tasks: [T21, T22, T23, T24, T25, T26]
+    objective: Repository offline certification, shadow/prospective evaluation and structural-edge/trading-authority decisions.
+  C05:
+    tasks: [T27, T28, T29, T30, T31, T32, T33, T34, T35]
+    objective: Global Context V2 and independent intraday-regime research path.
+  C06:
+    tasks: dynamic_T36_plus
+    objective: Any evidence-justified dynamic tasks, including T36/T37 when actually required.
+
+checkpoint_gate:
+  required:
+    - exact_candidate_sha
+    - focused_suite_pass
+    - adversarial_suite_pass
+    - integration_suite_pass
+    - regression_suite_pass
+    - repository_ci_pass
+    - zero_unresolved_major_or_critical
+    - zero_mandatory_unknowns
+  independent_verification: required_when_checkpoint_contains_certification_or_seal_boundary
+
+final_program_gate:
+  merge_to_main: prohibited_until_explicit_user_authorization
+  required:
+    - all_required_tasks_terminal_under_declared_exit_gates
+    - all_dynamic_tasks_recorded_and_completed_or_honestly_blocked
+    - exact_final_candidate_sha
+    - full_repository_regression_pass
+    - full_ci_pass
+    - architecture_invariants_pass
+    - execution_isolation_pass
+    - independent_exact_sha_verification_pass
+    - zero_unresolved_major_or_critical
+    - zero_mandatory_unknowns
+  note: No framework, task chain, or program merge to main occurs automatically.
