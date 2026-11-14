@@ -1241,8 +1241,8 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
         if is_session_active:
             phase_label = "OPENING_DRIVE" if eff_time <= dt_time(9, 45) else "CONTINUOUS_STATE_MACHINE"
-            # Low volatility regimes dynamically scale targets rather than hard-aborting
-            if is_low_vol and range_10m < (0.20 * macro_daily_atr):
+            # Strict Gate 2 Frictional Hurdle: Hard-abort when daily ATR is below minimum threshold (150 for NIFTY, 450 for SENSEX)
+            if macro_daily_atr < min_atr:
                 signal = CachedRBFNAuctionSignal(
                     timestamp_ms=timestamp_ms,
                     index_name=index_name,
@@ -2125,8 +2125,29 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 )
             )
             if is_mode5_reversal:
-                macro_ok = True
-                macro_reason = "MODE_5_REVERSAL_AUTONOMOUS"
+                # Check companion index safety: do not fade if companion index is plunging at day extreme in same direction
+                comp_index = "SENSEX" if index_name == "NIFTY" else "NIFTY"
+                comp_s = self.spots.get(comp_index, 0.0)
+                comp_b = self.or_bounds.get(comp_index, {})
+                comp_low = comp_b.get("low", -math.inf)
+                comp_high = comp_b.get("high", math.inf)
+                comp_levels = self.prior_day_levels.get(comp_index)
+                comp_atr = float(comp_levels.atr_20 or 150.0) if comp_levels else 150.0
+                
+                # If buying CE (bullish bounce), companion must not be plunging < comp_low - 0.5 * ATR (macro breakdown)
+                # If buying PE (bearish fade), companion must not be exploding > comp_high + 0.5 * ATR (macro breakout)
+                macro_extreme_trap = False
+                if required_option_type == "CE" and comp_s > 0 and comp_low > -math.inf and comp_s < (comp_low - 0.50 * comp_atr):
+                    macro_extreme_trap = True
+                elif required_option_type == "PE" and comp_s > 0 and comp_high < math.inf and comp_s > (comp_high + 0.50 * comp_atr):
+                    macro_extreme_trap = True
+
+                if macro_extreme_trap:
+                    macro_ok = False
+                    macro_reason = "MACRO_EXTREME_LIQUIDATION_TRAP"
+                else:
+                    macro_ok = True
+                    macro_reason = "MODE_5_REVERSAL_AUTONOMOUS"
             elif strategy_name == "OPTIONMATE_RBFN_AUCTION":
                 comp_index = "SENSEX" if index_name == "NIFTY" else "NIFTY"
                 comp_s = self.spots.get(comp_index, 0.0)

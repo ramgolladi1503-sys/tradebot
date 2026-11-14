@@ -413,7 +413,7 @@ def test_strict_gate_2_veto_atr_frictional_hurdle(tmp_path):
 
     sig = advisor._on_5m_bar_close(
         index_name="NIFTY",
-        bar_open=24005.0, bar_high=24015.0, bar_low=24000.0, bar_close=24010.0,
+        bar_open=24010.0, bar_high=24200.0, bar_low=24000.0, bar_close=24180.0,
         bar_volume=50000.0, bar_time=dt_time(9, 20), timestamp_ms=1793188800000, epoch_5min=100,
     )
 

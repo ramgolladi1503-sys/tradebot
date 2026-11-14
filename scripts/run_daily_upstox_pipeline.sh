@@ -91,10 +91,11 @@ except Exception as e:
 AUTH_CODE=$?
 set -e
 
-if [ "$AUTH_CODE" -eq 2 ]; then
-    echo "[!] CRITICAL: Halting daily pipeline due to expired Upstox Access Token (HTTP 401/403)." >> "$LOG_FILE"
-    echo "[!] Please renew token in .env or run authentication helper before market open." >> "$LOG_FILE"
-    exit 2
+if [ "" -eq 2 ]; then
+    echo "[!] CRITICAL AUTH FAILURE: Upstox Access Token Expired (HTTP 401/403)." >> ""
+    echo "[!] TRADING EXECUTION DISARMED: Preserving market telemetry & shadow capture while disabling live order routing." >> ""
+    export TRADING_EXECUTION_DISARMED=1
+    export UPSTOX_AUTH_FAILED=1
 fi
 
 # 4. Lock file management: Do NOT remove /tmp/upstox_daily_pipeline.lock.
