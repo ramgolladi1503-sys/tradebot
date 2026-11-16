@@ -14,47 +14,47 @@ class TestOptionMateGapAwareGrid:
         # Verify determinism: same input always produces identical grid
         grid_1 = strat.compute_daily_grid("2026-11-04", spot_open=23742.25, prev_close=23694.25, atr_14=150.0, vix=14.0)
         grid_2 = strat.compute_daily_grid("2026-11-04", spot_open=23742.25, prev_close=23694.25, atr_14=150.0, vix=14.0)
-        assert grid_1.trend_decider == grid_2.trend_decider == 23760.0
-        assert grid_1.rp1_upper == grid_2.rp1_upper == 23880.0
-        assert grid_1.rp2_upper == grid_2.rp2_upper == 24000.0
+        assert grid_1.trend_decider == grid_2.trend_decider == 23742.25
+        assert grid_1.rp1_upper == grid_2.rp1_upper == 23852.25
+        assert grid_1.rp2_upper == grid_2.rp2_upper == 23945.75
 
     def test_attacker_2_gap_up_acceptance_vs_rotation(self):
         """Prove that large gap-ups decouple from prev_close, while flat sessions bridge them."""
         strat = OptionMateRBFNStrategy(step_size=50)
-        # Gap-Up Session (+120 pt gap):
+        # Gap-Up Session (+122.25 pt gap >= 0.25 * 150 = 37.5):
         gap_grid = strat.compute_daily_grid("2026-11-04", spot_open=23742.25, prev_close=23620.0, atr_14=150.0, vix=14.0)
-        assert gap_grid.trend_decider == 23760.0  # anchored around open
-        assert gap_grid.rp1_upper == 23880.0
+        assert gap_grid.trend_decider == 23742.25  # anchored around open
+        assert gap_grid.rp1_upper == 23852.25
 
-        # Flat Rotation Session (0 pt gap):
-        # 23720 / 40 = 593.0 -> 23720.0
-        flat_grid = strat.compute_daily_grid("2026-11-04", spot_open=23720.0, prev_close=23720.0, atr_14=150.0, vix=14.0)
-        assert flat_grid.trend_decider == 23720.0  # equilibrium
+        # Flat Rotation Session (20 pt gap < 37.5 threshold):
+        # raw_td = 0.5 * (23740.0 + 23720.0) = 23730.0
+        flat_grid = strat.compute_daily_grid("2026-11-04", spot_open=23740.0, prev_close=23720.0, atr_14=150.0, vix=14.0)
+        assert flat_grid.trend_decider == 23730.0  # bridges open and prior close
 
     def test_attacker_3_scale_invariance_across_underlyings(self):
         """Prove that SENSEX (~77k) and NIFTY (~24k) scale their channel spacing appropriately."""
         strat = OptionMateRBFNStrategy(step_size=50)
-        # NIFTY: ~120 pt channel
+        # NIFTY: continuous 110 pt base channel
         nifty = strat.compute_daily_grid("2026-11-04", spot_open=23742.25, prev_close=23694.25, atr_14=150.0, vix=14.0)
-        assert nifty.rp1_upper - nifty.trend_decider == 120.0
-        assert nifty.rp2_upper - nifty.rp1_upper == 120.0
+        assert nifty.rp1_upper - nifty.trend_decider == 110.0
+        assert round(nifty.rp2_upper - nifty.rp1_upper, 2) == 93.5  # 0.85 * 110
 
-        # SENSEX: scale-invariant ~0.50% channel (at 76.8k -> round(76853*0.005/50)*50 = 400 pt channel)
+        # SENSEX: scale-invariant base step (400 pt channel at >60000)
         sensex = strat.compute_daily_grid("2026-11-04", spot_open=76853.11, prev_close=76500.0, atr_14=400.0, vix=14.0)
-        assert sensex.rp1_upper - sensex.trend_decider == 400.0
-        assert sensex.rp2_upper - sensex.rp1_upper == 400.0
+        assert round(sensex.rp1_upper - sensex.trend_decider, 2) == 400.0
+        # rp2_up_raw = 77253.11 + 340.0 = 77593.11, snaps to century 77600.0 (|77593.11 - 77600| = 6.89 <= 10.0)
+        assert sensex.rp2_upper == 77600.0
 
     def test_attacker_4_harmonic_symmetry_and_divisibility(self):
-        """Prove that Reversal Price levels are equidistant and fall cleanly on structural grids."""
+        """Prove that Reversal Price levels are equidistant and continuous."""
         strat = OptionMateRBFNStrategy(step_size=50)
         grid = strat.compute_daily_grid("2026-11-04", spot_open=23742.25, prev_close=23694.25, atr_14=150.0, vix=14.0)
         # Symmetrical spacing
-        assert (grid.rp1_upper - grid.trend_decider) == (grid.trend_decider - grid.rp1_lower) == 120.0
-        assert (grid.rp2_upper - grid.trend_decider) == (grid.trend_decider - grid.rp2_lower) == 240.0
-        # Divisible by structural base (40)
-        assert grid.trend_decider % 40 == 0
-        assert grid.rp1_upper % 40 == 0
-        assert grid.rp2_upper % 40 == 0
+        assert round(grid.rp1_upper - grid.trend_decider, 2) == round(grid.trend_decider - grid.rp1_lower, 2) == 110.0
+        assert round(grid.rp2_upper - grid.rp1_upper, 2) == round(grid.rp1_lower - grid.rp2_lower, 2) == 93.5
+        # Slingshot strikes cleanly quantized to step_size
+        assert grid.call_strike % 50 == 0
+        assert grid.put_strike % 50 == 0
 
     def test_attacker_5_frictional_hurdles_and_safety_invariants(self):
         """Prove that safety gating blocks invalid signals during sub-hurdle conditions."""

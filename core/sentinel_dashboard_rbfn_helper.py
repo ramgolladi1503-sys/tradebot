@@ -17,16 +17,15 @@ def compute_official_rbfn_boundaries(spots: Optional[Dict[str, float]] = None, t
     if spots is None:
         spots = {}
     today_s = datetime.now().strftime("%Y-%m-%d")
-    strat = OptionMateRBFNStrategy(step_size=50)
 
     if token is None:
         token = os.getenv("UPSTOX_ACCESS_TOKEN", "").strip()
     headers = {"accept": "application/json", "Api-Version": "2.0", "Authorization": f"Bearer {token}", "User-Agent": "TradeBot/Sentinel"}
 
     index_configs = {
-        "NIFTY": {"sym": "NSE_INDEX%7CNifty%2050", "key": "NSE_INDEX:Nifty 50", "default_atr": 150.0},
-        "SENSEX": {"sym": "BSE_INDEX%7CSENSEX", "key": "BSE_INDEX:SENSEX", "default_atr": 400.0},
-        "BANKNIFTY": {"sym": "NSE_INDEX%7CNifty%20Bank", "key": "NSE_INDEX:Nifty Bank", "default_atr": 350.0},
+        "NIFTY": {"sym": "NSE_INDEX%7CNifty%2050", "key": "NSE_INDEX:Nifty 50", "default_atr": 150.0, "step_size": 50},
+        "SENSEX": {"sym": "BSE_INDEX%7CSENSEX", "key": "BSE_INDEX:SENSEX", "default_atr": 400.0, "step_size": 100},
+        "BANKNIFTY": {"sym": "NSE_INDEX%7CNifty%20Bank", "key": "NSE_INDEX:Nifty Bank", "default_atr": 350.0, "step_size": 100},
     }
 
     rbfn_results = {}
@@ -47,8 +46,6 @@ def compute_official_rbfn_boundaries(spots: Optional[Dict[str, float]] = None, t
                     c_val = ohlc.get("close")
                     if c_val is not None and float(c_val) > 0:
                         upstox_prev_close = float(c_val)
-                    elif item.get("last_price") is not None and float(item.get("last_price")) > 0:
-                        upstox_prev_close = float(item.get("last_price"))
             except Exception:
                 pass
 
@@ -81,6 +78,7 @@ def compute_official_rbfn_boundaries(spots: Optional[Dict[str, float]] = None, t
             resolved_prev_close = 24000.0 if idx_name == "NIFTY" else (78000.0 if idx_name == "SENSEX" else 51000.0)
 
         open_ref = bar_5m.open if bar_5m else (current_spot if current_spot > 0 else resolved_prev_close)
+        strat = OptionMateRBFNStrategy(symbol=idx_name, step_size=cfg["step_size"])
         grid = strat.compute_daily_grid(
             date=today_s,
             spot_open=open_ref,
@@ -88,6 +86,7 @@ def compute_official_rbfn_boundaries(spots: Optional[Dict[str, float]] = None, t
             atr_14=cfg["default_atr"],
             vix=14.0,
             bar_5m_equilibrium=bar_5m,
+            symbol=idx_name,
         )
         rbfn_results[idx_name] = {
             "trend_decider": grid.trend_decider,

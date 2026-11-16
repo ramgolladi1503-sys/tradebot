@@ -31,13 +31,14 @@ class GoldenCandle:
     def create(cls, open: float, high: float, low: float, close: float, volume: float = 0.0) -> "GoldenCandle":
         rng = max(float(high - low), 1e-6)
         body = abs(float(close - open))
+        range_pts = max(round(rng, 2), 0.01)
         return cls(
             open=round(float(open), 2),
             high=round(float(high), 2),
             low=round(float(low), 2),
             close=round(float(close), 2),
             volume=float(volume),
-            range_pts=round(rng, 2),
+            range_pts=range_pts,
             body_ratio=round(body / rng, 4),
         )
 
@@ -90,19 +91,52 @@ class OptionMateRBFNStrategy:
     """
     strategy_name: str = "golden"
 
+    ASSET_CONFIGS = {
+        "BANKNIFTY": {"base_step": 250.0, "strike_step": 100},
+        "SENSEX": {"base_step": 400.0, "strike_step": 100},
+        "NIFTY": {"base_step": 110.0, "strike_step": 50},
+    }
+
+    @classmethod
+    def _resolve_asset_params(cls, symbol: Optional[str] = None, effective_spot: float = 0.0) -> tuple[str, float, int]:
+        """
+        Resolves (asset_name, base_step, strike_step) deterministically.
+        Explicit symbol takes priority; falls back to price level threshold.
+        """
+        if symbol:
+            sym_clean = symbol.upper().replace(" ", "")
+            for asset, cfg in cls.ASSET_CONFIGS.items():
+                if asset in sym_clean:
+                    return asset, cfg["base_step"], cfg["strike_step"]
+        if effective_spot > 60000:
+            return "SENSEX", 400.0, 100
+        elif effective_spot > 40000:
+            return "BANKNIFTY", 250.0, 100
+        else:
+            return "NIFTY", 110.0, 50
+
     def __init__(
         self,
-        step_size: int = 50,
+        symbol: Optional[str] = None,
+        step_size: Optional[int] = None,
         reference_vix: float = 14.0,
         min_atr_frictional_hurdle: float = 150.0,
         min_vix_hurdle: float = 12.0,
         reversal_confirmation_bars: int = 2,
     ):
-        self.step_size = step_size
+        self.symbol = symbol
         self.reference_vix = reference_vix
         self.min_atr_frictional_hurdle = min_atr_frictional_hurdle
         self.min_vix_hurdle = min_vix_hurdle
         self.reversal_confirmation_bars = reversal_confirmation_bars
+
+        if step_size is not None:
+            self.step_size = step_size
+        elif symbol is not None:
+            _, _, default_strike_step = self._resolve_asset_params(symbol=symbol)
+            self.step_size = default_strike_step
+        else:
+            self.step_size = 50
 
     def compute_daily_grid(
         self,
@@ -113,22 +147,22 @@ class OptionMateRBFNStrategy:
         vix: float,
         pro_client_divergence: float = 0.0,
         bar_5m_equilibrium: Optional[GoldenCandle] = None,
+        symbol: Optional[str] = None,
     ) -> OptionMateGrid:
         """
         Calculates Trend Decider (TD) and Reversal Price (RP1, RP2) lines
         using scale-invariant, gap-aware Gaussian volatility dispersion.
-        
-        Gap-Aware Auction Principles:
-        - When bar_5m_equilibrium is provided (at or after 09:20 5m bar close), the opening
-          auction equilibrium is anchored causal-first using the closed 5m bar (e.g. bar close/range).
-        - When an opening gap (|open - prev_close| >= 0.25 * ATR) occurs, the auction
-          decouples from prior-day close and anchors value around the opening equilibrium.
-        - For standard sessions, Trend Decider bridges the opening and prior settlement.
-        - Harmonic channel spacing enforces 120-pt intervals for NIFTY (scaled dynamically
-          by index price level: ~0.80 * ATR).
         """
         if atr_14 <= 0:
             raise ValueError(f"ATR_14 must be strictly positive, got {atr_14}")
+
+        # VIX guard: fallback to reference_vix (14.0) if None, NaN, or non-positive
+        try:
+            vix_val = float(vix)
+            if np.isnan(vix_val) or vix_val <= 0:
+                vix_val = self.reference_vix
+        except (TypeError, ValueError):
+            vix_val = self.reference_vix
 
         effective_spot = spot_open
         if bar_5m_equilibrium is not None:
@@ -139,14 +173,11 @@ class OptionMateRBFNStrategy:
         gap_threshold = 0.25 * atr_14
 
         # 1. Asset-tiered dynamic base step & VIX modulation
-        if effective_spot > 60000:  # SENSEX
-            base_step = 400.0
-        elif effective_spot > 40000:  # BANKNIFTY
-            base_step = 250.0
-        else:  # NIFTY
-            base_step = 110.0
+        resolved_sym = symbol or self.symbol
+        _, base_step, default_strike_step = self._resolve_asset_params(symbol=resolved_sym, effective_spot=effective_spot)
+        strike_step = self.step_size if self.step_size is not None else default_strike_step
 
-        vix_eff = min(max(float(vix), 9.0), 50.0)
+        vix_eff = min(max(vix_val, 9.0), 50.0)
         vol_scale = np.sqrt(vix_eff / self.reference_vix)
         channel_step = round(base_step * vol_scale, 2)
 
@@ -192,15 +223,27 @@ class OptionMateRBFNStrategy:
         rp2_down = century_dn if abs(rp2_down_raw - century_dn) <= 10.0 else rp2_down_raw
 
         # 4. Dynamic Slingshot Strike Selection (Target strike that converts to ATM)
-        call_strike = round(rp1_up / self.step_size) * self.step_size
-        put_strike = round(rp1_down / self.step_size) * self.step_size
+        call_strike = round(rp1_up / strike_step) * strike_step
+        put_strike = round(rp1_down / strike_step) * strike_step
 
-        bias = "BULL" if effective_spot >= trend_decider else "BEAR"
+        if effective_spot > trend_decider:
+            bias = "BULL"
+        elif effective_spot < trend_decider:
+            bias = "BEAR"
+        else:
+            # effective_spot == trend_decider: tie-break by opening gap
+            if gap > 0:
+                bias = "BULL"
+            elif gap < 0:
+                bias = "BEAR"
+            else:
+                bias = "NEUTRAL"
+
         target_strike = call_strike if bias == "BULL" else put_strike
 
         return OptionMateGrid(
             date=date,
-            spot_open=round(float(effective_spot), 2),
+            spot_open=round(float(spot_open), 2),
             trend_decider=round(float(trend_decider), 2),
             rp1_upper=round(float(rp1_up), 2),
             rp2_upper=round(float(rp2_up), 2),
@@ -226,8 +269,16 @@ class OptionMateRBFNStrategy:
         relative to the Trend Decider line and Golden Candle confirmation,
         guarded by Gate 2 ATR hurdle.
         """
+        # VIX guard: fallback to reference_vix (14.0) if None, NaN, or non-positive
+        try:
+            vix_val = float(vix)
+            if np.isnan(vix_val) or vix_val <= 0:
+                vix_val = self.reference_vix
+        except (TypeError, ValueError):
+            vix_val = self.reference_vix
+
         # Production Gate 2: ATR & VIX Frictional Hurdle Check
-        if current_atr < self.min_atr_frictional_hurdle or vix < self.min_vix_hurdle:
+        if current_atr < self.min_atr_frictional_hurdle or vix_val < self.min_vix_hurdle:
             return OptionMateSignal(
                 date=grid.date,
                 action="ABSTAIN",
@@ -244,16 +295,37 @@ class OptionMateRBFNStrategy:
                 veto_reason=(
                     f"GATE_2_VETO: Insufficient volatility expansion potential "
                     f"(ATR={current_atr:.1f} < {self.min_atr_frictional_hurdle:.1f} or "
-                    f"VIX={vix:.1f} < {self.min_vix_hurdle:.1f}). Over-trading suppressed."
+                    f"VIX={vix_val:.1f} < {self.min_vix_hurdle:.1f}). Over-trading suppressed."
                 ),
                 narrative=(
                     f"[{time_str}] Session suppressed by Gate 2: Low-volatility regime "
-                    f"(ATR={current_atr:.1f}, VIX={vix:.1f}) fails frictional hurdle."
+                    f"(ATR={current_atr:.1f}, VIX={vix_val:.1f}) fails frictional hurdle."
                 ),
             )
 
         # Golden Candle Validation (if provided)
         if golden_candle is not None:
+            # Zero-volume or zero-range chop check (Attacker 2 guard)
+            if golden_candle.volume == 0.0 or golden_candle.range_pts < 1.0:
+                return OptionMateSignal(
+                    date=grid.date,
+                    action="ABSTAIN",
+                    target_strike=0.0,
+                    spot_entry=current_spot,
+                    target_1_spot=0.0,
+                    target_2_spot=0.0,
+                    invalidation_spot=0.0,
+                    entry_premium_est=0.0,
+                    stop_loss_pts=0.0,
+                    take_profit_pts=0.0,
+                    trade_phase="MORNING_DRIVE",
+                    is_vetoed=True,
+                    veto_reason=(
+                        f"GATE_2_ZERO_RANGE_CHOP: Candle range ({golden_candle.range_pts:.2f}) < 1.0 "
+                        f"or volume ({golden_candle.volume:.0f}) == 0. Illiquid / synthetic artifact suppressed."
+                    ),
+                    narrative=f"[{time_str}] Suppressed by Gate 2: Zero volume or micro-range chop ({golden_candle.range_pts:.2f} pts).",
+                )
             # Wick exhaustion check: If adverse wick > 60% of total range, reject blind chasing
             upper_wick = golden_candle.high - max(golden_candle.open, golden_candle.close)
             lower_wick = min(golden_candle.open, golden_candle.close) - golden_candle.low
@@ -382,11 +454,22 @@ class OptionMateRBFNStrategy:
         Requires multi-bar confirmation of rejection at RP1/RP2 to prevent fading trend days.
         """
         # Gate 2 Check: Suppress midday reversals if daily ATR is below hurdle
-        if current_atr < self.min_atr_frictional_hurdle or vix < self.min_vix_hurdle:
+        # VIX guard: fallback to reference_vix (14.0) if None, NaN, or non-positive
+        try:
+            vix_val = float(vix)
+            if np.isnan(vix_val) or vix_val <= 0:
+                vix_val = self.reference_vix
+        except (TypeError, ValueError):
+            vix_val = self.reference_vix
+
+        if current_atr < self.min_atr_frictional_hurdle or vix_val < self.min_vix_hurdle:
             return None
 
         if len(recent_candle_closes) < self.reversal_confirmation_bars:
             return None
+
+        _, _, default_strike_step = self._resolve_asset_params(symbol=self.symbol, effective_spot=grid.trend_decider)
+        strike_step = self.step_size if self.step_size is not None else default_strike_step
 
         entry_prem_est = 0.16 * current_atr
         stop_loss_pts = 0.35 * entry_prem_est
@@ -399,7 +482,7 @@ class OptionMateRBFNStrategy:
         closed_below_rp1_upper = all(c <= (grid.rp1_upper - 5.0) for c in recent_candle_closes[-self.reversal_confirmation_bars:])
         
         if tested_rp1_upper and closed_below_rp1_upper and current_spot > grid.trend_decider:
-            put_strike = round(grid.trend_decider / self.step_size) * self.step_size
+            put_strike = round(grid.trend_decider / strike_step) * strike_step
             return OptionMateSignal(
                 date=grid.date,
                 action="BUY_PUT",
@@ -428,7 +511,7 @@ class OptionMateRBFNStrategy:
         closed_above_rp1_lower = all(c >= (grid.rp1_lower + 5.0) for c in recent_candle_closes[-self.reversal_confirmation_bars:])
 
         if tested_rp1_lower and closed_above_rp1_lower and current_spot < grid.trend_decider:
-            call_strike = round(grid.trend_decider / self.step_size) * self.step_size
+            call_strike = round(grid.trend_decider / strike_step) * strike_step
             return OptionMateSignal(
                 date=grid.date,
                 action="BUY_CALL",
