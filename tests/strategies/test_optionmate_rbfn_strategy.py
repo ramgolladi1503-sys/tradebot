@@ -36,17 +36,17 @@ def test_optionmate_grid_calculation():
     # Continuous unrounded equilibrium: 23566.5
     assert grid.trend_decider == 23566.5
 
-    # 2. Reversal Price 1 (110-pt base step modulated by sqrt(14/14)):
-    # rp1_upper = 23566.5 + 110.0 = 23676.5
-    assert grid.rp1_upper == 23676.5
+    # 2. Reversal Price 1 (102-pt calibrated base step modulated by sqrt(14/14)):
+    # rp1_upper = 23566.5 + 102.0 = 23668.5
+    assert grid.rp1_upper == 23668.5
     # 3. Reversal Price 2 (0.85 compression factor, century clamping):
-    # rp2_up_raw = 23676.5 + 0.85 * 110 = 23770.0 (century distance |23770 - 23800| = 30 > 10, retains raw 23770.0)
-    assert grid.rp2_upper == 23770.0
+    # rp2_up_raw = 23668.5 + 0.85 * 102.0 = 23755.2 (century distance |23755.2 - 23800| = 44.8 > 10, retains raw 23755.2)
+    assert grid.rp2_upper == 23755.2
 
     # 4. Slingshot Strike Selection:
-    # Call strike should be rounded to nearest 50 for 23676.5 -> 23700.0
-    assert grid.call_strike == 23700.0
-    # Put strike should be rounded to nearest 50 for 23566.5 - 110.0 = 23456.5 -> 23450.0
+    # Call strike should be rounded to nearest 50 for 23668.5 -> 23650.0
+    assert grid.call_strike == 23650.0
+    # Put strike should be rounded to nearest 50 for 23566.5 - 102.0 = 23464.5 -> 23450.0
     assert grid.put_strike == 23450.0
 
 
@@ -140,12 +140,12 @@ def test_optionmate_gate_3_midday_reversal_confirmation():
         atr_14=160.0,
         vix=14.0,
     )
-    # TD = 23500.0, rp1_upper = 23610.0
+    # TD = 23500.0, rp1_upper = 23602.0
     # Case A: False touch (wick touches rp1_upper, but closes continue up - NO reversal)
     unconfirmed = strategy.evaluate_midday_reversal(
         grid=grid,
         current_spot=23620.0,
-        recent_candle_closes=[23615.0, 23620.0],  # Closes above rp1_upper - 5.0 (23605.0)
+        recent_candle_closes=[23615.0, 23620.0],  # Closes above rp1_upper - 5.0 (23597.0)
         recent_candle_highs=[23618.0, 23625.0],
         recent_candle_lows=[23590.0, 23600.0],
         current_atr=160.0,
@@ -153,12 +153,12 @@ def test_optionmate_gate_3_midday_reversal_confirmation():
     )
     assert unconfirmed is None  # Fading breakout prevented!
 
-    # Case B: Confirmed 2-bar rejection close below rp1_upper - 5.0 (23605.0)
+    # Case B: Confirmed 2-bar rejection close below rp1_upper - 5.0 (23597.0)
     confirmed = strategy.evaluate_midday_reversal(
         grid=grid,
         current_spot=23580.0,
-        recent_candle_closes=[23600.0, 23580.0],  # Confirmed rejection closes <= 23605.0
-        recent_candle_highs=[23615.0, 23605.0],   # Touched RP1 upper (23610.0)
+        recent_candle_closes=[23595.0, 23580.0],  # Confirmed rejection closes <= 23597.0
+        recent_candle_highs=[23610.0, 23600.0],   # Touched RP1 upper (23602.0)
         recent_candle_lows=[23570.0, 23575.0],
         current_atr=160.0,
         vix=14.0,

@@ -41,7 +41,7 @@ class TestOptionMateRedTeam10Attackers:
             vix=float("nan"),
         )
         assert not math.isnan(grid_nan.rp1_upper)
-        assert grid_nan.rp1_upper == 24110.0  # 24000 + 110 * sqrt(14/14)
+        assert grid_nan.rp1_upper == 24102.0  # 24000 + 102 * sqrt(14/14)
 
         # 2. compute_daily_grid with negative/zero VIX
         grid_zero = strat.compute_daily_grid(
@@ -51,7 +51,7 @@ class TestOptionMateRedTeam10Attackers:
             atr_14=150.0,
             vix=0.0,
         )
-        assert grid_zero.rp1_upper == 24110.0
+        assert grid_zero.rp1_upper == 24102.0
 
         # 3. generate_signal with NaN VIX
         gc = GoldenCandle.create(open=24000.0, high=24050.0, low=23990.0, close=24040.0, volume=100000.0)
@@ -68,10 +68,10 @@ class TestOptionMateRedTeam10Attackers:
         # 4. evaluate_midday_reversal with NaN VIX
         rev = strat.evaluate_midday_reversal(
             grid=grid_nan,
-            current_spot=24080.0,
-            recent_candle_closes=[24100.0, 24080.0],
-            recent_candle_highs=[24115.0, 24105.0],
-            recent_candle_lows=[24070.0, 24075.0],
+            current_spot=24070.0,
+            recent_candle_closes=[24095.0, 24075.0],
+            recent_candle_highs=[24105.0, 24095.0],
+            recent_candle_lows=[24060.0, 24065.0],
             current_atr=150.0,
             vix=float("nan"),
         )
@@ -146,7 +146,7 @@ class TestOptionMateRedTeam10Attackers:
         # 1. NIFTY
         strat_nifty = OptionMateRBFNStrategy(symbol="NIFTY")
         g_nifty = strat_nifty.compute_daily_grid("2026-11-16", spot_open=24000.0, prev_close=24000.0, atr_14=150.0, vix=14.0)
-        assert g_nifty.rp1_upper - g_nifty.trend_decider == 110.0
+        assert g_nifty.rp1_upper - g_nifty.trend_decider == 102.0
 
         # 2. BANKNIFTY
         strat_bn = OptionMateRBFNStrategy(symbol="BANKNIFTY")

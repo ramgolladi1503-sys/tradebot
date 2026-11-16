@@ -94,7 +94,7 @@ class OptionMateRBFNStrategy:
     ASSET_CONFIGS = {
         "BANKNIFTY": {"base_step": 250.0, "strike_step": 100},
         "SENSEX": {"base_step": 400.0, "strike_step": 100},
-        "NIFTY": {"base_step": 110.0, "strike_step": 50},
+        "NIFTY": {"base_step": 102.0, "strike_step": 50},
     }
 
     @classmethod
@@ -113,7 +113,7 @@ class OptionMateRBFNStrategy:
         elif effective_spot > 40000:
             return "BANKNIFTY", 250.0, 100
         else:
-            return "NIFTY", 110.0, 50
+            return "NIFTY", 102.0, 50
 
     def __init__(
         self,
@@ -186,26 +186,32 @@ class OptionMateRBFNStrategy:
             channel_step = max(channel_step, round(0.35 * bar_5m_equilibrium.range_pts, 2))
 
         # 2. Trend Decider Price (Central Equilibrium)
-        # Remove discrete anchor_round_base = 40.0/50.0/100.0 integer rounding
-        if bar_5m_equilibrium is not None:
-            o = float(bar_5m_equilibrium.open)
-            h = float(bar_5m_equilibrium.high)
-            l = float(bar_5m_equilibrium.low)
-            c = float(bar_5m_equilibrium.close)
-            range_pts = max(float(h - l), 1e-6)
-            body = abs(float(c - o))
-            wick = range_pts - body
-            # Wick-Damped 5m Equilibrium when wide wick is present
-            if wick > 1.5 * body:
-                trend_decider = round(((o + c) / 2.0 + (h + l) / 2.0) / 2.0, 2)
+        # Gap regime priority: Check abs(gap) >= gap_threshold FIRST!
+        flow_bias = np.sign(pro_client_divergence) * 0.05 * atr_14
+        if abs(gap) >= gap_threshold:
+            # Gap regime holds! Market accepted new value decoupled from prior close.
+            anchor_spot = spot_open if abs(spot_open - prev_close) >= gap_threshold else effective_spot
+            if bar_5m_equilibrium is not None:
+                # Anchor to opening body equilibrium, NOT wide wick extremes that pull TD into the sky
+                raw_td = round((float(spot_open) + float(bar_5m_equilibrium.open)) / 2.0, 2) + flow_bias
             else:
-                trend_decider = round((o + h + l + c) / 4.0, 2)
-        else:
-            flow_bias = np.sign(pro_client_divergence) * 0.05 * atr_14
-            if abs(gap) >= gap_threshold:
-                anchor_spot = spot_open if abs(spot_open - prev_close) >= gap_threshold else effective_spot
                 raw_td = anchor_spot + flow_bias
-                trend_decider = round(float(raw_td), 2)
+            trend_decider = round(float(raw_td), 2)
+        else:
+            # Rotation Regime: abs(gap) < gap_threshold
+            if bar_5m_equilibrium is not None:
+                o = float(bar_5m_equilibrium.open)
+                h = float(bar_5m_equilibrium.high)
+                l = float(bar_5m_equilibrium.low)
+                c = float(bar_5m_equilibrium.close)
+                range_pts = max(float(h - l), 1e-6)
+                body = abs(float(c - o))
+                wick = range_pts - body
+                # Wick-Damped 5m Equilibrium when wide wick is present
+                if wick > 1.5 * body:
+                    trend_decider = round(((o + c) / 2.0 + (h + l) / 2.0) / 2.0, 2)
+                else:
+                    trend_decider = round((o + h + l + c) / 4.0, 2)
             else:
                 raw_td = 0.5 * (effective_spot + prev_close) + flow_bias
                 trend_decider = round(float(raw_td), 2)
