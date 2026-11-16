@@ -3,7 +3,7 @@ from pathlib import Path
 
 FROZEN_HASHES = {
     "strategies/optionmate_rbfn_strategy.py": "352f05b011d069d2e1fb7ecfa7e4983ba607fce686d6d60303a8437814d185bf",
-    "core/sentinel_live_stream_advisor.py": "3bb94769f671aeb44d36b99aa96f612cbf8436473a2ce7d0f2995cb4cfab52b8",
+    "core/sentinel_live_stream_advisor.py": "267483542dd7d4b5304d6d30777eb2ec9a28825a6a262867426a996a9b53923b",
     "core/sentinel_automated_order_dispatcher.py": "aca746d82d5ea46b96ca2bd37dbd85f850462dc224ff10fde4bedc5d6d6c0d61",
     "core/sentinel_option_strike_resolver.py": "aa7bbd2e3d5d0c13d9407a69959eed70670dda35dab47571e31e284dcd78881f",
 }

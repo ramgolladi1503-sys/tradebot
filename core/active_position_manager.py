@@ -209,8 +209,9 @@ class ActivePositionManager:
             if saved_cool_until:
                 try:
                     parsed_cool = datetime.fromisoformat(saved_cool_until)
+                    now_inst = datetime.now(parsed_cool.tzinfo) if parsed_cool.tzinfo else datetime.now()
                     # If cool-off timestamp is from a previous calendar day or already elapsed, clear it to STANDBY
-                    if parsed_cool < datetime.now() or parsed_cool.date() < datetime.now().date():
+                    if parsed_cool.timestamp() < now_inst.timestamp() or parsed_cool.date() < now_inst.date():
                         self.cool_off_until = None
                         self.cool_off_ref_spot = None
                         self.cool_off_direction = None
@@ -255,6 +256,58 @@ class ActivePositionManager:
             raise ValueError(f"Illegal state transition from {self.state} to {new_state}")
         self.state = new_state
         self._persist_wal_atomic()
+        return True
+
+    def check_and_expire_cool_off(self, now_dt: Optional[datetime] = None) -> bool:
+        """Checks if active cool-off duration has elapsed, auto-transitioning to STANDBY.
+        
+        Enforces POSIX float timestamp comparisons (now_dt.timestamp() >= cool_off_until.timestamp())
+        ensuring strict immunity against offset-naive vs aware datetime mismatches.
+        If expired:
+        - transitions state to STATE_STANDBY via self._transition_to(STATE_STANDBY)
+        - resets cool_off_until, cool_off_ref_spot, cool_off_direction to None
+        - atomically persists state in WAL
+        Returns True if cool-off was expired and transitioned to STANDBY, False otherwise.
+        """
+        if self.state != STATE_COOL_OFF or self.cool_off_until is None:
+            return False
+
+        eval_dt = now_dt if now_dt is not None else datetime.now()
+        if eval_dt.timestamp() >= self.cool_off_until.timestamp():
+            self._transition_to(STATE_STANDBY)
+            self.cool_off_until = None
+            self.cool_off_ref_spot = None
+            self.cool_off_direction = None
+            self._persist_wal_atomic(force_sync=True)
+            return True
+
+        return False
+
+    def is_cool_off_active(
+        self,
+        now_dt: Optional[datetime] = None,
+        incoming_direction: Optional[str] = None
+    ) -> bool:
+        """Determines if the active position manager is actively blocking entry due to cool-off.
+        
+        Evaluates cool-off state dynamically:
+        1. If self.state != STATE_COOL_OFF, returns False immediately.
+        2. First calls self.check_and_expire_cool_off(now_dt). If expired to STANDBY, returns False.
+        3. If still in cool-off:
+           - If incoming_direction is provided and differs from self.cool_off_direction (reversal pivot),
+             returns False (unblocking immediate opposite-direction entry).
+           - If incoming_direction matches or is not provided, returns True (blocking entry).
+        """
+        if self.state != STATE_COOL_OFF:
+            return False
+
+        if self.check_and_expire_cool_off(now_dt=now_dt):
+            return False
+
+        if incoming_direction is not None and self.cool_off_direction is not None:
+            if incoming_direction != self.cool_off_direction:
+                return False
+
         return True
 
     def check_session_energy_gate(
@@ -331,26 +384,30 @@ class ActivePositionManager:
         cleared_cool_off = False
         if self.state == STATE_COOL_OFF:
             now_dt = datetime.now()
-            # If the new setup is a reversal (opposite direction), allow immediate pivot
-            is_same_direction = (self.cool_off_direction is not None and self.cool_off_direction == direction)
-            
-            if is_same_direction:
-                if self.cool_off_until and now_dt < self.cool_off_until:
-                    rem_sec = (self.cool_off_until - now_dt).total_seconds()
-                    logger.warning(f"ENTRY_REJECTED: APM in STATE_COOL_OFF for {rem_sec:.1f}s more. Suppressing same-direction churn.")
-                    return False
-                # Check structural extreme if ref spot available
-                if self.cool_off_ref_spot is not None:
-                    if self.cool_off_direction == "CE" and entry_price <= self.cool_off_ref_spot:
-                        logger.warning("ENTRY_REJECTED: Spot has not exceeded pre-exit high extreme. Suppressing same-direction churn.")
-                        return False
-                    elif self.cool_off_direction == "PE" and entry_price >= self.cool_off_ref_spot:
-                        logger.warning("ENTRY_REJECTED: Spot has not broken pre-exit low extreme. Suppressing same-direction churn.")
-                        return False
+            # If cooldown duration has elapsed, auto-transition to STANDBY
+            if self.check_and_expire_cool_off(now_dt=now_dt):
+                cleared_cool_off = True
             else:
-                logger.info(f"COOL_OFF_PIVOT_ALLOWED: Immediate reversal trade permitted ({self.cool_off_direction} -> {direction}).")
-            
-            cleared_cool_off = True
+                # If the new setup is a reversal (opposite direction), allow immediate pivot
+                is_same_direction = (self.cool_off_direction is not None and self.cool_off_direction == direction)
+                
+                if is_same_direction:
+                    if self.cool_off_until and now_dt.timestamp() < self.cool_off_until.timestamp():
+                        rem_sec = self.cool_off_until.timestamp() - now_dt.timestamp()
+                        logger.warning(f"ENTRY_REJECTED: APM in STATE_COOL_OFF for {rem_sec:.1f}s more. Suppressing same-direction churn.")
+                        return False
+                    # Check structural extreme if ref spot available
+                    if self.cool_off_ref_spot is not None:
+                        if self.cool_off_direction == "CE" and entry_price <= self.cool_off_ref_spot:
+                            logger.warning("ENTRY_REJECTED: Spot has not exceeded pre-exit high extreme. Suppressing same-direction churn.")
+                            return False
+                        elif self.cool_off_direction == "PE" and entry_price >= self.cool_off_ref_spot:
+                            logger.warning("ENTRY_REJECTED: Spot has not broken pre-exit low extreme. Suppressing same-direction churn.")
+                            return False
+                else:
+                    logger.info(f"COOL_OFF_PIVOT_ALLOWED: Immediate reversal trade permitted ({self.cool_off_direction} -> {direction}).")
+                
+                cleared_cool_off = True
 
         if not cleared_cool_off and self.state not in {STATE_STANDBY, STATE_LIQUIDATED, STATE_PULLBACK_WAIT}:
             return False
@@ -370,7 +427,7 @@ class ActivePositionManager:
             return False
 
         # If cool-off was cleared and downstream gates pass, transition to STANDBY
-        if cleared_cool_off:
+        if cleared_cool_off and self.state == STATE_COOL_OFF:
             self._transition_to(STATE_STANDBY)
 
         if not self._transition_to(STATE_ARMED):

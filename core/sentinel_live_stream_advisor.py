@@ -2526,22 +2526,18 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         curr_trades = self.daily_trade_counters.get(index_name, 0)
                         shadow_tier = "PRIMARY_CANONICAL" if curr_trades < 5 else "OBSERVATIONAL_SHADOW"
 
-                        # Invariant 2.3 & Hardened Defense 3: Priority-Based Early Release from STATE_COOL_OFF
-                        # Allow entry if:
-                        # 1. State is STANDBY, LIQUIDATED, or PULLBACK_WAIT
-                        # 2. State is COOL_OFF, BUT setup is high-priority (Mode 5, priority >= 0.90) OR
-                        #    the signal direction inverts (e.g. PE after stopped CE), preventing false lock.
-                        can_bypass_cool_off = (
-                            idx_apm.state == STATE_COOL_OFF
-                            and getattr(idx_apm, "cool_off_direction", None) is not None
-                            and getattr(idx_apm, "cool_off_direction") != required_option_type
+                        # Invariant 2.3 & Hardened Defense 3: Encapsulated Cool-off State Evaluation
+                        # Check whether APM is actively blocking entry due to cool-off
+                        cool_off_blocking = idx_apm.is_cool_off_active(
+                            now_dt=now_dt,
+                            incoming_direction=required_option_type
                         )
 
                         if idx_apm.state in {STATE_IN_FLIGHT, STATE_TRAIL_LOCK, STATE_EXIT_PENDING}:
                             is_target_strike = False
-                        elif idx_apm.state == STATE_COOL_OFF and not can_bypass_cool_off:
+                        elif cool_off_blocking:
                             is_target_strike = False
-                        elif is_target_strike and (idx_apm.state in {STATE_STANDBY, STATE_LIQUIDATED, STATE_PULLBACK_WAIT} or can_bypass_cool_off):
+                        elif is_target_strike and (idx_apm.state in {STATE_STANDBY, STATE_LIQUIDATED, STATE_PULLBACK_WAIT} or not cool_off_blocking):
                             opt_q = {
                                 "symbol": depth.symbol,
                                 "token": depth.token,
