@@ -138,47 +138,58 @@ class OptionMateRBFNStrategy:
         gap = effective_spot - prev_close
         gap_threshold = 0.25 * atr_14
 
-        # 1. Scale-Invariant Step Size (Dynamic 0.50% harmonic channel)
-        # SENSEX/BANKNIFTY round to 50 pts; NIFTY rounds to 10 pts.
-        # At 79k SENSEX -> 400 pts; at 24k NIFTY -> 120 pts; at 50k BANKNIFTY -> 250 pts.
+        # 1. Asset-tiered dynamic base step & VIX modulation
         if effective_spot > 60000:  # SENSEX
-            step_round_base = 50.0
-            anchor_round_base = 100.0
+            base_step = 400.0
         elif effective_spot > 40000:  # BANKNIFTY
-            step_round_base = 50.0
-            anchor_round_base = 50.0
+            base_step = 250.0
         else:  # NIFTY
-            step_round_base = 10.0
-            anchor_round_base = 40.0
+            base_step = 110.0
 
-        channel_step = round((effective_spot * 0.0050) / step_round_base) * step_round_base
+        vix_eff = min(max(float(vix), 9.0), 50.0)
+        vol_scale = np.sqrt(vix_eff / self.reference_vix)
+        channel_step = round(base_step * vol_scale, 2)
 
-        # Dynamic channel expansion if 5m bar expansion range exceeds standard step
+        # Enforce minimum floor if bar_5m_equilibrium is present
         if bar_5m_equilibrium is not None and bar_5m_equilibrium.range_pts > 0:
             channel_step = max(channel_step, round(0.35 * bar_5m_equilibrium.range_pts, 2))
 
         # 2. Trend Decider Price (Central Equilibrium)
-        flow_bias = np.sign(pro_client_divergence) * 0.05 * atr_14
-        if abs(gap) >= gap_threshold:
-            # Gap Regime: Market accepts new value; anchor directly around opening settlement
-            # On gap shock, anchor TD to spot_open to avoid drift from 5m candle wick
-            anchor_spot = spot_open if abs(spot_open - prev_close) >= gap_threshold else effective_spot
-            raw_td = anchor_spot + flow_bias
-            trend_decider = round(raw_td / anchor_round_base) * anchor_round_base
+        # Remove discrete anchor_round_base = 40.0/50.0/100.0 integer rounding
+        if bar_5m_equilibrium is not None:
+            o = float(bar_5m_equilibrium.open)
+            h = float(bar_5m_equilibrium.high)
+            l = float(bar_5m_equilibrium.low)
+            c = float(bar_5m_equilibrium.close)
+            range_pts = max(float(h - l), 1e-6)
+            body = abs(float(c - o))
+            wick = range_pts - body
+            # Wick-Damped 5m Equilibrium when wide wick is present
+            if wick > 1.5 * body:
+                trend_decider = round(((o + c) / 2.0 + (h + l) / 2.0) / 2.0, 2)
+            else:
+                trend_decider = round((o + h + l + c) / 4.0, 2)
         else:
-            # Rotation Regime: Equilibrium between open and prior close
-            raw_td = 0.5 * (effective_spot + prev_close) + flow_bias
-            trend_decider = round(raw_td / anchor_round_base) * anchor_round_base
+            flow_bias = np.sign(pro_client_divergence) * 0.05 * atr_14
+            if abs(gap) >= gap_threshold:
+                anchor_spot = spot_open if abs(spot_open - prev_close) >= gap_threshold else effective_spot
+                raw_td = anchor_spot + flow_bias
+                trend_decider = round(float(raw_td), 2)
+            else:
+                raw_td = 0.5 * (effective_spot + prev_close) + flow_bias
+                trend_decider = round(float(raw_td), 2)
 
-        # 3. Harmonic Volatility Bands (RP1 = 1x step, RP2 = 2x step)
-        vol_scale = np.sqrt(max(vix, 9.0) / self.reference_vix)
-        rp1_dist = channel_step * vol_scale
-        rp2_dist = 2.0 * channel_step * vol_scale
+        # 3. Non-linear compression for RP2 and Century strike snapping
+        rp1_up = round(trend_decider + channel_step, 2)
+        rp1_down = round(trend_decider - channel_step, 2)
+        rp2_up_raw = round(rp1_up + 0.85 * channel_step, 2)
+        rp2_down_raw = round(rp1_down - 0.85 * channel_step, 2)
 
-        rp1_up = trend_decider + rp1_dist
-        rp2_up = trend_decider + rp2_dist
-        rp1_down = trend_decider - rp1_dist
-        rp2_down = trend_decider - rp2_dist
+        century_up = round(rp2_up_raw / 100.0) * 100.0
+        rp2_up = century_up if abs(rp2_up_raw - century_up) <= 10.0 else rp2_up_raw
+
+        century_dn = round(rp2_down_raw / 100.0) * 100.0
+        rp2_down = century_dn if abs(rp2_down_raw - century_dn) <= 10.0 else rp2_down_raw
 
         # 4. Dynamic Slingshot Strike Selection (Target strike that converts to ATM)
         call_strike = round(rp1_up / self.step_size) * self.step_size
