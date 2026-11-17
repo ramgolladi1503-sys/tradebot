@@ -156,6 +156,7 @@ class ActivePositionManager:
         self.payload: Optional[PositionPayload] = None
         self.last_completed_trade: Optional[Dict[str, Any]] = None
         self.trade_history: List[Dict[str, Any]] = []
+        self.daily_trade_count: int = 0
         self.cool_off_until: Optional[datetime] = None
         self.cool_off_ref_spot: Optional[float] = None
         self.cool_off_direction: Optional[str] = None
@@ -178,6 +179,7 @@ class ActivePositionManager:
             "payload": asdict(self.payload) if self.payload else None,
             "last_completed_trade": self.last_completed_trade,
             "trade_history": self.trade_history,
+            "daily_trade_count": self.daily_trade_count,
             "cool_off_until": self.cool_off_until.isoformat() if self.cool_off_until else None,
             "cool_off_ref_spot": self.cool_off_ref_spot,
             "cool_off_direction": self.cool_off_direction,
@@ -203,6 +205,7 @@ class ActivePositionManager:
             saved_payload = data.get("payload")
             self.last_completed_trade = data.get("last_completed_trade")
             self.trade_history = data.get("trade_history", [])
+            self.daily_trade_count = int(data.get("daily_trade_count") or 0)
 
             # Recover cool-off state
             saved_cool_until = data.get("cool_off_until")
@@ -415,13 +418,14 @@ class ActivePositionManager:
         # Invariant: Regime-Aware Session Trade Cap
         effective_cap = 6 if session_gear == "GEAR_2_TREND" else max_session_trades
         today_iso = entry_time_str[:10] if (entry_time_str and len(entry_time_str) >= 10) else datetime.now().strftime("%Y-%m-%d")
-        today_trades_count = sum(
+        history_trades_count = sum(
             1 for t in self.trade_history
             if isinstance(t, dict) and (
                 str(t.get("entry_time", "")).startswith(today_iso) or
                 not str(t.get("entry_time", ""))  # count if no date specified in mock
             )
         )
+        today_trades_count = max(history_trades_count, self.daily_trade_count)
         if today_trades_count >= effective_cap:
             logger.warning(f"SESSION_TRADE_CAP_REACHED: {today_trades_count} trades already executed today (cap={effective_cap}). Suppressing entry.")
             return False
