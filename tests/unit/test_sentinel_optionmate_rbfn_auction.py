@@ -405,10 +405,10 @@ def test_scale_calibrated_dynamic_channel_step(tmp_path):
 # =========================================================================
 
 def test_strict_gate_2_veto_atr_frictional_hurdle(tmp_path):
-    """If ATR is below minimum frictional hurdle (150 for NIFTY, 450 for SENSEX), signal is vetoed."""
+    """If ATR is below minimum frictional hurdle (65 for NIFTY, 450 for SENSEX), signal is vetoed."""
     wal = tmp_path / "test_wal_gate2_atr.json"
     advisor = SentinelLiveStreamAdvisor(wal_path=str(wal), enable_stdout=False)
-    advisor.seed_prior_day_levels("NIFTY", pdh=24100.0, pdl=23900.0, pdc=24000.0, atr_20=110.0)  # ATR 110 < 150
+    advisor.seed_prior_day_levels("NIFTY", pdh=24100.0, pdl=23900.0, pdc=24000.0, atr_20=50.0)  # ATR 50 < 65 calibrated hurdle
     advisor.session_open_prices["NIFTY"] = 24000.0
 
     sig = advisor._on_5m_bar_close(

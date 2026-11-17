@@ -18,6 +18,7 @@ Key Features:
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 import os
@@ -188,6 +189,32 @@ class CachedRBFNAuctionSignal:
     is_order_action: bool = False
     broker_api_called: bool = False
     allowed_for_live_execution: bool = False
+
+
+# ARCH-SENTINEL-OPTIONMATE-HARDENING-001: Mode 5 Setup Classification for Wall-Gate Exemptions
+MODE_5_STRUCTURAL_BREAKOUTS: set[str] = {
+    "RP1_UPPER_10M_EXPANSION_BREAKOUT",
+    "RP1_LOWER_10M_EXPANSION_BREAKDOWN",
+    "RP1_UPPER_AGGRESSIVE_DRIVE",
+    "RP1_LOWER_AGGRESSIVE_DRIVE",
+}
+
+MODE_5_EXHAUSTION_FADES: set[str] = {
+    "RP2_UPPER_10M_CEILING_FADE",
+    "RP2_LOWER_10M_FLOOR_BOUNCE",
+    "RP1_UPPER_REVERSAL_CONFIRMED",
+    "RP1_LOWER_REVERSAL_CONFIRMED",
+}
+
+
+def is_mode_5_structural_breakout(reason: str) -> bool:
+    """Predicate checking if setup is a confirmed Mode 5 structural breakout."""
+    return any(k in reason for k in MODE_5_STRUCTURAL_BREAKOUTS)
+
+
+def is_mode_5_exhaustion_fade(reason: str) -> bool:
+    """Predicate checking if setup is a confirmed Mode 5 exhaustion fade."""
+    return any(k in reason for k in MODE_5_EXHAUSTION_FADES)
 
 
 @dataclass(slots=True)
@@ -391,8 +418,8 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
         # FEAT-SENTINEL-OPTIONMATE-RBFN-AUCTION-001: RBFN Strategy Engines per index
         self.rbfn_strategies: dict[str, Any] = {
-            "NIFTY": OptionMateRBFNStrategy(step_size=50, min_atr_frictional_hurdle=150.0, min_vix_hurdle=12.0),
-            "BANKNIFTY": OptionMateRBFNStrategy(step_size=100, min_atr_frictional_hurdle=300.0, min_vix_hurdle=12.0),
+            "NIFTY": OptionMateRBFNStrategy(step_size=50, min_atr_frictional_hurdle=65.0, min_vix_hurdle=12.0),
+            "BANKNIFTY": OptionMateRBFNStrategy(step_size=100, min_atr_frictional_hurdle=250.0, min_vix_hurdle=12.0),
             "SENSEX": SensexOptionMateRBFNStrategy(step_size=100, min_atr_frictional_hurdle=450.0, min_vix_hurdle=12.0),
         }
         self.rbfn_strategy = self.rbfn_strategies["NIFTY"]
@@ -471,6 +498,9 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
         self.alerts_history: list[AdvisoryAlert] = []
         self._lock = threading.RLock()
+        self._om_levels_lock = threading.Lock()
+        self._last_om_levels_mtime: float = 0.0
+        self._last_om_check_mono: float = 0.0
         self._last_alert_time = 0.0
         self._last_wall_persist_time = 0.0
         self.session_gear = "GEAR_1_RANGE"  # Legacy global fallback
@@ -694,6 +724,130 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         except Exception as e:
             logger.error(f"[{index_name}] Failed to inject OptionMate levels: {e}")
             return False
+
+    def check_and_reload_optionmate_levels(
+        self,
+        levels_path: Optional[Path] = None,
+        force: bool = False,
+        session_date: Optional[str] = None,
+    ) -> dict[str, bool]:
+        """Dynamically reloads and injects verified OptionMate indicator levels from runtime JSON.
+
+        ARCH-SENTINEL-OPTIONMATE-HARDENING-001:
+        - Thread-safe using self._om_levels_lock.
+        - Rate-limited to at most once per 1.0s using time.monotonic() unless force=True.
+        - Reads mtime of runtime/optionmate_daily_levels.json (or passed levels_path).
+        - Strictly verifies that level payload date matches session_date (or today_str).
+        - Fails closed if date does not match or payload is invalid, returning {idx: False}.
+        - Injects validated levels via self.inject_optionmate_levels(...) returning {idx: True}.
+        """
+        now_mono = time.monotonic()
+        if not force and (now_mono - self._last_om_check_mono < 1.0):
+            return {}
+
+        target_file = levels_path or (Path("runtime") / "optionmate_daily_levels.json")
+        expected_date = session_date or datetime.now().strftime("%Y-%m-%d")
+
+        with self._om_levels_lock:
+            # Re-check rate limit inside lock in case another thread just completed reload
+            now_mono = time.monotonic()
+            if not force and (now_mono - self._last_om_check_mono < 1.0):
+                return {}
+            self._last_om_check_mono = now_mono
+
+            if not target_file.exists():
+                return {}
+
+            try:
+                stat_res = target_file.stat()
+                mtime = stat_res.st_mtime
+                if not force and mtime <= self._last_om_levels_mtime:
+                    return {}
+
+                with open(target_file, "r", encoding="utf-8") as f:
+                    levels_dict = json.load(f)
+
+                if not isinstance(levels_dict, dict):
+                    logger.error(f"[OptionMate Reload] Invalid JSON root format in {target_file}")
+                    return {}
+
+                reload_results: dict[str, bool] = {}
+                for idx_name, idx_payload in levels_dict.items():
+                    if not isinstance(idx_payload, dict):
+                        continue
+
+                    # Strict session date verification: reject stale prior-day levels
+                    payload_date = idx_payload.get("date")
+                    if payload_date != expected_date:
+                        logger.warning(
+                            f"[{idx_name}] Stale OptionMate levels rejected! "
+                            f"Payload date '{payload_date}' != expected session date '{expected_date}'"
+                        )
+                        reload_results[idx_name] = False
+                        continue
+
+                    td = idx_payload.get("trend_decider")
+                    r1_u = idx_payload.get("rp1_upper")
+                    r2_u = idx_payload.get("rp2_upper")
+                    r1_l = idx_payload.get("rp1_lower")
+                    r2_l = idx_payload.get("rp2_lower")
+                    s_open = idx_payload.get("spot_open")
+
+                    if any(v is None for v in (td, r1_u, r2_u, r1_l, r2_l)):
+                        logger.error(f"[{idx_name}] Incomplete OptionMate level attributes in {target_file}")
+                        reload_results[idx_name] = False
+                        continue
+
+                    ok = self.inject_optionmate_levels(
+                        index_name=idx_name,
+                        trend_decider=float(td),
+                        rp1_upper=float(r1_u),
+                        rp2_upper=float(r2_u),
+                        rp1_lower=float(r1_l),
+                        rp2_lower=float(r2_l),
+                        spot_open=float(s_open) if s_open is not None else None,
+                        date_str=payload_date,
+                    )
+                    reload_results[idx_name] = ok
+
+                self._last_om_levels_mtime = mtime
+                return reload_results
+            except Exception as e:
+                logger.error(f"[OptionMate Reload] Error reading levels file {target_file}: {e}")
+                return {}
+
+    def get_valid_cached_rbfn_signal(
+        self,
+        index_name: str,
+        current_timestamp_ms: Optional[int] = None,
+        ttl_seconds: float = 300.0,
+    ) -> Optional[CachedRBFNAuctionSignal]:
+        """Returns valid cached RBFN signal if within TTL; evicts and returns None if expired.
+
+        ARCH-SENTINEL-OPTIONMATE-HARDENING-001:
+        - Thread-safe under self._lock.
+        - Evaluates age = (current_timestamp_ms - sig.timestamp_ms) / 1000.0.
+        - If current_timestamp_ms is None or <= 0, uses time.time() * 1000.
+        - If age > ttl_seconds (default 300s = 1 5m bar epoch), evicts signal and returns None.
+        - Otherwise returns the cached signal.
+        """
+        with self._lock:
+            sig = self.cached_rbfn_signals.get(index_name)
+            if sig is None:
+                return None
+
+            now_ms = current_timestamp_ms if (current_timestamp_ms is not None and current_timestamp_ms > 0) else int(time.time() * 1000)
+            sig_ts_ms = getattr(sig, "timestamp_ms", 0)
+            if sig_ts_ms > 0:
+                age_sec = (now_ms - sig_ts_ms) / 1000.0
+                if age_sec > ttl_seconds:
+                    logger.info(
+                        f"[{index_name}] Evicting expired cached RBFN signal ({sig.setup_reason}) "
+                        f"after {age_sec:.1f}s > {ttl_seconds}s TTL"
+                    )
+                    self.cached_rbfn_signals[index_name] = None
+                    return None
+            return sig
 
     def clamp_atr(self, index_name: str, raw_atr: float) -> float:
         """Clamps ATR to index-specific floor (NIFTY: 25.0, BANKNIFTY: 100.0, SENSEX: 150.0)."""
@@ -1359,22 +1513,6 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     is_vetoed=True,
                     veto_reason="GATE_2_COMPRESSION_CHOP",
                 )
-            elif self.rp2_pierced_before_1030.get(index_name, False) and not (any(b.get("low", math.inf) <= grid.rp2_lower for b in history[-6:]) if len(history) >= 2 else False):
-                signal = CachedRBFNAuctionSignal(
-                    timestamp_ms=timestamp_ms,
-                    index_name=index_name,
-                    action="ABSTAIN",
-                    direction="",
-                    target_strike=0.0,
-                    target_pts=0.0,
-                    sl_pts=0.0,
-                    setup_reason="10:30_RP2_PIERCING_TREND_DAY_INVALIDATION",
-                    trade_phase=phase_label,
-                    bar_time=bar_time,
-                    is_active=False,
-                    is_vetoed=True,
-                    veto_reason="10:30_RP2_PIERCING_TREND_DAY_INVALIDATION",
-                )
             elif len(history) < 2:
                 # Need at least 2 bars of 5m history for 2-bar confirmation
                 # On the very first 09:20 bar, evaluate opening drive if tested TD
@@ -1573,6 +1711,26 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         is_active=True,
                         is_vetoed=False,
                         veto_reason="",
+                    )
+                # -------------------------------------------------------------
+                # 10:30 RP2 Piercing Invalidation Rule check for Early Retests / Continuations
+                # ARCH-SENTINEL-OPTIONMATE-HARDENING-001: Uncoupled from S5/S7 Exhaustion Fades
+                # -------------------------------------------------------------
+                elif self.rp2_pierced_before_1030.get(index_name, False) and not (any(b.get("low", math.inf) <= grid.rp2_lower for b in history[-6:]) if len(history) >= 2 else False):
+                    signal = CachedRBFNAuctionSignal(
+                        timestamp_ms=timestamp_ms,
+                        index_name=index_name,
+                        action="ABSTAIN",
+                        direction="",
+                        target_strike=0.0,
+                        target_pts=0.0,
+                        sl_pts=0.0,
+                        setup_reason="10:30_RP2_PIERCING_TREND_DAY_INVALIDATION",
+                        trade_phase=phase_label,
+                        bar_time=bar_time,
+                        is_active=False,
+                        is_vetoed=True,
+                        veto_reason="10:30_RP2_PIERCING_TREND_DAY_INVALIDATION",
                     )
                 # -------------------------------------------------------------
                 # 3. SCENARIO 2 (S2): RP1_UPPER -> RP2_UPPER Expansion Breakout
@@ -1906,8 +2064,11 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         if now_time < session_pre_open_cutoff:
             return
 
-        with self._lock:
-            rbfn_sig = self.cached_rbfn_signals.get(index_name)
+        rbfn_sig = self.get_valid_cached_rbfn_signal(
+            index_name=index_name,
+            current_timestamp_ms=depth.exchange_timestamp_ms,
+            ttl_seconds=300.0,
+        )
         has_mode_5_signal = (
             rbfn_sig is not None
             and rbfn_sig.is_active
@@ -2310,10 +2471,12 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             )
 
             # Gate 2: SentinelWallGate pre-entry check (0.5 * ATR Adverse Wall Clamping)
+            # ARCH-SENTINEL-OPTIONMATE-HARDENING-001: Wall-Gate Exemption for Mode 5 Structural Breakouts & Exhaustion Fades
+            is_wall_exempt = is_mode_5_structural_breakout(setup_reason) or is_mode_5_exhaustion_fade(setup_reason)
             wall_gate = self.wall_gates.get(index_name)
             wall_vetoed = False
             wall_reason = ""
-            if wall_gate is not None:
+            if wall_gate is not None and not is_wall_exempt:
                 wall_decision = wall_gate.evaluate_entry_gate(
                     direction=required_option_type,
                     spot_price=spot,

@@ -25,15 +25,19 @@ LEVELS_FILE = RUNTIME_DIR / "optionmate_daily_levels.json"
 def save_levels(levels_dict: dict) -> Path:
     RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
     today_str = datetime.now().strftime("%Y-%m-%d")
+    now_iso = datetime.now().isoformat()
     
     # Format and enrich with timestamp
     for k, v in levels_dict.items():
         if isinstance(v, dict):
-            v.setdefault("date", today_str)
-            v.setdefault("updated_at", datetime.now().isoformat())
+            v["date"] = today_str
+            v["updated_at"] = now_iso
 
-    with open(LEVELS_FILE, "w", encoding="utf-8") as f:
+    # Atomic write pattern (.tmp -> atomic replace) to prevent partial-read races in live loops
+    tmp_file = LEVELS_FILE.with_suffix(".tmp")
+    with open(tmp_file, "w", encoding="utf-8") as f:
         json.dump(levels_dict, f, indent=2)
+    os.replace(tmp_file, LEVELS_FILE)
     
     print(f"✅ Successfully persisted OptionMate daily levels to {LEVELS_FILE}")
     for idx, lvl in levels_dict.items():
