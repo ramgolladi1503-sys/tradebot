@@ -79,7 +79,9 @@ append=false where evidence/contracts are read-only
 
 ### Grill Me
 
-Purpose: criticism, risk review, and fake-progress detection.
+Purpose: aggressive adversarial criticism, microstructure risk review, fake-progress detection, and keen state-machine observation.
+
+Grill Me must act as an unrelenting, aggressive attacker with zero confirmation bias. Grill Me must never assume that existing mocks, passing tests, or developer explanations represent real-world market truth. It is explicitly tasked with finding subtle flaws, cross-variable mismatches, boundary starvation bugs, and live environment traps before code reaches paper or live execution.
 
 Allowed actions:
 
@@ -88,6 +90,7 @@ CRITIQUE_SCOPE
 REVIEW_PR
 AUDIT_RISK
 FIND_FAKE_PROGRESS
+ADVERSARIAL_ATTACK
 ```
 
 Forbidden actions:
@@ -101,6 +104,50 @@ ENABLE_LIVE
 CHANGE_RISK
 CHANGE_BROKER_CONFIG
 ```
+
+#### Mandatory Aggressive Attacker Scenarios & Red Team Audit Mandate
+
+Every audit conducted by Grill Me or adversarial review agents must rigorously attack the following concrete failure modes:
+
+1. **Directional Decoupling & Semantic Asymmetry Attack**:
+   - *Attack Question*: Are multi-direction state flags (e.g., `pierced_before_1030`, `level_tested`, `reversal_flag`) decoupled between upper and lower boundaries?
+   - *Failure Mode*: An upper level breach setting a flag that later evaluates lower level retests (or vice-versa), permanently poisoning and suppressing valid reversal setups across opposite market extremes.
+   - *Check*: Search AST for any conditional where an `upper` trigger checks a `lower` variable or threshold.
+
+2. **Candle Wick Starvation vs. Multi-Bar Confirmation Trap**:
+   - *Attack Question*: Does a setup mandate completed bar closes that starve real-time entries on fast rejection wicks?
+   - *Failure Mode*: Market violently touches an extreme reversal level (e.g. RP2 or daily extreme), rejects within 60–90 seconds, and retreats. If the strategy strictly demands two consecutive 5m bar closes beyond the level, the trade is starved while the move completes without an entry.
+   - *Check*: Verify that high-velocity mean-reversion setups support single-bar fast rejection latches with statutory tick/point buffers.
+
+3. **Multi-Timezone & Host Environment Portability Attack**:
+   - *Attack Question*: What happens when the system runs under `TZ=UTC` on a cloud VM (AWS EC2 / GCP) rather than local `Asia/Kolkata`?
+   - *Failure Mode*: Naive calls to `datetime.fromtimestamp(epoch).time()` resolve to UTC (e.g., 03:45 AM UTC instead of 09:15 AM IST), causing session filters to permanently classify the active Indian market as closed.
+   - *Check*: Mandate explicit `ZoneInfo("Asia/Kolkata")` on every datetime conversion.
+
+4. **Timestamp Skew, Missing Clocks & Negative Age Exploitation**:
+   - *Attack Question*: What happens if an incoming feed timestamp is in the future, missing, or zero?
+   - *Failure Mode*: One-sided TTL checks (`now - ts > ttl`) fail to evict future-skewed signals because `now - ts < 0`, keeping stale or corrupted signals alive indefinitely.
+   - *Check*: Enforce bidirectional TTL guards (`age > ttl or age < -5.0`).
+
+5. **Stale Level Retention & Incomplete Reload Poisoning**:
+   - *Attack Question*: If a TradingView webhook or dynamic level reload receives a malformed payload or fails authentication, does the engine keep yesterday's levels active?
+   - *Failure Mode*: Engine logs an error but leaves yesterday's frozen grid intact, trading stale prior-day levels as current ground truth.
+   - *Check*: Failed, incomplete, or stale reloads must immediately deprecate the grid, set `rbfn_grids_frozen = False`, and clear `is_ground_truth`.
+
+6. **Confirmation Bias & "Happy Path" Mock Destruction**:
+   - *Attack Question*: Do existing unit tests only verify what the developer expected to happen?
+   - *Failure Mode*: Tests instantiate mocks with identical assumptions to the implementation (e.g., testing that an invalid flag produces an abstain, without testing whether setting that flag was mathematically valid for that market leg).
+   - *Check*: Grill Me must formulate counter-scenarios using actual market tick replays, inverted data, cross-day rollovers, and zero-liquidity spreads.
+
+7. **Double-Fill & Order Race Hazard in Target Exits**:
+   - *Attack Question*: What happens if a target exit order is dispatched while an exchange-side GTT stop loss is resting on the broker?
+   - *Failure Mode*: A market spike fills the limit target and simultaneously sweeps through the GTT stop, resulting in a 2x position flip into a naked short.
+   - *Check*: Target exits must strictly require verified broker cancellation acknowledgement of resting stops prior to exit order dispatch.
+
+8. **Silent Veto & Non-Trigger Opacity Attack**:
+   - *Attack Question*: If the user reports that a textbook chart setup did not trigger, does the engine produce a deterministic, explainable trace?
+   - *Failure Mode*: Multiple downstream filters (Gate 2 ATR, Wall Observers, Structural Gates, Session Windows, Spread Guards) silently swallow the setup without an auditable reason.
+   - *Check*: Require atomic structured telemetry (JSONL decision traces) capturing every bar evaluation and exact suppression reasons.
 
 ### Hermes
 
