@@ -29,6 +29,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time as dt_time
 from pathlib import Path
 from typing import Any, Optional, Dict
+from zoneinfo import ZoneInfo
 
 from core.active_position_manager import (
     ActivePositionManager,
@@ -202,6 +203,8 @@ MODE_5_STRUCTURAL_BREAKOUTS: set[str] = {
 MODE_5_EXHAUSTION_FADES: set[str] = {
     "RP2_UPPER_10M_CEILING_FADE",
     "RP2_LOWER_10M_FLOOR_BOUNCE",
+    "RP2_UPPER_FAST_REJECTION",
+    "RP2_LOWER_FAST_BOUNCE",
     "RP1_UPPER_REVERSAL_CONFIRMED",
     "RP1_LOWER_REVERSAL_CONFIRMED",
 }
@@ -455,6 +458,17 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             "SENSEX": None,
             "BANKNIFTY": None,
         }
+        self.rp2_upper_pierced_before_1030: dict[str, bool] = {
+            "NIFTY": False,
+            "SENSEX": False,
+            "BANKNIFTY": False,
+        }
+        self.rp2_lower_pierced_before_1030: dict[str, bool] = {
+            "NIFTY": False,
+            "SENSEX": False,
+            "BANKNIFTY": False,
+        }
+        # Backward-compatibility alias for tests and external inspection
         self.rp2_pierced_before_1030: dict[str, bool] = {
             "NIFTY": False,
             "SENSEX": False,
@@ -535,10 +549,11 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             "DERIVATIVE_BASIS_REVERSION": 0.40,
         }
         # Daily canonical trade counters per index for dual-stream shadow tagging
+        # Vector 1 / 13: Seed from APM WAL so daily trade count survives restarts/reboots
         self.daily_trade_counters: dict[str, int] = {
-            "NIFTY": 0,
-            "SENSEX": 0,
-            "BANKNIFTY": 0,
+            "NIFTY": self.apms["NIFTY"].daily_trade_count if "NIFTY" in self.apms else 0,
+            "SENSEX": self.apms["SENSEX"].daily_trade_count if "SENSEX" in self.apms else 0,
+            "BANKNIFTY": self.apms["BANKNIFTY"].daily_trade_count if "BANKNIFTY" in self.apms else 0,
         }
 
         # Forensic Decision Journal Engine (non-blocking in-memory queue & shadow barrier evaluator)
@@ -561,11 +576,49 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         self.total_veto_evaluations: int = 0
         self.accepted_trade_count: int = 0
 
+        # Decision trace file path and lock (ARCH-SENTINEL-HARDENING-002)
+        self.decision_trace_path = Path("runtime") / "sentinel_decision_trace.jsonl"
+        self._decision_trace_lock = threading.Lock()
+
         # Non-negotiable Trading Safety Invariants
         self.read_only = True
         self.is_order_action = False
         self.broker_api_called = False
         self.allowed_for_live_execution = False
+
+    def log_decision_trace(
+        self,
+        index_name: str,
+        bar_time: Any,
+        action: str,
+        reason: str,
+        details: Optional[Dict[str, Any]] = None,
+        timestamp_ms: Optional[int] = None,
+    ) -> None:
+        """Emits structured decision trace telemetry to runtime/sentinel_decision_trace.jsonl.
+
+        ARCH-SENTINEL-HARDENING-002 Requirement 5:
+        - Writes atomic JSONL record with fields:
+          index_name, bar_time (as HH:MM:SS or string), action, reason, details, timestamp_ms.
+        - Thread-safe and non-blocking with error isolation.
+        """
+        try:
+            bar_time_str = bar_time.strftime("%H:%M:%S") if hasattr(bar_time, "strftime") else str(bar_time)
+            ts_ms = timestamp_ms if (timestamp_ms is not None and timestamp_ms > 0) else int(time.time() * 1000)
+            record = {
+                "index_name": index_name,
+                "bar_time": bar_time_str,
+                "action": action,
+                "reason": reason,
+                "details": details or {},
+                "timestamp_ms": ts_ms,
+            }
+            with self._decision_trace_lock:
+                self.decision_trace_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(self.decision_trace_path, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(record) + "\n")
+        except Exception as e:
+            logger.error(f"[{index_name}] Failed to log decision trace: {e}")
 
     def record_veto(self, veto_category: str, reason: str = "") -> None:
         """Records a gate veto in the per-gate telemetry ledger and emits journal event."""
@@ -692,6 +745,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     target_put_strike=float(target_put),
                     sustainable_price_anchor=30.0,
                     dte=0,
+                    is_ground_truth=True,
                 )
             else:
                 call_strike = round(r1_u / step_size) * step_size
@@ -710,6 +764,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     put_strike=float(put_strike),
                     recommended_bias=bias,
                     target_strike=float(target_strike),
+                    is_ground_truth=True,
                 )
 
             with self._lock:
@@ -756,6 +811,16 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             self._last_om_check_mono = now_mono
 
             if not target_file.exists():
+                # Stale Grid Deprecation: missing file resets frozen and is_ground_truth state
+                with self._lock:
+                    for idx_name in list(self.rbfn_grids_frozen.keys()):
+                        self.rbfn_grids_frozen[idx_name] = False
+                        grid = self.cached_rbfn_grids.get(idx_name)
+                        if grid is not None and hasattr(grid, "is_ground_truth"):
+                            try:
+                                object.__setattr__(grid, "is_ground_truth", False)
+                            except Exception:
+                                pass
                 return {}
 
             try:
@@ -784,6 +849,15 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                             f"Payload date '{payload_date}' != expected session date '{expected_date}'"
                         )
                         reload_results[idx_name] = False
+                        # Stale Grid Deprecation (ARCH-SENTINEL-HARDENING-002)
+                        with self._lock:
+                            self.rbfn_grids_frozen[idx_name] = False
+                            grid = self.cached_rbfn_grids.get(idx_name)
+                            if grid is not None and hasattr(grid, "is_ground_truth"):
+                                try:
+                                    object.__setattr__(grid, "is_ground_truth", False)
+                                except Exception:
+                                    pass
                         continue
 
                     td = idx_payload.get("trend_decider")
@@ -824,11 +898,11 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
     ) -> Optional[CachedRBFNAuctionSignal]:
         """Returns valid cached RBFN signal if within TTL; evicts and returns None if expired.
 
-        ARCH-SENTINEL-OPTIONMATE-HARDENING-001:
+        ARCH-SENTINEL-OPTIONMATE-HARDENING-001 & ARCH-SENTINEL-HARDENING-002:
         - Thread-safe under self._lock.
         - Evaluates age = (current_timestamp_ms - sig.timestamp_ms) / 1000.0.
         - If current_timestamp_ms is None or <= 0, uses time.time() * 1000.
-        - If age > ttl_seconds (default 300s = 1 5m bar epoch), evicts signal and returns None.
+        - Bidirectional TTL Guard: Evicts signal if age_sec > ttl_seconds or age_sec < -5.0.
         - Otherwise returns the cached signal.
         """
         with self._lock:
@@ -840,10 +914,10 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             sig_ts_ms = getattr(sig, "timestamp_ms", 0)
             if sig_ts_ms > 0:
                 age_sec = (now_ms - sig_ts_ms) / 1000.0
-                if age_sec > ttl_seconds:
+                if age_sec > ttl_seconds or age_sec < -5.0:
                     logger.info(
-                        f"[{index_name}] Evicting expired cached RBFN signal ({sig.setup_reason}) "
-                        f"after {age_sec:.1f}s > {ttl_seconds}s TTL"
+                        f"[{index_name}] Evicting expired/future cached RBFN signal ({sig.setup_reason}) "
+                        f"with age {age_sec:.1f}s (TTL={ttl_seconds}s, bound=[-5.0, {ttl_seconds}])"
                     )
                     self.cached_rbfn_signals[index_name] = None
                     return None
@@ -1008,7 +1082,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         bucket.last_timestamp_ms = ts_ms
                     elif epoch_min > bucket.bucket_epoch_min:
                         # Minute boundary crossed: finalize completed bar into router
-                        bar_time = datetime.fromtimestamp(bucket.bucket_epoch_min * 60).time()
+                        bar_time = datetime.fromtimestamp(bucket.bucket_epoch_min * 60, tz=ZoneInfo("Asia/Kolkata")).time()
                         router.on_bar_close(
                             bar_close=bucket.close,
                             bar_volume=bucket.volume,
@@ -1066,7 +1140,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         # 5-minute boundary crossed: finalize completed bar
                         completed_epoch = bucket_5m.bucket_epoch_5min
                         if completed_epoch not in self.evaluated_5m_epochs[idx_key]:
-                            bar_time = datetime.fromtimestamp((completed_epoch + 1) * 300).time()
+                            bar_time = datetime.fromtimestamp((completed_epoch + 1) * 300, tz=ZoneInfo("Asia/Kolkata")).time()
                             self._on_5m_bar_close(
                                 index_name=idx_key,
                                 bar_open=bucket_5m.open,
@@ -1128,7 +1202,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                             self.evaluated_5m_epochs[idx_key] = set()
 
                         if completed_epoch not in self.evaluated_5m_epochs[idx_key]:
-                            bar_time = datetime.fromtimestamp((completed_epoch + 1) * 300).time()
+                            bar_time = datetime.fromtimestamp((completed_epoch + 1) * 300, tz=ZoneInfo("Asia/Kolkata")).time()
                             self._on_5m_bar_close(
                                 index_name=idx_key,
                                 bar_open=bucket_5m.open,
@@ -1460,9 +1534,13 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         is_session_active = (dt_time(9, 20) <= eff_time <= dt_time(15, 0))
         rp2_piercing_cutoff = dt_time(10, 30)
 
-        # 10:30 RP2 Piercing Invalidation Rule check
+        # 10:30 RP2 Piercing Invalidation Rule check (Directional RP2 Piercing: ARCH-SENTINEL-HARDENING-002)
         if eff_time <= rp2_piercing_cutoff:
-            if bar_high >= grid.rp2_upper or bar_low <= grid.rp2_lower:
+            if bar_high >= grid.rp2_upper:
+                self.rp2_upper_pierced_before_1030[index_name] = True
+                self.rp2_pierced_before_1030[index_name] = True
+            if bar_low <= grid.rp2_lower:
+                self.rp2_lower_pierced_before_1030[index_name] = True
                 self.rp2_pierced_before_1030[index_name] = True
 
         strat = self.rbfn_strategies.get(index_name)
@@ -1658,21 +1736,25 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 is_10m_breakout_upper = (c_prev >= grid.rp1_upper and c_curr >= grid.rp1_upper)
                 is_10m_breakdown_lower = (c_prev <= grid.rp1_lower and c_curr <= grid.rp1_lower)
 
-                # Check for S7: Extreme Floor Bounce (Tested RP2_LOWER and holds above for 10 mins)
+                # Check for S7: Extreme Floor Bounce (Tested RP2_LOWER and holds above for 10 mins, or single-bar fast bounce)
+                rejection_buffer = 25.0 if index_name in {"SENSEX", "BANKNIFTY"} else 10.0
+                fast_bounce_rp2 = (bar_low <= grid.rp2_lower and bar_close >= (grid.rp2_lower + rejection_buffer))
                 tested_rp2_lower = any(b["low"] <= grid.rp2_lower for b in history[-6:])
                 is_10m_bounce_rp2 = tested_rp2_lower and (c_prev >= grid.rp2_lower and c_curr >= grid.rp2_lower and c_curr < grid.rp1_lower)
 
-                # Check for S5: Extreme Ceiling Fade (Tested RP2_UPPER and holds below for 10 mins)
+                # Check for S5: Extreme Ceiling Fade (Tested RP2_UPPER and holds below for 10 mins, or single-bar fast rejection)
+                fast_rejection_rp2 = (bar_high >= grid.rp2_upper and bar_close <= (grid.rp2_upper - rejection_buffer))
                 tested_rp2_upper = any(b["high"] >= grid.rp2_upper for b in history[-6:])
                 is_10m_fade_rp2 = tested_rp2_upper and (c_prev <= grid.rp2_upper and c_curr <= grid.rp2_upper and c_curr > grid.rp1_upper)
 
                 # -------------------------------------------------------------
-                # 1. SCENARIO 7 (S7): RP2_LOWER -> RP1_LOWER Extreme Floor Bounce
+                # 1. SCENARIO 7 (S7): RP2_LOWER -> RP1_LOWER Extreme Floor Bounce / Fast Bounce
                 # -------------------------------------------------------------
-                if is_10m_bounce_rp2:
+                if fast_bounce_rp2 or is_10m_bounce_rp2:
                     target_k = round(grid.rp1_lower / step) * step
                     t_pts = max(20.0 if index_name != "SENSEX" else 50.0, abs(grid.rp1_lower - bar_close))
                     s_pts = max(15.0 if index_name != "SENSEX" else 40.0, abs(bar_close - (grid.rp2_lower - (25.0 if index_name == "SENSEX" else 15.0))))
+                    setup_str = "RP2_LOWER_FAST_BOUNCE" if fast_bounce_rp2 else "RP2_LOWER_10M_FLOOR_BOUNCE"
                     signal = CachedRBFNAuctionSignal(
                         timestamp_ms=timestamp_ms,
                         index_name=index_name,
@@ -1681,7 +1763,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         target_strike=float(target_k),
                         target_pts=round(t_pts, 2),
                         sl_pts=round(s_pts, 2),
-                        setup_reason="RP2_LOWER_10M_FLOOR_BOUNCE",
+                        setup_reason=setup_str,
                         trade_phase="EXTREME_EXHAUSTION_REVERSAL",
                         bar_time=bar_time,
                         sustainable_anchor_price=calc_anchor,
@@ -1690,12 +1772,13 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         veto_reason="",
                     )
                 # -------------------------------------------------------------
-                # 2. SCENARIO 5 (S5): RP2_UPPER -> RP1_UPPER Extreme Ceiling Fade
+                # 2. SCENARIO 5 (S5): RP2_UPPER -> RP1_UPPER Extreme Ceiling Fade / Fast Rejection
                 # -------------------------------------------------------------
-                elif is_10m_fade_rp2:
+                elif fast_rejection_rp2 or is_10m_fade_rp2:
                     target_k = round(grid.rp1_upper / step) * step
                     t_pts = max(20.0 if index_name != "SENSEX" else 50.0, abs(bar_close - grid.rp1_upper))
                     s_pts = max(15.0 if index_name != "SENSEX" else 40.0, abs((grid.rp2_upper + (25.0 if index_name == "SENSEX" else 15.0)) - bar_close))
+                    setup_str = "RP2_UPPER_FAST_REJECTION" if fast_rejection_rp2 else "RP2_UPPER_10M_CEILING_FADE"
                     signal = CachedRBFNAuctionSignal(
                         timestamp_ms=timestamp_ms,
                         index_name=index_name,
@@ -1704,7 +1787,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         target_strike=float(target_k),
                         target_pts=round(t_pts, 2),
                         sl_pts=round(s_pts, 2),
-                        setup_reason="RP2_UPPER_10M_CEILING_FADE",
+                        setup_reason=setup_str,
                         trade_phase="EXTREME_EXHAUSTION_REVERSAL",
                         bar_time=bar_time,
                         sustainable_anchor_price=calc_anchor,
@@ -1714,9 +1797,13 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     )
                 # -------------------------------------------------------------
                 # 10:30 RP2 Piercing Invalidation Rule check for Early Retests / Continuations
-                # ARCH-SENTINEL-OPTIONMATE-HARDENING-001: Uncoupled from S5/S7 Exhaustion Fades
+                # ARCH-SENTINEL-OPTIONMATE-HARDENING-001 & ARCH-SENTINEL-HARDENING-002:
+                # Directional RP2 Piercing uncouples upper from lower checks
                 # -------------------------------------------------------------
-                elif self.rp2_pierced_before_1030.get(index_name, False) and not (any(b.get("low", math.inf) <= grid.rp2_lower for b in history[-6:]) if len(history) >= 2 else False):
+                elif (
+                    (self.rp2_upper_pierced_before_1030.get(index_name, False) and not (any(b.get("low", math.inf) <= grid.rp2_lower for b in history[-6:]) if len(history) >= 2 else False))
+                    or (self.rp2_lower_pierced_before_1030.get(index_name, False) and not (any(b.get("high", -math.inf) >= grid.rp2_upper for b in history[-6:]) if len(history) >= 2 else False))
+                ):
                     signal = CachedRBFNAuctionSignal(
                         timestamp_ms=timestamp_ms,
                         index_name=index_name,
@@ -1952,6 +2039,25 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     self.gear_range_bar_counters[index_name] = 0
                     self.gear_trend_bar_counters[index_name] = 0
 
+        if signal is not None:
+            self.log_decision_trace(
+                index_name=index_name,
+                bar_time=bar_time,
+                action=signal.action,
+                reason=signal.setup_reason,
+                details={
+                    "direction": signal.direction,
+                    "target_strike": signal.target_strike,
+                    "target_pts": signal.target_pts,
+                    "sl_pts": signal.sl_pts,
+                    "is_active": signal.is_active,
+                    "is_vetoed": signal.is_vetoed,
+                    "veto_reason": signal.veto_reason,
+                    "bar_close": bar_close,
+                },
+                timestamp_ms=timestamp_ms,
+            )
+
         return signal
 
     def _evaluate_option_depth(self, depth: UpstoxLevel5DepthRecord) -> None:
@@ -2007,11 +2113,9 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             # OI broadcast during pre-market is stale remnant from prior session
             effective_oi = float(depth.open_interest)
             if depth.exchange_timestamp_ms > 0:
-                from datetime import timezone, timedelta
-                ist_tz = timezone(timedelta(hours=5, minutes=30))
-                opt_check_time = datetime.fromtimestamp(depth.exchange_timestamp_ms / 1000.0, tz=ist_tz).time()
+                opt_check_time = datetime.fromtimestamp(depth.exchange_timestamp_ms / 1000.0, tz=ZoneInfo("Asia/Kolkata")).time()
             else:
-                opt_check_time = datetime.now().time()
+                opt_check_time = datetime.now(ZoneInfo("Asia/Kolkata")).time()
             if opt_check_time < self.market_open_time:
                 effective_oi = 0.0
 
@@ -2046,12 +2150,9 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
         # Derive causal wall time from exchange timestamp or fallback to system clock
         if depth.exchange_timestamp_ms > 0:
-            from datetime import timezone, timedelta
-            # IST is UTC+5:30
-            ist_tz = timezone(timedelta(hours=5, minutes=30))
-            now_dt = datetime.fromtimestamp(depth.exchange_timestamp_ms / 1000.0, tz=ist_tz)
+            now_dt = datetime.fromtimestamp(depth.exchange_timestamp_ms / 1000.0, tz=ZoneInfo("Asia/Kolkata"))
         else:
-            now_dt = datetime.now()
+            now_dt = datetime.now(ZoneInfo("Asia/Kolkata"))
         now_time = now_dt.time()
 
         # Opening shock freeze: strictly suppress all candidate setups unless Mode 5 Opening Drive is active
@@ -2821,6 +2922,8 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                             )
                             if entered:
                                 self.daily_trade_counters[index_name] = curr_trades + 1
+                                idx_apm.daily_trade_count = self.daily_trade_counters[index_name]
+                                idx_apm._persist_wal_atomic(force_sync=True)
                                 if rbfn_sig is not None:
                                     self.cached_rbfn_signals[index_name] = None
                                 exec_reason = f"[{shadow_tier}] {setup_reason}"
