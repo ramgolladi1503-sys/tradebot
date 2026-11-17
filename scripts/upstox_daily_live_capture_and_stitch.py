@@ -562,6 +562,31 @@ def main():
     except Exception as e:
         logger.warning(f"Failed to auto-seed prior-day levels: {e}")
 
+    # 3c. Automatic OptionMate Ground-Truth Level Seeding (from runtime/optionmate_daily_levels.json if present)
+    try:
+        om_levels_file = ROOT / "runtime" / "optionmate_daily_levels.json"
+        if om_levels_file.exists():
+            import json
+            with open(om_levels_file, "r") as om_f:
+                om_data = json.load(om_f)
+            # Support single index dict or multi-index map
+            if "trend_decider" in om_data:
+                om_data = {"NIFTY": om_data}
+            for idx_k, l_dict in om_data.items():
+                if isinstance(l_dict, dict) and "trend_decider" in l_dict:
+                    sentinel_advisor.inject_optionmate_levels(
+                        index_name=idx_k,
+                        trend_decider=l_dict["trend_decider"],
+                        rp1_upper=l_dict["rp1_upper"],
+                        rp2_upper=l_dict["rp2_upper"],
+                        rp1_lower=l_dict["rp1_lower"],
+                        rp2_lower=l_dict["rp2_lower"],
+                        spot_open=l_dict.get("spot_open"),
+                        date_str=l_dict.get("date"),
+                    )
+    except Exception as e:
+        logger.warning(f"Failed to auto-load OptionMate daily levels: {e}")
+
     # 4. Stream Broadcaster (Fan-out to Sentinel in-memory + Async Parquet recorder)
     broadcaster = UpstoxStreamBroadcaster([
         recorder,

@@ -610,6 +610,91 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         )
         return True
 
+    def inject_optionmate_levels(
+        self,
+        index_name: str,
+        trend_decider: float,
+        rp1_upper: float,
+        rp2_upper: float,
+        rp1_lower: float,
+        rp2_lower: float,
+        spot_open: Optional[float] = None,
+        date_str: Optional[str] = None,
+    ) -> bool:
+        """Injects exact ground-truth OptionMate indicator levels (from TradingView / user).
+        
+        Freezes the RBFN grid with exact values to bypass heuristic estimation.
+        Ensures sub-millisecond execution synchronization with official OptionMate indicators.
+        """
+        try:
+            d_str = date_str or datetime.now().strftime("%Y-%m-%d")
+            s_open = float(spot_open) if spot_open and spot_open > 0 else float(trend_decider)
+            td = float(trend_decider)
+            r1_u = float(rp1_upper)
+            r2_u = float(rp2_upper)
+            r1_l = float(rp1_lower)
+            r2_l = float(rp2_lower)
+
+            # Basic sanity assertions
+            if not (r2_l < r1_l < td < r1_u < r2_u):
+                logger.error(
+                    f"[{index_name}] Invalid OptionMate grid hierarchy: "
+                    f"RP2_L={r2_l} < RP1_L={r1_l} < TD={td} < RP1_U={r1_u} < RP2_U={r2_u} failed!"
+                )
+                return False
+
+            step_size = 100.0 if index_name in {"SENSEX", "BANKNIFTY"} else 50.0
+            if index_name == "SENSEX":
+                target_call = round(r2_u / step_size) * step_size
+                target_put = round(r2_l / step_size) * step_size
+                grid = SensexOptionMateGrid(
+                    date=d_str,
+                    spot_open=round(s_open, 2),
+                    prev_close=round(s_open, 2),
+                    atr_14=round(r2_u - r2_l, 2),
+                    vix=14.0,
+                    trend_decider=round(td, 2),
+                    rp1_upper=round(r1_u, 2),
+                    rp2_upper=round(r2_u, 2),
+                    rp1_lower=round(r1_l, 2),
+                    rp2_lower=round(r2_l, 2),
+                    target_call_strike=float(target_call),
+                    target_put_strike=float(target_put),
+                    sustainable_price_anchor=30.0,
+                    dte=0,
+                )
+            else:
+                call_strike = round(r1_u / step_size) * step_size
+                put_strike = round(r1_l / step_size) * step_size
+                bias = "BULL" if s_open >= td else "BEAR"
+                target_strike = call_strike if bias == "BULL" else put_strike
+                grid = OptionMateGrid(
+                    date=d_str,
+                    spot_open=round(s_open, 2),
+                    trend_decider=round(td, 2),
+                    rp1_upper=round(r1_u, 2),
+                    rp2_upper=round(r2_u, 2),
+                    rp1_lower=round(r1_l, 2),
+                    rp2_lower=round(r2_l, 2),
+                    call_strike=float(call_strike),
+                    put_strike=float(put_strike),
+                    recommended_bias=bias,
+                    target_strike=float(target_strike),
+                )
+
+            with self._lock:
+                self.cached_rbfn_grids[index_name] = grid
+                self.rbfn_grids_frozen[index_name] = True
+
+            logger.info(
+                f"[{index_name}] 🎯 Injected Ground-Truth OptionMate Levels: "
+                f"TD={td:.2f}, RP1_U={r1_u:.2f}, RP2_U={r2_u:.2f}, RP1_L={r1_l:.2f}, RP2_L={r2_l:.2f} (Grid Frozen)"
+            )
+            return True
+        except Exception as e:
+            logger.error(f"[{index_name}] Failed to inject OptionMate levels: {e}")
+            return False
+
     def clamp_atr(self, index_name: str, raw_atr: float) -> float:
         """Clamps ATR to index-specific floor (NIFTY: 25.0, BANKNIFTY: 100.0, SENSEX: 150.0)."""
         floor = self.index_atr_floors.get(index_name, 25.0)
@@ -2581,9 +2666,10 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
                                 # Pure Algo Automated Order Dispatching
                                 if self.automated_dispatcher:
+                                    order_instrument = depth.token if depth.token and '|' in str(depth.token) else depth.symbol
                                     self.automated_dispatcher.on_apm_entry(
                                         index_name=index_name,
-                                        symbol=depth.symbol,
+                                        symbol=order_instrument,
                                         option_type=required_option_type,
                                         entry_price=fill_price,
                                         target_pts=target_pts,
