@@ -125,14 +125,14 @@ class TestDynamicHalfStraddleAnchorDerivation:
 
 
 # =========================================================================
-# 2. Mode 5 Premium-Proximity Strike Resolution & Step Granularity
+# 2. Mode 5 Geometric Target Strike Resolution & Step Granularity
 # =========================================================================
 
-class TestMode5PremiumProximityStrikeResolution:
-    """Proves strike selection inside [0.50, 0.75] * anchor and strict exchange intervals."""
+class TestMode5GeometricTargetStrikeResolution:
+    """Proves geometric target preservation and strict exchange intervals."""
 
-    def test_nifty_exchange_step_50_and_proximity_band(self):
-        """NIFTY step size is strictly 50; selects contract within [0.50 * anchor, 0.75 * anchor]."""
+    def test_nifty_exchange_step_50_and_matching_target_quote_metadata(self):
+        """NIFTY target stays geometric; matching quote premium is metadata only."""
         anchor = 100.0
         lower = 0.50 * anchor  # 50.0
         upper = 0.75 * anchor  # 75.0
@@ -152,9 +152,9 @@ class TestMode5PremiumProximityStrikeResolution:
         )
 
         assert res.step_size == 50.0
-        assert res.target_strike == 24150.0
-        assert res.selected_premium == 65.0
-        assert res.selection_mode == "PREMIUM_PROXIMITY_BAND"
+        assert res.target_strike == 24100.0
+        assert res.selected_premium == 120.0
+        assert res.selection_mode == "GEOMETRIC_TARGET_QUOTE"
         assert res.lower_band == 50.0
         assert res.upper_band == 75.0
         assert res.target_strike % 50.0 == 0.0
@@ -180,9 +180,9 @@ class TestMode5PremiumProximityStrikeResolution:
             live_quotes=quotes,
         )
 
-        assert res.target_strike == 77500.0
-        assert res.selected_premium == 140.0
-        assert res.selection_mode == "PREMIUM_PROXIMITY_BAND"
+        assert res.target_strike == 77300.0
+        assert res.selected_premium == 210.0
+        assert res.selection_mode == "GEOMETRIC_TARGET_QUOTE"
         assert res.target_strike % 100.0 == 0.0
 
     def test_geometric_fallback_when_no_live_quotes(self):

@@ -1,10 +1,10 @@
-"""Sentinel Option Strike Resolver & Mode 5 Premium-Proximity Selector.
-=====================================================================
+"""Sentinel Option Strike Resolver & Mode 5 target-strike quote lookup.
+======================================================================
 Implements strike selection mechanisms for Indian Index Options (NIFTY, BANKNIFTY, SENSEX),
 with dedicated support for Mode 5 OptionMate RBFN auction signals using:
-1. Dynamic Sustainable Price Anchor accumulation band: [0.50 * anchor, 0.75 * anchor].
+1. The strategy's geometric target strike as the selected contract strike.
 2. Exchange step size compliance: 50 for NIFTY, 100 for BANKNIFTY / SENSEX.
-3. Fallback to geometric Slingshot strike (RP1 / RP2) if option chain live quotes are absent.
+3. Matching option quotes provide premium metadata only and never replace the target strike.
 4. Non-negotiable Trading Safety Invariants:
    - read_only = True
    - is_order_action = False
@@ -21,14 +21,14 @@ from typing import Any, Dict, List, Optional, Sequence, Union
 
 @dataclass(slots=True, frozen=True)
 class Mode5StrikeSelection:
-    """Result of Mode 5 Premium-Proximity strike resolution."""
+    """Result of Mode 5 target strike resolution and optional matching quote lookup."""
     target_strike: float
     option_type: str  # "CE" or "PE"
     selected_premium: float
     anchor_price: float
     lower_band: float
     upper_band: float
-    selection_mode: str  # "PREMIUM_PROXIMITY_BAND" or "GEOMETRIC_SLINGSHOT_FALLBACK"
+    selection_mode: str  # "GEOMETRIC_TARGET_QUOTE" or "GEOMETRIC_SLINGSHOT_FALLBACK"
     step_size: float
     read_only: bool = True
     is_order_action: bool = False
@@ -37,7 +37,7 @@ class Mode5StrikeSelection:
 
 
 class SentinelOptionStrikeResolver:
-    """Autonomous strike resolution engine enforcing exchange intervals and premium proximity."""
+    """Strike resolver preserving the strategy target and exchange intervals."""
 
     EXCHANGE_STEP_SIZES: dict[str, float] = {
         "NIFTY": 50.0,
@@ -74,15 +74,11 @@ class SentinelOptionStrikeResolver:
         geometric_strike: float,
         live_quotes: Optional[Sequence[Dict[str, Any]]] = None,
     ) -> Mode5StrikeSelection:
-        """Resolves target strike for Mode 5 OptionMate RBFN auction.
+        """Resolve the strategy target strike and optionally find its current premium.
 
-        Preference:
-        - When live option prices are available, select the contract trading within
-          or closest to the baseline accumulation band: [0.50 * anchor, 0.75 * anchor].
-          The optimal target within band is midpoint 0.625 * anchor.
-        - Strictly enforce exchange step sizes (50 for NIFTY, 100 for SENSEX/BANKNIFTY).
-        - If no live quotes match or live_quotes is empty, fall back to geometric_strike
-          rounded to exchange step size.
+        The geometric RP target determines the contract strike. Quotes can supply
+        premium metadata only when they match that strike and option type; they
+        cannot substitute a different strike based on premium or anchor proximity.
         """
         step = cls.get_step_size(index_name)
         dir_clean = (direction or "").strip().upper()
@@ -92,17 +88,12 @@ class SentinelOptionStrikeResolver:
         safe_anchor = max(0.0, float(anchor_price))
         lower_band = round(0.50 * safe_anchor, 2)
         upper_band = round(0.75 * safe_anchor, 2)
-        target_mid = 0.625 * safe_anchor
-
         selected_strike: float = cls.round_to_exchange_step(geometric_strike, index_name)
         selected_premium: float = 0.0
         selection_mode = "GEOMETRIC_SLINGSHOT_FALLBACK"
 
-        if live_quotes and safe_anchor > 0.0:
-            # Filter quotes matching direction and having valid strike & LTP
-            valid_candidates: list[tuple[float, float, float]] = []  # (dist_to_mid, strike, ltp)
-            band_candidates: list[tuple[float, float, float]] = []
-
+        if live_quotes:
+            matching_target_quotes: list[float] = []
             for quote in live_quotes:
                 q_dir = str(quote.get("direction") or quote.get("option_type") or "").upper()
                 if not q_dir:
@@ -132,22 +123,14 @@ class SentinelOptionStrikeResolver:
                 if ltp <= 0.0:
                     continue
 
-                dist = abs(ltp - target_mid)
-                valid_candidates.append((dist, stk, ltp))
+                if stk == selected_strike:
+                    matching_target_quotes.append(ltp)
 
-                if lower_band <= ltp <= upper_band:
-                    band_candidates.append((dist, stk, ltp))
-
-            if band_candidates:
-                # Best candidate inside the [0.50, 0.75] * anchor band closest to 0.625 * anchor
-                band_candidates.sort(key=lambda x: x[0])
-                _, selected_strike, selected_premium = band_candidates[0]
-                selection_mode = "PREMIUM_PROXIMITY_BAND"
-            elif valid_candidates:
-                # If no quote strictly inside band, pick valid quote closest to target band midpoint
-                valid_candidates.sort(key=lambda x: x[0])
-                _, selected_strike, selected_premium = valid_candidates[0]
-                selection_mode = "PREMIUM_PROXIMITY_PROXIMATE"
+            if matching_target_quotes:
+                # Deterministic metadata when a provider yields duplicate entries;
+                # quote price does not affect the selected strike.
+                selected_premium = matching_target_quotes[0]
+                selection_mode = "GEOMETRIC_TARGET_QUOTE"
 
         return Mode5StrikeSelection(
             target_strike=float(selected_strike),

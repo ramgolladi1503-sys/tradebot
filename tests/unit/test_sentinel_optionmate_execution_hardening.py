@@ -75,6 +75,60 @@ def _seed_test_or_pair(advisor, index_name: str, bar_time: dt_time) -> None:
         }
 
 
+def _seed_rp1_reversal_case(advisor, tmp_path: Path, side: str) -> None:
+    """Seed a frozen test grid and two prior completed bars for RP1 reversal checks."""
+    session_day = date(2026, 11, 17)
+    advisor.decision_trace_path = tmp_path / f"rp1_{side}_trace.jsonl"
+    _seed_test_or_pair(advisor, "NIFTY", dt_time(12, 10))
+    advisor.or_reconciliation_frozen = True
+    advisor.seed_prior_day_levels("NIFTY", pdh=24600.0, pdl=24400.0, pdc=24500.0, atr_20=160.0)
+    advisor.session_open_prices["NIFTY"] = 24500.0
+    advisor.cached_rbfn_grids["NIFTY"] = OptionMateGrid(
+        date=session_day.isoformat(),
+        spot_open=24500.0,
+        trend_decider=24500.0,
+        rp1_upper=24600.0,
+        rp2_upper=24700.0,
+        rp1_lower=24400.0,
+        rp2_lower=24300.0,
+        call_strike=24700.0,
+        put_strike=24300.0,
+        recommended_bias="RANGE",
+        target_strike=24700.0,
+    )
+    advisor.rbfn_grids_frozen["NIFTY"] = True
+    if side == "lower":
+        advisor.bars_5m_history["NIFTY"] = [
+            {"open": 24420.0, "high": 24430.0, "low": 24390.0, "close": 24410.0,
+             "volume": 1000, "time": dt_time(12, 0), "timestamp_ms": 0, "epoch_5min": 0},
+            {"open": 24420.0, "high": 24435.0, "low": 24410.0, "close": 24430.0,
+             "volume": 1000, "time": dt_time(12, 5), "timestamp_ms": 0, "epoch_5min": 0},
+        ]
+    else:
+        advisor.bars_5m_history["NIFTY"] = [
+            {"open": 24580.0, "high": 24610.0, "low": 24570.0, "close": 24580.0,
+             "volume": 1000, "time": dt_time(12, 0), "timestamp_ms": 0, "epoch_5min": 0},
+            {"open": 24580.0, "high": 24590.0, "low": 24565.0, "close": 24570.0,
+             "volume": 1000, "time": dt_time(12, 5), "timestamp_ms": 0, "epoch_5min": 0},
+        ]
+
+
+def _evaluate_rp1_reversal(advisor, side: str, open_price: float, close_price: float):
+    bar_time = dt_time(12, 10)
+    timestamp_ms = _test_bar_epoch(bar_time) * 300_000
+    return advisor._on_5m_bar_close(
+        index_name="NIFTY",
+        bar_open=open_price,
+        bar_high=max(open_price, close_price) + 5.0,
+        bar_low=min(open_price, close_price) - 5.0,
+        bar_close=close_price,
+        bar_volume=1000.0,
+        bar_time=bar_time,
+        timestamp_ms=timestamp_ms,
+        epoch_5min=timestamp_ms // 300_000,
+    )
+
+
 def test_dynamic_hot_reload_fresh_levels(tmp_path: Path):
     """Dynamic hot-reload detects modified mtime and injects verified levels safely."""
     wal = tmp_path / "test_wal_reload.json"
@@ -198,6 +252,7 @@ def test_1030_rp2_piercing_uncoupled_from_exhaustion_fade(tmp_path: Path):
     """Early morning RP2 touch does not block S5 ceiling fade or S7 floor bounce."""
     wal = tmp_path / "test_wal_uncouple.json"
     advisor = SentinelLiveStreamAdvisor(wal_path=str(wal), enable_stdout=False)
+    advisor.decision_trace_path = tmp_path / "rp2_fade_trace.jsonl"
     advisor.seed_prior_day_levels("NIFTY", pdh=24100.0, pdl=23900.0, pdc=24000.0, atr_20=160.0)
     advisor.session_open_prices["NIFTY"] = 24000.0
     _seed_test_or_pair(advisor, "NIFTY", dt_time(10, 15))
@@ -217,8 +272,20 @@ def test_1030_rp2_piercing_uncoupled_from_exhaustion_fade(tmp_path: Path):
     )
     assert advisor.rp2_pierced_before_1030["NIFTY"] is True
 
-    # At 11:30 and 11:35 AM, price forms S5: Extreme Ceiling Fade
-    # Tested RP2_UPPER (already tested at 10:15) and holds below RP2_UPPER (<= 24240) and above RP1_UPPER (> 24120) for 2 bars
+    # Preserve the early piercing state, then establish a fresh 11:25 touch.
+    # The 11:30 and 11:35 completed bars are the two contiguous post-touch holds.
+    advisor._on_5m_bar_close(
+        index_name="NIFTY",
+        bar_open=24230.0,
+        bar_high=24250.0,
+        bar_low=24220.0,
+        bar_close=24230.0,
+        bar_volume=40000.0,
+        bar_time=dt_time(11, 25),
+        timestamp_ms=_test_bar_epoch(dt_time(11, 25)) * 300_000,
+        epoch_5min=_test_bar_epoch(dt_time(11, 25)),
+    )
+
     advisor._on_5m_bar_close(
         index_name="NIFTY",
         bar_open=24230.0,
@@ -248,6 +315,38 @@ def test_1030_rp2_piercing_uncoupled_from_exhaustion_fade(tmp_path: Path):
     assert sig_fade.setup_reason == "RP2_UPPER_10M_CEILING_FADE"
     assert sig_fade.is_active is True
     assert sig_fade.is_vetoed is False
+
+
+@pytest.mark.parametrize(
+    ("side", "open_price", "close_price", "expected_reason"),
+    [
+        ("lower", 24460.0, 24450.0, None),  # bearish candle cannot confirm CE
+        ("lower", 24450.0, 24450.0, None),  # doji has no bullish trade direction
+        ("lower", 24440.0, 24450.0, "RP1_LOWER_REVERSAL_CONFIRMED"),
+        ("upper", 24520.0, 24530.0, None),  # bullish candle cannot confirm PE
+        ("upper", 24550.0, 24550.0, None),  # doji has no bearish trade direction
+        ("upper", 24540.0, 24530.0, "RP1_UPPER_REVERSAL_CONFIRMED"),
+    ],
+)
+def test_rp1_reversal_requires_current_bar_direction(
+    tmp_path: Path, side: str, open_price: float, close_price: float, expected_reason: str | None
+):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / f"rp1_{side}_{open_price}.json"), enable_stdout=False
+    )
+    _seed_rp1_reversal_case(advisor, tmp_path, side)
+
+    signal = _evaluate_rp1_reversal(advisor, side, open_price, close_price)
+
+    if expected_reason is None:
+        assert signal is not None
+        assert signal.setup_reason != (
+            "RP1_LOWER_REVERSAL_CONFIRMED" if side == "lower"
+            else "RP1_UPPER_REVERSAL_CONFIRMED"
+        )
+    else:
+        assert signal is not None
+        assert signal.setup_reason == expected_reason
 
 
 def _make_dummy_depth(

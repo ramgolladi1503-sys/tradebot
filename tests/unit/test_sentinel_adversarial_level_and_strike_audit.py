@@ -17,7 +17,22 @@ def test_full_chain_otm_strike_selection():
     res = SentinelOptionStrikeResolver.resolve_mode5_strike("NIFTY", "PE", anchor, 25000, quotes)
     assert res.target_strike == 25000.0
     assert res.selected_premium == 75.0
-    assert res.selection_mode == "PREMIUM_PROXIMITY_BAND"
+    assert res.selection_mode == "GEOMETRIC_TARGET_QUOTE"
+
+
+def test_far_otm_premium_candidate_cannot_override_geometric_target():
+    quotes = [
+        {"symbol": "NIFTY 25300 CE 17 NOV 26", "strike": 25300, "ltp": 207.6, "direction": "CE"},
+        {"symbol": "NIFTY 25000 CE 17 NOV 26", "strike": 25000, "ltp": 75.0, "direction": "CE"},
+    ]
+
+    result = SentinelOptionStrikeResolver.resolve_mode5_strike(
+        "NIFTY", "CE", anchor_price=120.0, geometric_strike=25300.0, live_quotes=quotes
+    )
+
+    assert result.target_strike == 25300.0
+    assert result.selected_premium == 207.6
+    assert result.selection_mode == "GEOMETRIC_TARGET_QUOTE"
 
 def test_midway_no_mans_land_vetoed():
     """Prove that simulated ticks midway between TD and RP1 without testing TD are vetoed."""

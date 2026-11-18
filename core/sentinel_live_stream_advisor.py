@@ -1937,6 +1937,21 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             self.rbfn_grids_frozen[index_name] = False
         return True
 
+    @staticmethod
+    def _has_consecutive_rp2_hold_epochs(history: list[dict[str, Any]]) -> bool:
+        """Require a touched bar followed by two contiguous five-minute bars."""
+        if len(history) < 3:
+            return False
+        epochs: list[int] = []
+        for record in history[-3:]:
+            if not isinstance(record, dict):
+                return False
+            epoch = record.get("epoch_5min")
+            if isinstance(epoch, bool) or not isinstance(epoch, int) or epoch < 0:
+                return False
+            epochs.append(epoch)
+        return epochs[0] + 1 == epochs[1] and epochs[1] + 1 == epochs[2]
+
     def _on_5m_bar_close(
         self,
         index_name: str,
@@ -2347,12 +2362,16 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 # Check for S7: Extreme Floor Bounce (Tested RP2_LOWER and holds above for 10 mins, or single-bar fast bounce)
                 rejection_buffer = 25.0 if index_name in {"SENSEX", "BANKNIFTY"} else 10.0
                 fast_bounce_rp2 = (bar_low <= grid.rp2_lower and bar_close >= (grid.rp2_lower + rejection_buffer))
-                tested_rp2_lower = any(b["low"] <= grid.rp2_lower for b in history[-6:])
+                # A touch qualifies for the 10-minute branch only when two
+                # consecutive completed five-minute bars follow it. The current
+                # bar is already appended, so validate all three epochs.
+                has_consecutive_rp2_hold = self._has_consecutive_rp2_hold_epochs(history)
+                tested_rp2_lower = has_consecutive_rp2_hold and history[-3]["low"] <= grid.rp2_lower
                 is_10m_bounce_rp2 = tested_rp2_lower and (c_prev >= grid.rp2_lower and c_curr >= grid.rp2_lower and c_curr < grid.rp1_lower)
 
                 # Check for S5: Extreme Ceiling Fade (Tested RP2_UPPER and holds below for 10 mins, or single-bar fast rejection)
                 fast_rejection_rp2 = (bar_high >= grid.rp2_upper and bar_close <= (grid.rp2_upper - rejection_buffer))
-                tested_rp2_upper = any(b["high"] >= grid.rp2_upper for b in history[-6:])
+                tested_rp2_upper = has_consecutive_rp2_hold and history[-3]["high"] >= grid.rp2_upper
                 is_10m_fade_rp2 = tested_rp2_upper and (c_prev <= grid.rp2_upper and c_curr <= grid.rp2_upper and c_curr > grid.rp1_upper)
 
                 # -------------------------------------------------------------
@@ -2478,7 +2497,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 # 5. SCENARIO 6 (S6): RP1_UPPER Reversal Fade (Capped Target)
                 # Tested RP1_UPPER and 2 consecutive closes below RP1_UPPER - buf -> Targets TD
                 # -------------------------------------------------------------
-                elif any(b["high"] >= grid.rp1_upper for b in history[-3:]) and all(b["close"] <= (grid.rp1_upper - buf) for b in history[-2:]) and bar_close > grid.trend_decider:
+                elif any(b["high"] >= grid.rp1_upper for b in history[-3:]) and all(b["close"] <= (grid.rp1_upper - buf) for b in history[-2:]) and bar_close > grid.trend_decider and bar_close < bar_open:
                     t_strike = round(grid.trend_decider / step) * step
                     t_pts = max(18.0 if index_name != "SENSEX" else 50.0, round(abs(bar_close - grid.trend_decider), 2))
                     s_pts = max(12.0 if index_name != "SENSEX" else 35.0, abs((grid.rp1_upper + (30.0 if index_name == "SENSEX" else 20.0)) - bar_close))
@@ -2502,7 +2521,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 # 6. SCENARIO 8 (S8): RP1_LOWER Reversal Fade (Capped Target)
                 # Tested RP1_LOWER and 2 consecutive closes above RP1_LOWER + buf -> Targets TD
                 # -------------------------------------------------------------
-                elif any(b["low"] <= grid.rp1_lower for b in history[-3:]) and all(b["close"] >= (grid.rp1_lower + buf) for b in history[-2:]) and bar_close < grid.trend_decider:
+                elif any(b["low"] <= grid.rp1_lower for b in history[-3:]) and all(b["close"] >= (grid.rp1_lower + buf) for b in history[-2:]) and bar_close < grid.trend_decider and bar_close > bar_open:
                     t_strike = round(grid.trend_decider / step) * step
                     t_pts = max(18.0 if index_name != "SENSEX" else 50.0, round(abs(grid.trend_decider - bar_close), 2))
                     s_pts = max(12.0 if index_name != "SENSEX" else 35.0, abs(bar_close - (grid.rp1_lower - (30.0 if index_name == "SENSEX" else 20.0))))
