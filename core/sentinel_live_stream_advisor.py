@@ -349,6 +349,20 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
         # If current time is past opening shock (09:45), trade lock is cleared
         self.trade_lock_active = (datetime.now(ZoneInfo("Asia/Kolkata")).time() < self.opening_shock_end_time)
+        self.or_reconciliation_frozen: bool = False
+        self.or_last_reconcile_attempt_ms: dict[str, int] = {
+            "NIFTY": 0,
+            "BANKNIFTY": 0,
+            "SENSEX": 0,
+        }
+        self.or_reconcile_retry_count: dict[str, int] = {
+            "NIFTY": 0,
+            "BANKNIFTY": 0,
+            "SENSEX": 0,
+        }
+        self.OR_MAX_RETRY_ATTEMPTS: int = 10
+        self.OR_MIN_RETRY_INTERVAL_MS: int = 60_000  # 60s throttle
+        self.CAUSAL_SKEW_TOLERANCE_MS: int = 1_000   # 1s arrival jitter buffer
         self.spots: dict[str, float] = {"NIFTY": 0.0, "SENSEX": 0.0, "BANKNIFTY": 0.0}
         self.spots_ts_ms: dict[str, int] = {"NIFTY": 0, "SENSEX": 0, "BANKNIFTY": 0}
 
@@ -1490,12 +1504,26 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             self.active_range_high = -math.inf
             self.active_range_low = math.inf
 
-    def _seed_or_bounds_from_api_if_late_boot(self, session_day: Optional[date] = None) -> bool:
-        """Seed complete OR only from exact, aware v2 one-minute source coverage."""
+    def _seed_or_bounds_from_api_if_late_boot(
+        self,
+        session_day: Optional[date] = None,
+        current_time_ms: Optional[int] = None,
+        force: bool = False,
+    ) -> bool:
+        """Seed complete OR only from exact, aware v2 one-minute source coverage.
+        
+        GATE-SENTINEL-15: Retries periodically until all indices achieve status == COMPLETE,
+        at which point reconciliation freezes permanently (or_reconciliation_frozen = True).
+        Rate-limited with a 60-second backoff throttle per index and max 10 attempts.
+        """
         now_dt = datetime.now(ZoneInfo("Asia/Kolkata"))
         expected_day = session_day or now_dt.date()
         if now_dt.time() < self.opening_shock_end_time:
             return False
+
+        with self._lock:
+            if self.or_reconciliation_frozen:
+                return True
 
         import os
         import requests
@@ -1510,7 +1538,26 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             ("SENSEX", "BSE_INDEX%7CSENSEX"),
         ]
         all_valid = True
+        now_ms = current_time_ms if current_time_ms is not None else int(now_dt.timestamp() * 1000)
+
         for index_name, instrument in indices:
+            with self._lock:
+                current = self.or_evidence.get(index_name) or {}
+                if current.get("session_date") == expected_day.isoformat() and current.get("status") == "COMPLETE":
+                    continue
+
+                if not force:
+                    last_attempt = self.or_last_reconcile_attempt_ms.get(index_name, 0)
+                    if (now_ms - last_attempt) < self.OR_MIN_RETRY_INTERVAL_MS:
+                        all_valid = False
+                        continue
+                    if self.or_reconcile_retry_count.get(index_name, 0) >= self.OR_MAX_RETRY_ATTEMPTS:
+                        all_valid = False
+                        continue
+
+                self.or_last_reconcile_attempt_ms[index_name] = now_ms
+                self.or_reconcile_retry_count[index_name] = self.or_reconcile_retry_count.get(index_name, 0) + 1
+
             try:
                 url = f"https://api.upstox.com/v2/historical-candle/intraday/{instrument}/1minute"
                 response = requests.get(url, headers=headers, timeout=4)
@@ -1526,13 +1573,14 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     all_valid = False
                     if not (current.get("session_date") == expected_day.isoformat()
                             and current.get("status") == "COMPLETE"):
-                        invalid = dict(current)
-                        invalid.update({
+                        pending = dict(current)
+                        pending.update({
                             "session_date": expected_day.isoformat(),
-                            "status": "INVALID",
-                            "source": "UPSTOX_V2_1M",
+                            "status": "PENDING_RECONCILIATION",
+                            "source": "UPSTOX_V2_1M_RETRY",
+                            "retry_count": self.or_reconcile_retry_count.get(index_name, 0),
                         })
-                        self.or_evidence[index_name] = invalid
+                        self.or_evidence[index_name] = pending
                     continue
 
                 self.or_bounds[index_name] = {"high": parsed["high"], "low": parsed["low"]}
@@ -1550,6 +1598,20 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     self.active_range_low = parsed["low"]
                 if self.enable_stdout:
                     print(f"📥 [OR RECOVERY/RECONCILE] {index_name}: Verified 30 timestamped v2 1m candles -> High={parsed['high']:.2f}, Low={parsed['low']:.2f}")
+
+        with self._lock:
+            # Check if all required indices are now COMPLETE for expected_day
+            all_complete = True
+            for idx_name, _ in indices:
+                ev = self.or_evidence.get(idx_name) or {}
+                if not (ev.get("session_date") == expected_day.isoformat() and ev.get("status") == "COMPLETE"):
+                    all_complete = False
+                    break
+            if all_complete:
+                self.or_reconciliation_frozen = True
+                if self.enable_stdout:
+                    print("🔒 [OR RECONCILIATION COMPLETE] All indices verified exact 30-bar coverage. Reconciliation permanently frozen.")
+
         return all_valid
 
     def _validate_mode5_or_evidence(self, index_name: str, decision_timestamp_ms: int) -> tuple[bool, str, dict[str, Any]]:
@@ -1574,7 +1636,8 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             return False, "OR_EVIDENCE_MISSING", details
         if not (math.isfinite(high) and math.isfinite(low) and low > 0 and high >= low):
             return False, "OR_BOUNDS_INVALID", details
-        if source_timestamp_ms <= 0 or source_timestamp_ms > decision_timestamp_ms:
+        skew_tolerance = self.CAUSAL_SKEW_TOLERANCE_MS if decision_dt.time() >= self.opening_shock_end_time else 0
+        if source_timestamp_ms <= 0 or source_timestamp_ms > (decision_timestamp_ms + skew_tolerance):
             return False, "OR_SOURCE_NONCAUSAL", details
         try:
             source_dt = datetime.fromtimestamp(
@@ -1706,7 +1769,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 if self.trade_lock_active:
                     self.trade_lock_active = False
                     # Reconcile OR with official 1m candles to eliminate any stream drops or spurious ticks
-                    self._seed_or_bounds_from_api_if_late_boot(session_day=tick_day)
+                    self._seed_or_bounds_from_api_if_late_boot(session_day=tick_day, current_time_ms=ts_ms)
                     if self.enable_stdout:
                         print("\n🔓 [OPENING SHOCK CONCLUDED] Opening Range Boundaries Established:")
                         for idx, bounds in self.or_bounds.items():
@@ -1714,6 +1777,8 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                                 rng = bounds["high"] - bounds["low"]
                                 print(f"   • {idx}: OR High={bounds['high']:.1f} | OR Low={bounds['low']:.1f} | Range={rng:.1f} pts")
                         print("🛰️ Sentinel Live Setup Trigger Engine ACTIVE.")
+                elif not self.or_reconciliation_frozen:
+                    self._seed_or_bounds_from_api_if_late_boot(session_day=tick_day, current_time_ms=ts_ms)
         return True
 
     def _compute_rbfn_grid(
@@ -1858,6 +1923,9 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         self.bar_buckets[index_name] = SyntheticBarBucket()
         if index_name in self.or_bounds:
             self._reset_opening_range_for_session_locked(index_name, session_day)
+        self.or_reconciliation_frozen = False
+        self.or_last_reconcile_attempt_ms[index_name] = 0
+        self.or_reconcile_retry_count[index_name] = 0
         if not self._has_valid_ground_truth_grid(index_name, session_day):
             old_grid = self.cached_rbfn_grids.get(index_name)
             if old_grid is not None and hasattr(old_grid, "is_ground_truth"):
@@ -1941,6 +2009,11 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         self._reset_rp2_state_for_session(index_name, session_day)
         self._last_5m_timestamp_ms[index_name] = timestamp_ms
         self._last_completed_5m_epoch[index_name] = epoch_5min
+
+        # GATE-SENTINEL-15: Retry Opening Range reconciliation until complete
+        if expected_bar_time >= self.opening_shock_end_time and not self.or_reconciliation_frozen:
+            self._seed_or_bounds_from_api_if_late_boot(session_day=session_day, current_time_ms=timestamp_ms)
+
         if self._ground_truth_required.get(index_name, False) and not self._has_valid_ground_truth_grid(index_name, session_day):
             signal = CachedRBFNAuctionSignal(
                 timestamp_ms=timestamp_ms,
