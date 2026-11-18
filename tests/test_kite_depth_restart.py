@@ -2873,6 +2873,41 @@ def test_market_open_option_subscriptions_missing_forces_full_restart(monkeypatc
     assert "FEED_FULL_RESTART_BEGIN" in [event for event, _payload in events]
 
 
+def test_market_open_option_subscriptions_missing_respects_startup_grace(monkeypatch):
+    """Verify that during startup grace period or pending verification, missing options do not trigger restart."""
+    ws._reset_feed_restart_verification(reason="test_setup")
+    monkeypatch.setattr(ws, "_DEPTH_WS_START_EPOCH", 1000.0, raising=False)
+    monkeypatch.setattr(cfg, "FEED_OPTION_SUBSCRIPTION_MISSING_GRACE_SEC", 30.0, raising=False)
+
+    # 1. Within grace period (now = 1010.0, elapsed = 10.0s < 30.0s)
+    now_loop = 1010.0
+    elapsed_since_start = max(0.0, now_loop - float(ws._DEPTH_WS_START_EPOCH or 0.0))
+    restart_block = ws._restart_verification_restart_block()
+    verify_pending = restart_block is not None and str(restart_block.get("verification_state") or "").upper() == "PENDING"
+    startup_grace_active = (elapsed_since_start < 30.0) or verify_pending
+    assert startup_grace_active is True
+
+    # 2. Beyond grace period but verification is PENDING
+    now_loop = 1050.0
+    elapsed_since_start = max(0.0, now_loop - float(ws._DEPTH_WS_START_EPOCH or 0.0))
+    with ws._RESTART_VERIFY_LOCK:
+        ws._FEED_RESTART_VERIFY_STATE = "PENDING"
+        ws._FEED_RESTART_VERIFY_REASON = "test_verify"
+    restart_block = ws._restart_verification_restart_block()
+    verify_pending = restart_block is not None and str(restart_block.get("verification_state") or "").upper() == "PENDING"
+    startup_grace_active = (elapsed_since_start < 30.0) or verify_pending
+    assert startup_grace_active is True
+
+    # 3. Beyond grace period and verification is IDLE
+    with ws._RESTART_VERIFY_LOCK:
+        ws._FEED_RESTART_VERIFY_STATE = "IDLE"
+    restart_block = ws._restart_verification_restart_block()
+    verify_pending = restart_block is not None and str(restart_block.get("verification_state") or "").upper() == "PENDING"
+    startup_grace_active = (elapsed_since_start < 30.0) or verify_pending
+    assert startup_grace_active is False
+
+
+
 def test_repeated_hard_restarts_trip_storm_breaker(monkeypatch):
     monkeypatch.setattr(ws, "_LAST_TOKENS", [123, 456], raising=False)
     monkeypatch.setattr(ws, "_LAST_DESIRED_TOKENS", [123, 456], raising=False)

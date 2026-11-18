@@ -2033,6 +2033,73 @@ def test_stale_socket_generation_cannot_confirm_option_ownership(monkeypatch):
     assert snapshot.socket_generation == generation
 
 
+def test_soft_resubscribe_bootstraps_unknown_applied_option_ownership(monkeypatch):
+    ws = importlib.import_module("core.kite_depth_ws")
+    _prepare_mutation_bootstrap(ws, monkeypatch, tokens=(101, 201))
+    # Simulate a post-bootstrap reset or restart where _OPTION_OWNERSHIP_BOOTSTRAP_GENERATION is 0
+    ws._OPTION_OWNERSHIP_BOOTSTRAP_GENERATION = 0
+    base_snapshot = ws.get_applied_option_ownership_snapshot()
+    assert base_snapshot.state == "UNKNOWN"
+
+    # Soft resubscribe should now successfully transition from UNKNOWN to KNOWN
+    ok = ws._soft_resubscribe_current("test_soft_bootstrap")
+    assert ok is True
+    post_snapshot = ws.get_applied_option_ownership_snapshot()
+    assert post_snapshot.state == "KNOWN"
+    assert 201 in post_snapshot.contracts
+    assert post_snapshot.contracts[201].symbol == "NIFTY"
+
+
+def test_apply_subscription_delta_async_callback_commits_ownership(monkeypatch):
+    ws = importlib.import_module("core.kite_depth_ws")
+    queue = importlib.import_module("core.feed.ws_mutation_queue")
+    _prepare_mutation_bootstrap(ws, monkeypatch, tokens=(101, 201))
+    _commit_test_option_ownership(ws, {
+        201: {
+            "symbol": "NIFTY", "instrument_type": "CE", "exchange": "NFO",
+            "expiry": "2026-08-06", "strike": 25000,
+        },
+    })
+    ticker = ws._KITE_TICKER
+
+    desired_contracts = {
+        201: {
+            "symbol": "NIFTY", "instrument_type": "CE", "exchange": "NFO",
+            "expiry": "2026-08-06", "strike": 25000,
+        },
+        202: {
+            "symbol": "NIFTY", "instrument_type": "PE", "exchange": "NFO",
+            "expiry": "2026-08-06", "strike": 25000,
+        },
+    }
+    ws.record_desired_option_contracts(desired_contracts, expected_tokens=[201, 202], source="test_add_202")
+
+    captured_cb = {}
+    def mock_safe_subscribe(ticker_inst, tokens, reason, now_epoch, socket_generation, active_generation, on_applied_callback):
+        captured_cb["sub"] = on_applied_callback
+        res = queue.WsMutationResult(
+            ok=False, action="subscribe", tokens_count=len(tokens), socket_present=True,
+            ws_connected=True, scheduled=True, queued=True, applied=False,
+            failure_reason="scheduled", reason=reason, ts_epoch=now_epoch,
+        )
+        return res, res
+
+    monkeypatch.setattr(queue, "safe_subscribe_full_mode_observed", mock_safe_subscribe)
+
+    applied = ws._apply_subscription_delta(ticker, [202], [], reason="test_async_rebalance")
+    assert applied is False
+    assert ws.get_applied_option_ownership_snapshot().state == "UNKNOWN"
+
+    assert "sub" in captured_cb
+    captured_cb["sub"]()
+
+    post_snapshot = ws.get_applied_option_ownership_snapshot()
+    assert post_snapshot.state == "KNOWN"
+    assert 201 in post_snapshot.contracts
+    assert 202 in post_snapshot.contracts
+
+
+
 def test_wi04_gate1_monotonic_temporal_causality_blocks_future_ticks():
     """Invariant I-1: Option tick tau > tau_decision must never enter current decision cycle."""
     from core.market_event_graph_live_runtime_bridge import _source_tick_freshness_failure

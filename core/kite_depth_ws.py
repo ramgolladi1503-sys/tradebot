@@ -919,6 +919,12 @@ def _commit_applied_option_ownership(
                 if not desired.expected_tokens.issubset(confirmed):
                     return False
                 next_contracts = dict(desired.contracts)
+            elif base_snapshot.state == "UNKNOWN":
+                # Resubscribe replay or watchdog soft-reset establishing ownership
+                # from an unconfirmed initial or invalidated state when full desired options confirmed.
+                if not desired.expected_tokens.issubset(confirmed):
+                    return False
+                next_contracts = dict(desired.contracts)
             else:
                 if (
                     base_snapshot.state != "KNOWN"
@@ -4667,12 +4673,36 @@ def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_token
             phase="before",
         )
 
+        sub_state = {"queued": False}
+        unsub_state = {"queued": False}
+
+        def _maybe_commit_async_ownership(caller_action: str):
+            if (sub_state.get("queued") or unsub_state.get("queued")) and not _PENDING_SUBSCRIBE_TOKENS and not _PENDING_UNSUBSCRIBE_TOKENS:
+                if _commit_applied_option_ownership(
+                    socket_generation=generation,
+                    desired_revision=desired_snapshot.revision,
+                    base_snapshot=base_snapshot,
+                    invalidated_revision=invalidated.revision,
+                    confirmed_tokens=_LAST_TOKENS,
+                    subscribe_tokens=to_subscribe,
+                    unsubscribe_tokens=to_unsubscribe,
+                    provenance=f"subscription_delta_async:{reason}:{caller_action}",
+                ):
+                    _record_completed_subscription_delta(
+                        old_tokens=old_tokens,
+                        new_tokens=sorted({int(token) for token in (_LAST_TOKENS or []) if int(token) > 0}),
+                        reason=reason,
+                        socket_generation=int(_SOCKET_GENERATION),
+                    )
+                    _log_ws("FEED_OPTION_OWNERSHIP_ASYNC_COMMITTED", {"reason": reason, "action": caller_action, "tokens": len(_LAST_TOKENS or [])})
+
         if to_subscribe:
             def on_sub_applied():
                 global _LAST_TOKENS
                 _LAST_TOKENS = list(sorted(set(_LAST_TOKENS or []).union(set(to_subscribe))))
                 _PENDING_SUBSCRIBE_TOKENS.difference_update(to_subscribe)
                 _log_ws("FEED_MUTATION_APPLIED", {"action": "subscribe", "count": len(to_subscribe), "reason": reason})
+                _maybe_commit_async_ownership("subscribe")
 
             res_sub, res_mode = safe_subscribe_full_mode_observed(
                 ws, to_subscribe, reason, now_epoch,
@@ -4680,6 +4710,7 @@ def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_token
                 active_generation=_current_socket_generation,
                 on_applied_callback=on_sub_applied,
             )
+            sub_state["queued"] = bool(res_sub.queued or res_mode.queued)
 
             if res_sub.queued or res_mode.queued:
                 _PENDING_SUBSCRIBE_TOKENS.update(to_subscribe)
@@ -4695,8 +4726,10 @@ def _apply_subscription_delta(ws, subscribe_tokens: list[int], unsubscribe_token
                 _LAST_TOKENS = list(sorted(set(_LAST_TOKENS or []) - set(to_unsubscribe)))
                 _PENDING_UNSUBSCRIBE_TOKENS.difference_update(to_unsubscribe)
                 _log_ws("FEED_MUTATION_APPLIED", {"action": "unsubscribe", "count": len(to_unsubscribe), "reason": reason})
+                _maybe_commit_async_ownership("unsubscribe")
 
             res_unsub = safe_unsubscribe(ws, to_unsubscribe, reason, now_epoch, on_applied_callback=on_unsub_applied)
+            unsub_state["queued"] = bool(res_unsub.queued)
             if res_unsub.queued:
                 _PENDING_UNSUBSCRIBE_TOKENS.update(to_unsubscribe)
                 _log_ws("FEED_MUTATION_QUEUED", {"action": "unsubscribe", "count": len(to_unsubscribe), "reason": reason})
@@ -10964,7 +10997,7 @@ def _start_depth_ws_impl(
                     reason=reason,
                     local_call_result="dispatched",
                     client_mode_before=client_mode_before,
-                    socket_generation=socket_generation,
+                    socket_generation=generation,
                 )
                 ws.subscribe(to_subscribe)
                 _record_subscription_request_succeeded(to_subscribe)
@@ -10978,7 +11011,7 @@ def _start_depth_ws_impl(
                     local_call_result="succeeded",
                     client_mode_before=client_mode_before,
                     client_mode_after=client_mode_after_subscribe,
-                    socket_generation=socket_generation,
+                    socket_generation=generation,
                 )
                 client_mode_before_mode = _client_mode_for_token(ws, 256265)
                 if not generation_is_current():
@@ -10992,7 +11025,7 @@ def _start_depth_ws_impl(
                     reason=reason,
                     local_call_result="dispatched",
                     client_mode_before=client_mode_before_mode,
-                    socket_generation=socket_generation,
+                    socket_generation=generation,
                 )
                 ws.set_mode(ws.MODE_FULL, to_subscribe)
                 _record_mode_request_succeeded(to_subscribe)
@@ -11006,7 +11039,7 @@ def _start_depth_ws_impl(
                     local_call_result="succeeded",
                     client_mode_before=client_mode_before_mode,
                     client_mode_after=_client_mode_for_token(ws, 256265),
-                    socket_generation=socket_generation,
+                    socket_generation=generation,
                 )
         except Exception as exc:
             _RUNTIME_STATE = "SUBSCRIBE_FAILED"
@@ -11072,7 +11105,7 @@ def _start_depth_ws_impl(
                     reason=reason,
                     local_call_result="dispatched",
                     client_mode_before=client_mode_before_final,
-                    socket_generation=socket_generation,
+                    socket_generation=generation,
                 )
                 ws.set_mode(ws.MODE_FULL, _LAST_TOKENS)
                 _record_mode_request_succeeded(_LAST_TOKENS)
@@ -11086,7 +11119,7 @@ def _start_depth_ws_impl(
                     local_call_result="succeeded",
                     client_mode_before=client_mode_before_final,
                     client_mode_after=_client_mode_for_token(ws, 256265),
-                    socket_generation=socket_generation,
+                    socket_generation=generation,
                 )
             except Exception as exc:
                 _record_ws_subscription_operation(
@@ -11099,7 +11132,7 @@ def _start_depth_ws_impl(
                     local_call_result="exception",
                     exception_type=type(exc).__name__,
                     client_mode_before=client_mode_before_final,
-                    socket_generation=socket_generation,
+                    socket_generation=generation,
                 )
                 _RUNTIME_STATE = "SUBSCRIBE_FAILED"
                 _LAST_RUNTIME_ERROR = f"final_set_mode:{exc}"[:1000]
@@ -11129,7 +11162,7 @@ def _start_depth_ws_impl(
             old_tokens=old_tokens,
             new_tokens=sorted({int(token) for token in (_LAST_TOKENS or []) if int(token) > 0}),
             reason=reason,
-            socket_generation=socket_generation,
+            socket_generation=generation,
         )
         if not generation_is_current() or not _commit_applied_option_ownership(
             socket_generation=generation,
@@ -11188,6 +11221,7 @@ def _start_depth_ws_impl(
     def _resubscribe_full(ws, reason: str):
         global _RUNTIME_STATE, _LAST_RUNTIME_ERROR
         _log_ws("subscription_replay_requested", {"reason": reason})
+        generation = _current_socket_generation()
         old_tokens = sorted({int(token) for token in (_LAST_TOKENS or []) if int(token) > 0})
         desired, selection_payload = _resubscribe_token_selection()
         desired = sorted({int(token) for token in (desired or []) if int(token) > 0})
@@ -11204,7 +11238,7 @@ def _start_depth_ws_impl(
                     "reason": failure_reason,
                     "token_source": str(selection_payload.get("token_source") or "blocked"),
                     "fallback_tokens_count": int(selection_payload.get("fallback_tokens_count") or 0),
-                    "socket_generation": int(socket_generation),
+                    "socket_generation": int(generation),
                 },
             )
             return {
@@ -11215,7 +11249,6 @@ def _start_depth_ws_impl(
                 "old_tokens": old_tokens,
                 "new_tokens": old_tokens,
             }
-        generation = _current_socket_generation()
         base_snapshot, invalidated = _begin_applied_option_mutation(
             reason, affected_tokens=desired
         )
@@ -11223,7 +11256,7 @@ def _start_depth_ws_impl(
         fresh_socket = _is_option_ownership_bootstrap_generation(generation)
         if desired:
             event_base = {
-                "socket_generation": socket_generation,
+                "socket_generation": generation,
                 "token_count": len(desired),
                 "token_ids": list(desired),
                 "desired_count": len(desired),
@@ -11242,7 +11275,7 @@ def _start_depth_ws_impl(
                 reason=reason,
                 local_call_result="dispatched",
                 client_mode_before=client_mode_before,
-                socket_generation=socket_generation,
+                socket_generation=generation,
             )
             ws.subscribe(desired)
             _record_subscription_request_succeeded(desired)
@@ -11256,7 +11289,7 @@ def _start_depth_ws_impl(
                 local_call_result="succeeded",
                 client_mode_before=client_mode_before,
                 client_mode_after=client_mode_after_subscribe,
-                socket_generation=socket_generation,
+                socket_generation=generation,
             )
             _log_ws("FEED_SUBSCRIBE_CALLBACK_APPLIED", {**event_base, "result": "applied"})
             _log_ws("FEED_MODE_FULL_REQUESTED", {**event_base, "result": "requested"})
@@ -11270,7 +11303,7 @@ def _start_depth_ws_impl(
                 reason=reason,
                 local_call_result="dispatched",
                 client_mode_before=client_mode_before_mode,
-                socket_generation=socket_generation,
+                socket_generation=generation,
             )
             ws.set_mode(ws.MODE_FULL, desired)
             _record_mode_request_succeeded(desired)
@@ -11284,11 +11317,11 @@ def _start_depth_ws_impl(
                 local_call_result="succeeded",
                 client_mode_before=client_mode_before_mode,
                 client_mode_after=_client_mode_for_token(ws, 256265),
-                socket_generation=socket_generation,
+                socket_generation=generation,
             )
             _log_ws("FEED_MODE_FULL_CALLBACK_APPLIED", {**event_base, "result": "applied"})
         _record_feed_restart_verify_subscribe(
-            now_epoch=float(now_utc_epoch()), socket_generation=socket_generation
+            now_epoch=float(now_utc_epoch()), socket_generation=generation
         )
         _LAST_TOKENS[:] = desired
         tokens[:] = desired
@@ -11385,6 +11418,7 @@ def _start_depth_ws_impl(
     def on_connect(ws, response):
         global _STALE_STRIKES, _WARMUP_PENDING, _RUNTIME_STATE, _LAST_RUNTIME_ERROR
         try:
+            active_gen = _current_socket_generation()
             campaign_raw_diagnostics.observe_protocol("open")
             campaign_raw_diagnostics.start_process_heartbeat()
             campaign_raw_diagnostics.start_reactor_heartbeat(getattr(getattr(ws, "factory", None), "reactor", None))
@@ -11403,7 +11437,7 @@ def _start_depth_ws_impl(
                 })
             _clear_last_disconnected_info()
             _record_feed_restart_verify_connect(
-                now_epoch=float(now_utc_epoch()), socket_generation=socket_generation
+                now_epoch=float(now_utc_epoch()), socket_generation=active_gen
             )
             _log_ws("ws_connected", {"response": str(response), "ws_lifecycle_state": "CONNECTED"})
             _log_ws("FEED_CONNECT", {"tokens": len(tokens), "response": str(response)})
@@ -11427,7 +11461,7 @@ def _start_depth_ws_impl(
             if (
                 not bool(resubscribe_result.get("success"))
                 or applied_ownership.state != "KNOWN"
-                or applied_ownership.socket_generation != int(socket_generation)
+                or applied_ownership.socket_generation != int(active_gen)
             ):
                 _RUNTIME_STATE = "SUBSCRIBE_FAILED"
                 _LAST_RUNTIME_ERROR = str(
@@ -11436,7 +11470,7 @@ def _start_depth_ws_impl(
                 _log_ws(
                     "FEED_CONNECT_SUBSCRIPTION_UNCONFIRMED",
                     {
-                        "socket_generation": int(socket_generation),
+                        "socket_generation": int(active_gen),
                         "resubscribe_status": str(resubscribe_result.get("status") or "FAILED"),
                         "ownership_state": applied_ownership.state,
                         "ownership_generation": int(applied_ownership.socket_generation),
@@ -11457,13 +11491,13 @@ def _start_depth_ws_impl(
             if resubscribe_result.get("status") == "SUCCESS_CHANGED":
                 _advance_completed_transition(
                     "SUBSCRIPTION_REBUILD_COMPLETED",
-                    f"connect:{socket_generation}:{tuple(resubscribe_result.get('old_tokens') or [])}->{tuple(resubscribe_result.get('new_tokens') or [])}",
-                    {"socket_generation": int(socket_generation), "reason": "connect", "old_tokens": resubscribe_result.get("old_tokens"), "new_tokens": resubscribe_result.get("new_tokens")},
+                    f"connect:{active_gen}:{tuple(resubscribe_result.get('old_tokens') or [])}->{tuple(resubscribe_result.get('new_tokens') or [])}",
+                    {"socket_generation": int(active_gen), "reason": "connect", "old_tokens": resubscribe_result.get("old_tokens"), "new_tokens": resubscribe_result.get("new_tokens")},
                 )
             _log_ws(
                 "FEED_SUBSCRIPTION_REGISTRY_SNAPSHOT",
                 {
-                    "socket_generation": socket_generation,
+                    "socket_generation": active_gen,
                     "desired_count": len(_LAST_DESIRED_TOKENS or []),
                     "applied_count": len(_LAST_TOKENS or []),
                     "mode_full_applied_count": len(_LAST_TOKENS or []),
@@ -12099,8 +12133,19 @@ def _start_depth_ws_impl(
             stale_option_mutation_guard_blocked, stale_option_mutation_guard_payload = _stale_option_mutation_guard_blocked(
                 refresh_payload
             )
-            if expected_option_tokens > 0 and subscribed_option_tokens <= 0:
-                if (now_loop - float(last_option_subscribe_retry)) >= max(1.0, soft_cooldown):
+            # Check if active confirmed tokens contain non-underlying (option) tokens and ticks are active.
+            # During transient ATM shift / rebalance windows, ownership state might momentarily invalidate,
+            # but if active subscriptions have option tokens and ticks are arriving, the socket is NOT missing subscriptions.
+            active_has_options = bool([t for t in (_LAST_TOKENS or []) if not _is_underlying_token(t)])
+            recent_tick_flow = (_LAST_WS_TICK_EPOCH > 0.0) and ((now_loop - float(_LAST_WS_TICK_EPOCH)) <= float(getattr(cfg, "MAX_LTP_AGE_SEC", 8.0)))
+            transient_rebalance_active = active_has_options and recent_tick_flow and (_ws_connected_state() is True)
+
+            if expected_option_tokens > 0 and subscribed_option_tokens <= 0 and not transient_rebalance_active:
+                elapsed_since_start = max(0.0, now_loop - float(_DEPTH_WS_START_EPOCH or 0.0))
+                restart_block = _restart_verification_restart_block()
+                verify_pending = restart_block is not None and str(restart_block.get("verification_state") or "").upper() == "PENDING"
+                startup_grace_active = (elapsed_since_start < option_missing_startup_grace_sec) or verify_pending
+                if not startup_grace_active and (now_loop - float(last_option_subscribe_retry)) >= max(1.0, soft_cooldown):
                     last_option_subscribe_retry = now_loop
                     _log_ws(
                         "FEED_OPTION_SUBSCRIPTIONS_MISSING",
@@ -12218,17 +12263,21 @@ def _start_depth_ws_impl(
                     if time.time() - last_soft >= backoff:
                         last_soft = time.time()
                         try:
-                            resubscribe_result = _resubscribe_full(kws, reason=f"soft_reset:strikes={depth_stale_strikes}")
-                            if resubscribe_result.get("success") is True:
-                                if resubscribe_result.get("changed") is True:
-                                    _advance_completed_transition(
-                                        "SUBSCRIPTION_REBUILD_COMPLETED",
-                                        f"watchdog:{socket_generation}:{resubscribe_result.get('new_tokens')}",
-                                        {"socket_generation": int(socket_generation), "reason": "watchdog_soft_reset"},
-                                    )
-                                _log_ws("FEED_SOFT_RESET_OK", {"tokens": len(tokens), "backoff_sec": backoff})
+                            if _ws_connected_state() is True:
+                                resubscribe_result = _resubscribe_full(kws, reason=f"soft_reset:strikes={depth_stale_strikes}")
+                                if resubscribe_result.get("success") is True:
+                                    if resubscribe_result.get("changed") is True:
+                                        active_gen = _current_socket_generation()
+                                        _advance_completed_transition(
+                                            "SUBSCRIPTION_REBUILD_COMPLETED",
+                                            f"watchdog:{active_gen}:{resubscribe_result.get('new_tokens')}",
+                                            {"socket_generation": int(active_gen), "reason": "watchdog_soft_reset"},
+                                        )
+                                    _log_ws("FEED_SOFT_RESET_OK", {"tokens": len(tokens), "backoff_sec": backoff})
+                                else:
+                                    _log_ws("FEED_SOFT_RESET_ERROR", {"reason": resubscribe_result.get("reason")})
                             else:
-                                _log_ws("FEED_SOFT_RESET_ERROR", {"reason": resubscribe_result.get("reason")})
+                                _log_ws("FEED_SOFT_RESET_SKIPPED", {"reason": "ws_not_connected", "strikes": depth_stale_strikes})
                         except Exception as exc:
                             _log_ws("FEED_SOFT_RESET_ERROR", {"error": str(exc), "backoff_sec": backoff})
 
