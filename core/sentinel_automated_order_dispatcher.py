@@ -20,6 +20,15 @@ from core.broker_interface import BrokerAdapter, BrokerOrderRequest, BrokerOrder
 from core.sentinel_execution_router import SentinelExecutionRouter, ExecutionMode
 
 
+@dataclass(frozen=True)
+class EntryReservationResult:
+    accepted: bool
+    reason: str
+    action: str
+    intent_key: Optional[str] = None
+    routed_mode: str = "PAPER"
+
+
 @dataclass
 class AutomatedExecutionResult:
     index_name: str
@@ -187,6 +196,93 @@ class SentinelAutomatedOrderDispatcher:
                 return True
         return False
 
+    def reserve_entry_intent(
+        self,
+        index_name: str,
+        symbol: str,
+        option_type: str,
+        entry_price: float,
+        target_pts: float,
+        sl_pts: float,
+        setup_reason: str,
+        qty: Optional[int] = None,
+        intent_id: Optional[str] = None,
+    ) -> EntryReservationResult:
+        """
+        Atomically evaluates routing, parameters, daily trade caps, and concurrent position limits.
+        If accepted, returns accepted=True and holds the reservation.
+        If rejected, returns accepted=False with explicit veto reason without mutating state.
+        """
+        policy = self.router.get_policy(index_name)
+        mode = policy.target_mode
+        if policy.lot_size <= 0:
+            return EntryReservationResult(
+                accepted=False,
+                reason="Unknown or missing instrument route; broker dispatch blocked.",
+                action="VETOED_UNKNOWN_ROUTE",
+                routed_mode=mode.value,
+            )
+        if not symbol or not all(self._valid_positive(v) for v in (entry_price, target_pts, sl_pts)):
+            return EntryReservationResult(
+                accepted=False,
+                reason="Missing symbol or invalid entry, target, or stop value.",
+                action="VETOED_INVALID_INTENT",
+                routed_mode=mode.value,
+            )
+        resolved_qty = qty if qty is not None else policy.lot_size
+        if isinstance(resolved_qty, bool) or not isinstance(resolved_qty, int) or resolved_qty <= 0:
+            return EntryReservationResult(
+                accepted=False,
+                reason="Quantity must be a positive integer.",
+                action="VETOED_INVALID_INTENT",
+                routed_mode=mode.value,
+            )
+
+        intent = {
+            "index_name": policy.index_name,
+            "symbol": symbol,
+            "side": "BUY",
+            "qty": resolved_qty,
+            "entry_price": entry_price,
+            "target_pts": target_pts,
+            "sl_pts": sl_pts,
+            "setup_reason": setup_reason,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        routed = self.router.route_execution_intent(index_name, intent)
+        if routed["mode"] == ExecutionMode.LIVE.value:
+            if self.broker is None:
+                return EntryReservationResult(
+                    accepted=False,
+                    reason="Broker adapter offline or not connected",
+                    action="VETOED_OFFLINE",
+                    routed_mode="LIVE",
+                )
+            key = self._intent_key(policy.index_name, symbol, "BUY", resolved_qty, entry_price, setup_reason, intent_id)
+            reserved, reservation_reason = self._reserve_live_entry(policy.index_name, symbol, key, resolved_qty)
+            if not reserved:
+                cap_hit = reservation_reason.startswith("Daily trade cap")
+                return EntryReservationResult(
+                    accepted=False,
+                    reason=reservation_reason,
+                    action="VETOED_OVERTRADING_CAP" if cap_hit else "VETOED_CONCURRENT_POSITION",
+                    routed_mode="LIVE",
+                )
+            return EntryReservationResult(
+                accepted=True,
+                reason="RESERVED_LIVE",
+                action="RESERVED",
+                intent_key=key,
+                routed_mode="LIVE",
+            )
+        else:
+            return EntryReservationResult(
+                accepted=True,
+                reason="RESERVED_PAPER",
+                action="RESERVED",
+                routed_mode=routed.get("mode", "PAPER"),
+            )
+
     def on_apm_entry(
         self,
         index_name: str,
@@ -247,17 +343,20 @@ class SentinelAutomatedOrderDispatcher:
                 )
 
             key = self._intent_key(policy.index_name, symbol, "BUY", resolved_qty, entry_price, setup_reason, intent_id)
-            reserved, reservation_reason = self._reserve_live_entry(
-                policy.index_name, symbol, key, resolved_qty
-            )
-            if not reserved:
-                cap_hit = reservation_reason.startswith("Daily trade cap")
-                return AutomatedExecutionResult(
-                    index_name=index_name, symbol=symbol,
-                    action="VETOED_OVERTRADING_CAP" if cap_hit else "VETOED_CONCURRENT_POSITION",
-                    mode="LIVE", qty=resolved_qty, message=reservation_reason,
-                    status="VETOED", read_only=True, is_order_action=False, broker_api_called=False,
+            with self._lock:
+                already_reserved = key in self._intents and self._intents[key].get("status") == "DISPATCHING"
+            if not already_reserved:
+                reserved, reservation_reason = self._reserve_live_entry(
+                    policy.index_name, symbol, key, resolved_qty
                 )
+                if not reserved:
+                    cap_hit = reservation_reason.startswith("Daily trade cap")
+                    return AutomatedExecutionResult(
+                        index_name=index_name, symbol=symbol,
+                        action="VETOED_OVERTRADING_CAP" if cap_hit else "VETOED_CONCURRENT_POSITION",
+                        mode="LIVE", qty=resolved_qty, message=reservation_reason,
+                        status="VETOED", read_only=True, is_order_action=False, broker_api_called=False,
+                    )
             current_count = self.daily_live_trade_count.get(policy.index_name, 0)
 
             req = BrokerOrderRequest(

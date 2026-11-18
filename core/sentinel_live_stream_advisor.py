@@ -67,6 +67,7 @@ from strategies.optionmate_rbfn_strategy import (
 )
 from core.sentinel_execution_router import SentinelExecutionRouter
 from core.sentinel_automated_order_dispatcher import SentinelAutomatedOrderDispatcher
+from core.orders.gtt_stop_dispatcher import GTTStopDispatcher
 from strategies.sensex_optionmate_rbfn_strategy import (
     SensexOptionMateRBFNStrategy,
     SensexOptionMateGrid,
@@ -289,9 +290,14 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         self.enable_automated_dispatch = enable_automated_dispatch
         self.enable_nifty_live = enable_nifty_live
         self.execution_router = SentinelExecutionRouter(enable_nifty_live=enable_nifty_live)
+        self.gtt_stop_dispatcher = GTTStopDispatcher(
+            broker_adapter=broker_adapter,
+            enable_live_dispatch=enable_nifty_live,
+        ) if enable_automated_dispatch else None
         self.automated_dispatcher = SentinelAutomatedOrderDispatcher(
             router=self.execution_router,
             broker_adapter=broker_adapter,
+            gtt_stop_dispatcher=self.gtt_stop_dispatcher,
         ) if enable_automated_dispatch else None
         self.market_open_time = market_open_time
         self.opening_shock_end_time = opening_shock_end_time
@@ -3466,28 +3472,89 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                                     index_name, depth.exchange_timestamp_ms
                                 )
                             if entry_or_valid:
-                                entered = idx_apm.arm_and_enter(
-                                    position_id=pos_id,
-                                    direction=required_option_type,
-                                    contract=depth.symbol,
-                                    entry_price=spot,
-                                    entry_time_str=now_dt.isoformat(),
-                                    sl_pts=sl_pts,
-                                    tp_pts=target_pts,
-                                    friction_drag_pts=total_drag,
-                                    opt_quote=opt_q,
-                                    is_runner_mode=(active_gear == "GEAR_2_TREND"),
-                                    session_gear=active_gear,
-                                    opt_stop_loss_pct=0.20,
-                                    atr_1m=effective_atr,
-                                    lots=computed_lots,
-                                    sizing_tier=sizing_tier,
-                                    lot_size=ex_lot_size,
-                                    total_quantity=total_qty,
-                                    is_expiry_day=is_exp,
-                                    is_deep_itm=(itm_res.moneyness in {"ITM_1", "DEEP_ITM"}),
-                                    strategy_name=strategy_name,
-                                )
+                                exec_reason = f"[{shadow_tier}] {setup_reason}"
+                                if strategy_name == "OPTIONMATE_RBFN_AUCTION" and rbfn_sig and rbfn_sig.sustainable_anchor_price > 0:
+                                    exec_reason = f"{exec_reason} [ANCHOR: ₹{rbfn_sig.sustainable_anchor_price:.1f}]"
+
+                                # CONTRACT 1: Gate APM entry, WAL, and counters on automated dispatcher acceptance
+                                dispatcher_accepted = True
+                                if self.automated_dispatcher:
+                                    if broker_instrument_key is None:
+                                        dispatcher_accepted = False
+                                        entered = False
+                                        status_flag = "VETO_BROKER_KEY"
+                                        advisory = "WAIT (BROKER_KEY_INVALID)"
+                                        self.record_veto("BROKER_INSTRUMENT_KEY", "ENTRY_DISPATCH_BLOCKED_MISSING_OR_MALFORMED_KEY")
+                                        self.log_decision_trace(
+                                            index_name=index_name,
+                                            bar_time=now_time,
+                                            action="ABSTAIN",
+                                            reason="ENTRY_DISPATCH_BLOCKED_MISSING_OR_MALFORMED_KEY",
+                                            details={"authorization_recheck": True},
+                                            timestamp_ms=depth.exchange_timestamp_ms,
+                                        )
+                                    else:
+                                        res = self.automated_dispatcher.reserve_entry_intent(
+                                            index_name=index_name,
+                                            symbol=broker_instrument_key,
+                                            option_type=required_option_type,
+                                            entry_price=fill_price,
+                                            target_pts=target_pts,
+                                            sl_pts=sl_pts,
+                                            setup_reason=exec_reason,
+                                            qty=int(total_qty),
+                                            intent_id=str(pos_id),
+                                        )
+                                        if not res.accepted:
+                                            dispatcher_accepted = False
+                                            entered = False
+                                            status_flag = f"VETO_{res.action}"
+                                            advisory = f"WAIT ({res.action})"
+                                            self.record_veto(res.action, res.reason)
+                                            self.log_decision_trace(
+                                                index_name=index_name,
+                                                bar_time=now_time,
+                                                action="ABSTAIN",
+                                                reason=res.reason,
+                                                details={"veto_action": res.action, "routed_mode": res.routed_mode},
+                                                timestamp_ms=depth.exchange_timestamp_ms,
+                                            )
+                                        else:
+                                            entry_dispatch_request = {
+                                                "index_name": index_name,
+                                                "symbol": broker_instrument_key,
+                                                "option_type": required_option_type,
+                                                "entry_price": fill_price,
+                                                "target_pts": target_pts,
+                                                "sl_pts": sl_pts,
+                                                "setup_reason": exec_reason,
+                                                "qty": int(total_qty),
+                                                "intent_id": str(pos_id),
+                                            }
+
+                                if dispatcher_accepted:
+                                    entered = idx_apm.arm_and_enter(
+                                        position_id=pos_id,
+                                        direction=required_option_type,
+                                        contract=depth.symbol,
+                                        entry_price=spot,
+                                        entry_time_str=now_dt.isoformat(),
+                                        sl_pts=sl_pts,
+                                        tp_pts=target_pts,
+                                        friction_drag_pts=total_drag,
+                                        opt_quote=opt_q,
+                                        is_runner_mode=(active_gear == "GEAR_2_TREND"),
+                                        session_gear=active_gear,
+                                        opt_stop_loss_pct=0.20,
+                                        atr_1m=effective_atr,
+                                        lots=computed_lots,
+                                        sizing_tier=sizing_tier,
+                                        lot_size=ex_lot_size,
+                                        total_quantity=total_qty,
+                                        is_expiry_day=is_exp,
+                                        is_deep_itm=(itm_res.moneyness in {"ITM_1", "DEEP_ITM"}),
+                                        strategy_name=strategy_name,
+                                    )
                             else:
                                 entered = False
                                 status_flag = "VETO_MODE5_OR"
@@ -3507,24 +3574,6 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                                 idx_apm._persist_wal_atomic(force_sync=True)
                                 if rbfn_sig is not None:
                                     self.cached_rbfn_signals[index_name] = None
-                                exec_reason = f"[{shadow_tier}] {setup_reason}"
-                                if strategy_name == "OPTIONMATE_RBFN_AUCTION" and rbfn_sig and rbfn_sig.sustainable_anchor_price > 0:
-                                    exec_reason = f"{exec_reason} [ANCHOR: ₹{rbfn_sig.sustainable_anchor_price:.1f}]"
-
-                                if self.automated_dispatcher and broker_instrument_key is not None:
-                                    entry_dispatch_request = {
-                                        "index_name": index_name,
-                                        "symbol": broker_instrument_key,
-                                        "option_type": required_option_type,
-                                        "entry_price": fill_price,
-                                        "target_pts": target_pts,
-                                        "sl_pts": sl_pts,
-                                        "setup_reason": exec_reason,
-                                        "qty": int(total_qty),
-                                        "intent_id": str(pos_id),
-                                    }
-                                elif self.automated_dispatcher:
-                                    self.record_veto("BROKER_INSTRUMENT_KEY", "ENTRY_DISPATCH_BLOCKED_MISSING_OR_MALFORMED_KEY")
                                 self.journal.record_execution(
                                     position_id=pos_id,
                                     index_name=index_name,
