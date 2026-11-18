@@ -18,12 +18,16 @@ Key Features:
 
 from __future__ import annotations
 
+import copy
+import atexit
 import json
 import logging
 import math
 import os
+import queue
 import threading
 import time
+import uuid
 from collections import deque
 from dataclasses import dataclass
 from datetime import date, datetime, time as dt_time, timedelta
@@ -195,6 +199,28 @@ class CachedRBFNAuctionSignal:
     allowed_for_live_execution: bool = False
 
 
+@dataclass(slots=True, frozen=True)
+class CachedRBFNCandidateMetadata:
+    """Process-local decision availability metadata paired with one cached bar signal."""
+
+    generation: int
+    issued_monotonic_ns: int
+    boundary_timestamp_ms: int
+    session_day: date
+    status: str = "AVAILABLE"
+
+
+@dataclass(frozen=True, slots=True)
+class Mode5TraceQueueItem:
+    """Bounded immutable JSONL payload reserved by a quote/decision callback."""
+
+    serialized_record: str
+    trace_sequence: int
+    dedup_key: Optional[tuple[str, str, Optional[int], str]]
+    reservation_id: int
+    suppression_record: bool
+
+
 # ARCH-SENTINEL-OPTIONMATE-HARDENING-001: Mode 5 Setup Classification for Wall-Gate Exemptions
 MODE_5_STRUCTURAL_BREAKOUTS: set[str] = {
     "RP1_UPPER_10M_EXPANSION_BREAKOUT",
@@ -281,7 +307,13 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         enable_automated_dispatch: bool = False,
         enable_nifty_live: bool = False,
         broker_adapter: Optional[any] = None,
+        mode5_trace_queue_capacity: int = 1536,
+        mode5_trace_max_record_bytes: int = 16384,
     ) -> None:
+        if isinstance(mode5_trace_queue_capacity, bool) or not isinstance(mode5_trace_queue_capacity, int) or mode5_trace_queue_capacity < 1:
+            raise ValueError("mode5_trace_queue_capacity must be a positive integer")
+        if isinstance(mode5_trace_max_record_bytes, bool) or not isinstance(mode5_trace_max_record_bytes, int) or mode5_trace_max_record_bytes < 256:
+            raise ValueError("mode5_trace_max_record_bytes must be an integer of at least 256")
         self.adapter = adapter if adapter is not None else InMemorySentinelAdapter()
         self.spread_veto_threshold = float(spread_veto_threshold)
         # Configurable capital: fallback to env or standard 30k allocation
@@ -482,6 +514,22 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             "SENSEX": None,
             "BANKNIFTY": None,
         }
+        # Candidate age is process-local and intentionally not restored from WAL.
+        self._cached_rbfn_candidate_meta: dict[str, Optional[CachedRBFNCandidateMetadata]] = {
+            "NIFTY": None,
+            "SENSEX": None,
+            "BANKNIFTY": None,
+        }
+        self._cached_rbfn_generation: dict[str, int] = {
+            "NIFTY": 0,
+            "SENSEX": 0,
+            "BANKNIFTY": 0,
+        }
+        self._option_depth_watermarks: dict[str, dict[str, tuple[date, int, int]]] = {
+            "NIFTY": {},
+            "SENSEX": {},
+            "BANKNIFTY": {},
+        }
         self.rp2_upper_pierced_before_1030: dict[str, bool] = {
             "NIFTY": False,
             "SENSEX": False,
@@ -623,13 +671,340 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
         # Decision trace file path and lock (ARCH-SENTINEL-HARDENING-002)
         self.decision_trace_path = Path("runtime") / "sentinel_decision_trace.jsonl"
+        # Trace-state reservations never perform I/O. Lock order is advisor `_lock`
+        # then this state lock; append serialization is a separate lock acquired
+        # only after both state locks have been released.
+        self._mode5_quote_trace_state_lock = threading.Lock()
         self._decision_trace_lock = threading.Lock()
+        self._mode5_quote_trace_emitted: set[tuple[str, str, Optional[int], str]] = set()
+        self._mode5_quote_trace_attempts: dict[tuple[str, str, Optional[int], str], int] = {}
+        self._mode5_quote_trace_inflight: dict[tuple[str, str, Optional[int], str], int] = {}
+        self._mode5_quote_trace_dropped: set[tuple[str, str, Optional[int], str]] = set()
+        self._mode5_quote_trace_sequence = 0
+        self.trace_run_id = str(uuid.uuid4())
+        self._mode5_quote_trace_active_generation: dict[str, Optional[int]] = {
+            "NIFTY": None,
+            "SENSEX": None,
+            "BANKNIFTY": None,
+        }
+        self.mode5_trace_queue_capacity = mode5_trace_queue_capacity
+        self.mode5_trace_max_record_bytes = mode5_trace_max_record_bytes
+        self._mode5_trace_queue: queue.Queue[Mode5TraceQueueItem] = queue.Queue(
+            maxsize=mode5_trace_queue_capacity
+        )
+        self._mode5_trace_health_lock = threading.Lock()
+        self._mode5_trace_health: dict[str, Any] = {
+            "enqueued": 0,
+            "append_successes": 0,
+            "append_failures": 0,
+            "queue_full_drops": 0,
+            "oversize_drops": 0,
+            "writer_unavailable_drops": 0,
+            "pending_unpersisted": 0,
+            "active_writes": 0,
+            "writer_status": "STARTING",
+            "last_persisted_sequence": None,
+            "last_processed_sequence": None,
+            "last_error": None,
+            "degraded": False,
+        }
+        self._mode5_trace_accepting = True
+        self._mode5_trace_stop = threading.Event()
+        self._mode5_trace_stopped = threading.Event()
+        self._mode5_trace_shutdown_lock = threading.Lock()
+        self._mode5_trace_atexit_callback = None
+        self._mode5_trace_writer = threading.Thread(
+            target=self._mode5_trace_writer_main,
+            name=f"Mode5TraceWriter-{id(self):x}",
+            daemon=True,
+        )
+        try:
+            self._mode5_trace_writer.start()
+        except Exception as exc:
+            self._mode5_trace_accepting = False
+            with self._mode5_trace_health_lock:
+                self._mode5_trace_health["writer_status"] = "FAILED"
+                self._mode5_trace_health["last_error"] = f"writer_start:{type(exc).__name__}"
+                self._mode5_trace_health["degraded"] = True
+            self._mode5_trace_stopped.set()
+        else:
+            self._mode5_trace_atexit_callback = self._shutdown_mode5_trace_writer_at_exit
+            atexit.register(self._mode5_trace_atexit_callback)
 
         # Non-negotiable Trading Safety Invariants
         self.read_only = True
         self.is_order_action = False
         self.broker_api_called = False
         self.allowed_for_live_execution = False
+
+    def _append_decision_trace_record_locked(self, record: str | dict[str, Any]) -> bool:
+        """Append one pre-serialized JSONL record while the writer holds append lock."""
+        try:
+            serialized = record if isinstance(record, str) else json.dumps(record)
+            self.decision_trace_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.decision_trace_path, "a", encoding="utf-8") as f:
+                f.write(serialized + "\n")
+            return True
+        except Exception:
+            return False
+
+    def _mode5_trace_key(
+        self, index_name: str, candidate_generation: Optional[int], reason: str, timestamp_ms: int
+    ) -> tuple[str, str, Optional[int], str]:
+        try:
+            session = datetime.fromtimestamp(timestamp_ms / 1000.0, tz=ZoneInfo("Asia/Kolkata")).date().isoformat()
+        except (OverflowError, OSError, TypeError, ValueError):
+            session = "UNKNOWN_SESSION"
+        return session, index_name, candidate_generation, reason
+
+    def _mode5_trace_health_changed(self, **updates: Any) -> None:
+        with self._mode5_trace_health_lock:
+            self._mode5_trace_health.update(updates)
+
+    def _mode5_trace_health_increment(self, **increments: int) -> None:
+        with self._mode5_trace_health_lock:
+            for key, amount in increments.items():
+                self._mode5_trace_health[key] += amount
+
+    def get_mode5_trace_health(self) -> dict[str, Any]:
+        """Return a thread-safe snapshot of queue, writer, and persistence health."""
+        with self._mode5_trace_health_lock:
+            result = dict(self._mode5_trace_health)
+        result.update({
+            "capacity": self.mode5_trace_queue_capacity,
+            "max_record_bytes": self.mode5_trace_max_record_bytes,
+            "queue_depth": self._mode5_trace_queue.qsize(),
+        })
+        return result
+
+    def _enqueue_mode5_trace_record(
+        self,
+        record: dict[str, Any],
+        *,
+        dedup_key: Optional[tuple[str, str, Optional[int], str]],
+        suppression_record: bool = False,
+        expected_signal: Optional[CachedRBFNAuctionSignal] = None,
+        expected_generation: Optional[int] = None,
+    ) -> bool:
+        """Reserve and enqueue without blocking on disk; return queue acceptance only."""
+        with self._lock:
+            if expected_signal is not None:
+                current_signal = self.cached_rbfn_signals.get(record["index_name"])
+                current_meta = self._cached_rbfn_candidate_meta.get(record["index_name"])
+                if (
+                    current_signal is not expected_signal
+                    or current_meta is None
+                    or current_meta.generation != expected_generation
+                    or current_meta.status != "AVAILABLE"
+                ):
+                    return False
+            with self._mode5_quote_trace_state_lock:
+                if suppression_record and dedup_key is not None:
+                    if self._mode5_quote_trace_active_generation.get(record["index_name"]) != expected_generation:
+                        return False
+                    if (
+                        dedup_key in self._mode5_quote_trace_emitted
+                        or dedup_key in self._mode5_quote_trace_inflight
+                        or dedup_key in self._mode5_quote_trace_dropped
+                        or self._mode5_quote_trace_attempts.get(dedup_key, 0) >= 2
+                    ):
+                        return False
+                elif dedup_key is not None:
+                    if (
+                        dedup_key in self._mode5_quote_trace_emitted
+                        or dedup_key in self._mode5_quote_trace_dropped
+                        or dedup_key in self._mode5_quote_trace_inflight
+                        or self._mode5_quote_trace_attempts.get(dedup_key, 0) >= 2
+                    ):
+                        return False
+
+                if not self._mode5_trace_accepting:
+                    if dedup_key is not None:
+                        self._mode5_quote_trace_dropped.add(dedup_key)
+                    self._mode5_trace_health_increment(writer_unavailable_drops=1)
+                    self._mode5_trace_health_changed(degraded=True)
+                    return False
+
+                self._mode5_quote_trace_sequence += 1
+                trace_sequence = self._mode5_quote_trace_sequence
+                record["trace_run_id"] = self.trace_run_id
+                record["trace_sequence"] = trace_sequence
+                try:
+                    serialized = json.dumps(record, separators=(",", ":"), ensure_ascii=False)
+                    record_size = len(serialized.encode("utf-8"))
+                except Exception:
+                    serialized = ""
+                    record_size = self.mode5_trace_max_record_bytes + 1
+                if record_size > self.mode5_trace_max_record_bytes:
+                    if dedup_key is not None:
+                        self._mode5_quote_trace_dropped.add(dedup_key)
+                    self._mode5_trace_health_increment(oversize_drops=1)
+                    self._mode5_trace_health_changed(degraded=True, last_error="record_serialization_or_size_limit")
+                    return False
+
+                reservation_id = trace_sequence
+                if dedup_key is not None:
+                    self._mode5_quote_trace_inflight[dedup_key] = reservation_id
+                item = Mode5TraceQueueItem(
+                    serialized_record=serialized,
+                    trace_sequence=trace_sequence,
+                    dedup_key=dedup_key,
+                    reservation_id=reservation_id,
+                    suppression_record=suppression_record,
+                )
+                # Publish pending work before making the item visible to the
+                # worker. A health reader can therefore never observe a dequeued
+                # item before its pending reservation is counted.
+                with self._mode5_trace_health_lock:
+                    self._mode5_trace_health["pending_unpersisted"] += 1
+                    try:
+                        self._mode5_trace_queue.put_nowait(item)
+                    except queue.Full:
+                        self._mode5_trace_health["pending_unpersisted"] = max(
+                            0, self._mode5_trace_health["pending_unpersisted"] - 1
+                        )
+                        self._mode5_trace_health["queue_full_drops"] += 1
+                        self._mode5_trace_health["degraded"] = True
+                        if dedup_key is not None:
+                            if self._mode5_quote_trace_inflight.get(dedup_key) == reservation_id:
+                                self._mode5_quote_trace_inflight.pop(dedup_key, None)
+                            self._mode5_quote_trace_dropped.add(dedup_key)
+                        return False
+                    self._mode5_trace_health["enqueued"] += 1
+                return True
+
+    def _mode5_trace_writer_main(self) -> None:
+        self._mode5_trace_health_changed(writer_status="RUNNING")
+        try:
+            while not self._mode5_trace_stop.is_set() or not self._mode5_trace_queue.empty():
+                try:
+                    item = self._mode5_trace_queue.get(timeout=0.05)
+                except queue.Empty:
+                    continue
+                self._mode5_trace_health_increment(active_writes=1)
+                try:
+                    self._persist_mode5_trace_item(item)
+                except Exception as exc:
+                    self._finalize_mode5_trace_item_exception(item, exc)
+                    logger.exception("Mode5 trace writer failed sequence=%s", item.trace_sequence)
+                finally:
+                    with self._mode5_trace_health_lock:
+                        last_processed = self._mode5_trace_health["last_processed_sequence"]
+                        self._mode5_trace_health["last_processed_sequence"] = max(
+                            item.trace_sequence, last_processed or 0
+                        )
+                    self._mode5_trace_queue.task_done()
+                    with self._mode5_trace_health_lock:
+                        self._mode5_trace_health["active_writes"] = max(
+                            0, self._mode5_trace_health["active_writes"] - 1
+                        )
+        finally:
+            self._mode5_trace_health_changed(writer_status="STOPPED")
+            self._mode5_trace_stopped.set()
+
+    def _finalize_mode5_trace_item_exception(
+        self, item: Mode5TraceQueueItem, exc: Exception
+    ) -> None:
+        """Account one unexpected item failure without poisoning the writer loop."""
+        if item.dedup_key is not None:
+            with self._mode5_quote_trace_state_lock:
+                if self._mode5_quote_trace_inflight.get(item.dedup_key) == item.reservation_id:
+                    self._mode5_quote_trace_inflight.pop(item.dedup_key, None)
+                    self._mode5_quote_trace_dropped.add(item.dedup_key)
+        with self._mode5_trace_health_lock:
+            self._mode5_trace_health["append_failures"] += 1
+            self._mode5_trace_health["last_error"] = f"writer:{type(exc).__name__}"
+            self._mode5_trace_health["degraded"] = True
+
+    def _persist_mode5_trace_item(self, item: Mode5TraceQueueItem) -> None:
+        success = False
+        last_failure: Optional[str] = None
+        for _ in range(2):
+            if item.dedup_key is not None:
+                with self._mode5_quote_trace_state_lock:
+                    if self._mode5_quote_trace_inflight.get(item.dedup_key) == item.reservation_id:
+                        self._mode5_quote_trace_attempts[item.dedup_key] = (
+                            self._mode5_quote_trace_attempts.get(item.dedup_key, 0) + 1
+                        )
+            try:
+                with self._decision_trace_lock:
+                    success = self._append_decision_trace_record_locked(item.serialized_record)
+            except Exception as exc:
+                success = False
+                last_failure = f"append_exception:{type(exc).__name__}"
+            if success:
+                break
+            self._mode5_trace_health_increment(append_failures=1)
+            self._mode5_trace_health_changed(
+                last_error=last_failure or "append_failed",
+                degraded=True,
+            )
+
+        if item.dedup_key is not None:
+            with self._mode5_quote_trace_state_lock:
+                if self._mode5_quote_trace_inflight.get(item.dedup_key) == item.reservation_id:
+                    self._mode5_quote_trace_inflight.pop(item.dedup_key, None)
+                    if success:
+                        self._mode5_quote_trace_emitted.add(item.dedup_key)
+                    elif not success:
+                        # A failed generic decision reason is also sticky for this
+                        # generation; later quotes must not churn the writer.
+                        self._mode5_quote_trace_dropped.add(item.dedup_key)
+        if success:
+            with self._mode5_trace_health_lock:
+                self._mode5_trace_health["append_successes"] += 1
+                self._mode5_trace_health["pending_unpersisted"] = max(
+                    0, self._mode5_trace_health["pending_unpersisted"] - 1
+                )
+                last_seq = self._mode5_trace_health["last_persisted_sequence"]
+                self._mode5_trace_health["last_persisted_sequence"] = max(
+                    item.trace_sequence, last_seq or 0
+                )
+        else:
+            logger.error(
+                "Mode5 trace append exhausted retries sequence=%s reason_key=%s last_failure=%s",
+                item.trace_sequence,
+                item.dedup_key[3] if item.dedup_key is not None else "GENERIC",
+                last_failure or "append_failed",
+            )
+
+    def get_mode5_trace_health_snapshot(self) -> dict[str, Any]:
+        return self.get_mode5_trace_health()
+
+    def shutdown_mode5_trace_writer(self, timeout_sec: float = 1.0) -> dict[str, Any]:
+        """Stop accepting traces and boundedly drain the daemon writer."""
+        timeout = max(0.0, float(timeout_sec))
+        with self._mode5_trace_shutdown_lock:
+            with self._mode5_quote_trace_state_lock:
+                self._mode5_trace_accepting = False
+            if not self._mode5_trace_stopped.is_set():
+                self._mode5_trace_health_changed(writer_status="STOPPING")
+                self._mode5_trace_stop.set()
+                if self._mode5_trace_writer.is_alive():
+                    self._mode5_trace_writer.join(timeout=timeout)
+            snapshot = self.get_mode5_trace_health()
+            if not self._mode5_trace_stopped.is_set() or snapshot["pending_unpersisted"]:
+                snapshot["degraded"] = True
+                snapshot["remaining_unpersisted"] = snapshot["pending_unpersisted"]
+            else:
+                snapshot["remaining_unpersisted"] = 0
+            if self._mode5_trace_stopped.is_set():
+                callback = self._mode5_trace_atexit_callback
+                if callback is not None:
+                    try:
+                        atexit.unregister(callback)
+                    except Exception:
+                        logger.exception("Could not unregister Mode5 trace atexit callback")
+                    else:
+                        self._mode5_trace_atexit_callback = None
+        if snapshot["degraded"]:
+            logger.warning("Mode5 trace writer shutdown health: %s", snapshot)
+        else:
+            logger.info("Mode5 trace writer shutdown health: %s", snapshot)
+        return snapshot
+
+    def _shutdown_mode5_trace_writer_at_exit(self) -> None:
+        self.shutdown_mode5_trace_writer(timeout_sec=0.25)
 
     def log_decision_trace(
         self,
@@ -639,31 +1014,89 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         reason: str,
         details: Optional[Dict[str, Any]] = None,
         timestamp_ms: Optional[int] = None,
+        candidate_generation: Optional[int] = None,
     ) -> None:
-        """Emits structured decision trace telemetry to runtime/sentinel_decision_trace.jsonl.
-
-        ARCH-SENTINEL-HARDENING-002 Requirement 5:
-        - Writes atomic JSONL record with fields:
-          index_name, bar_time (as HH:MM:SS or string), action, reason, details, timestamp_ms.
-        - Thread-safe and non-blocking with error isolation.
-        """
+        """Queue structured decision telemetry without filesystem work on the caller."""
         try:
             bar_time_str = bar_time.strftime("%H:%M:%S") if hasattr(bar_time, "strftime") else str(bar_time)
-            ts_ms = timestamp_ms if (timestamp_ms is not None and timestamp_ms > 0) else int(time.time() * 1000)
+            ts_ms = (
+                timestamp_ms
+                if isinstance(timestamp_ms, int) and not isinstance(timestamp_ms, bool) and timestamp_ms > 0
+                else int(time.time() * 1000)
+            )
+            with self._lock:
+                metadata = self._cached_rbfn_candidate_meta.get(index_name)
+                generation = candidate_generation
+                if generation is None and metadata is not None:
+                    generation = metadata.generation
             record = {
+                "event_type": "MODE5_DECISION_TRACE",
                 "index_name": index_name,
                 "bar_time": bar_time_str,
                 "action": action,
                 "reason": reason,
-                "details": details or {},
+                "details": copy.deepcopy(details or {}),
                 "timestamp_ms": ts_ms,
+                "candidate_generation": generation,
             }
-            with self._decision_trace_lock:
-                self.decision_trace_path.parent.mkdir(parents=True, exist_ok=True)
-                with open(self.decision_trace_path, "a", encoding="utf-8") as f:
-                    f.write(json.dumps(record) + "\n")
-        except Exception as e:
-            logger.error(f"[{index_name}] Failed to log decision trace: {e}")
+            key = self._mode5_trace_key(index_name, generation, reason, ts_ms)
+            self._enqueue_mode5_trace_record(record, dedup_key=key)
+        except Exception:
+            # Trace serialization/queue errors must not alter the trading decision.
+            self._mode5_trace_health_increment(oversize_drops=1)
+            self._mode5_trace_health_changed(degraded=True, last_error="decision_trace_snapshot_failed")
+
+    def _defer_mode5_decision_trace_locked(
+        self,
+        index_name: str,
+        bar_time: Any,
+        action: str,
+        reason: str,
+        details: Optional[Dict[str, Any]] = None,
+        timestamp_ms: Optional[int] = None,
+        candidate_generation: Optional[int] = None,
+    ) -> None:
+        """Snapshot and nonblockingly enqueue a decision trace under advisor lock."""
+        if not self._lock._is_owned():
+            raise RuntimeError("deferred Mode5 trace snapshot requires advisor lock")
+        bar_time_str = bar_time.strftime("%H:%M:%S") if hasattr(bar_time, "strftime") else str(bar_time)
+        ts_ms = (
+            timestamp_ms
+            if isinstance(timestamp_ms, int) and not isinstance(timestamp_ms, bool) and timestamp_ms > 0
+            else int(time.time() * 1000)
+        )
+        try:
+            details_snapshot = copy.deepcopy(details or {})
+        except Exception as exc:
+            # Trace snapshot failure must not escape into or alter the decision path.
+            details_snapshot = {"trace_details_snapshot_error": type(exc).__name__}
+        metadata = self._cached_rbfn_candidate_meta.get(index_name)
+        generation = candidate_generation
+        if generation is None and metadata is not None:
+            generation = metadata.generation
+        record = {
+            "event_type": "MODE5_DECISION_TRACE",
+            "index_name": index_name,
+            "bar_time": bar_time_str,
+            "action": action,
+            "reason": reason,
+            "details": details_snapshot,
+            "timestamp_ms": ts_ms,
+            "candidate_generation": generation,
+        }
+        key = self._mode5_trace_key(index_name, generation, reason, ts_ms)
+        self._enqueue_mode5_trace_record(record, dedup_key=key)
+
+    def _dispatch_reserved_entry_then_flush_traces(
+        self, entry_dispatch_request: Optional[dict[str, Any]]
+    ) -> None:
+        """Dispatch an accepted reservation; trace writes continue asynchronously."""
+        if self._lock._is_owned():
+            raise RuntimeError("entry dispatch requires advisor lock release")
+        if entry_dispatch_request is None:
+            return
+        if self.automated_dispatcher is not None:
+            self.automated_dispatcher.on_apm_entry(**entry_dispatch_request)
 
     def record_veto(self, veto_category: str, reason: str = "") -> None:
         """Records a gate veto in the per-gate telemetry ledger and emits journal event."""
@@ -802,7 +1235,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         pass
                 self.cached_rbfn_grids[idx] = None
                 self.rbfn_grids_frozen[idx] = False
-                self.cached_rbfn_signals[idx] = None
+                self._clear_cached_rbfn_candidate_locked(idx, "LEVELS_INVALIDATED")
 
     def _has_valid_ground_truth_grid(self, index_name: str, session_day: date) -> bool:
         grid = self.cached_rbfn_grids.get(index_name)
@@ -1059,44 +1492,308 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 self._invalidate_optionmate_levels()
                 return {}
 
+    def _replace_mode5_trace_generation_locked(self, index_name: str, generation: Optional[int]) -> None:
+        """Publish generation and clear trace state while advisor lock is held."""
+        with self._mode5_quote_trace_state_lock:
+            self._mode5_quote_trace_emitted = {
+                key for key in self._mode5_quote_trace_emitted if key[1] != index_name
+            }
+            self._mode5_quote_trace_attempts = {
+                key: attempts for key, attempts in self._mode5_quote_trace_attempts.items()
+                if key[1] != index_name
+            }
+            self._mode5_quote_trace_inflight = {
+                key: reservation
+                for key, reservation in self._mode5_quote_trace_inflight.items()
+                if key[1] != index_name
+            }
+            self._mode5_quote_trace_dropped = {
+                key for key in self._mode5_quote_trace_dropped if key[1] != index_name
+            }
+            self._mode5_quote_trace_active_generation[index_name] = generation
+
+    def _clear_cached_rbfn_candidate_locked(self, index_name: str, status: str = "CLEARED") -> None:
+        """Invalidate a candidate generation and its process-local age metadata."""
+        if index_name not in self._cached_rbfn_generation:
+            return
+        self._cached_rbfn_generation[index_name] += 1
+        self.cached_rbfn_signals[index_name] = None
+        self._cached_rbfn_candidate_meta[index_name] = None
+        self._replace_mode5_trace_generation_locked(index_name, None)
+
+    def _cache_rbfn_signal_locked(
+        self, index_name: str, signal: CachedRBFNAuctionSignal, epoch_5min: int
+    ) -> None:
+        """Atomically replace the signal and its decision-availability metadata."""
+        self._cached_rbfn_generation[index_name] += 1
+        generation = self._cached_rbfn_generation[index_name]
+        try:
+            session_day = datetime.fromtimestamp(
+                signal.timestamp_ms / 1000.0, tz=ZoneInfo("Asia/Kolkata")
+            ).date()
+            boundary_ms = (epoch_5min + 1) * 300_000
+        except (OverflowError, OSError, TypeError, ValueError):
+            self.cached_rbfn_signals[index_name] = None
+            self._cached_rbfn_candidate_meta[index_name] = None
+            self._replace_mode5_trace_generation_locked(index_name, None)
+            return
+        self.cached_rbfn_signals[index_name] = signal
+        actionable = (
+            signal.is_active
+            and not signal.is_vetoed
+            and signal.action in {"BUY_CALL", "BUY_PUT"}
+        )
+        self._cached_rbfn_candidate_meta[index_name] = CachedRBFNCandidateMetadata(
+            generation=generation,
+            issued_monotonic_ns=time.monotonic_ns(),
+            boundary_timestamp_ms=boundary_ms,
+            session_day=session_day,
+            status="AVAILABLE" if actionable else "SUPERSEDED_BY_ABSTENTION",
+        )
+        self._replace_mode5_trace_generation_locked(index_name, generation if actionable else None)
+
+    def _emit_mode5_quote_suppression(
+        self,
+        index_name: str,
+        instrument_key: str,
+        signal: CachedRBFNAuctionSignal,
+        metadata: CachedRBFNCandidateMetadata,
+        depth: UpstoxLevel5DepthRecord,
+        reason: str,
+        validated_decision_timestamp_ms: int,
+    ) -> bool:
+        """Reserve under state locks, append without them, then reconcile safely."""
+        if reason not in {
+            "MODE5_QUOTE_BEFORE_BAR_BOUNDARY",
+            "MODE5_QUOTE_INGRESS_BEFORE_CANDIDATE_ISSUE",
+        }:
+            return False
+        dedup_key = (
+            metadata.session_day.isoformat(),
+            index_name,
+            metadata.generation,
+            reason,
+        )
+        bar_time = signal.bar_time.strftime("%H:%M:%S") if hasattr(signal.bar_time, "strftime") else str(signal.bar_time)
+        record = {
+            "event_type": "MODE5_QUOTE_SUPPRESSED",
+            "action": "ABSTAIN",
+            "decision": "RETAIN_CANDIDATE",
+            "index_name": index_name,
+            "canonical_instrument": instrument_key,
+            "candidate_generation": metadata.generation,
+            "candidate_action": signal.action,
+            "candidate_setup": signal.setup_reason,
+            "candidate_bar_time": bar_time,
+            "boundary_timestamp_ms": metadata.boundary_timestamp_ms,
+            "issued_monotonic_ns": metadata.issued_monotonic_ns,
+            "quote_exchange_timestamp_ms": depth.exchange_timestamp_ms,
+            "ingress_monotonic_ns": depth.ingress_monotonic_ns,
+            "validated_decision_timestamp_ms": validated_decision_timestamp_ms,
+            "timestamp_ms": validated_decision_timestamp_ms,
+            "reason": reason,
+        }
+        return self._enqueue_mode5_trace_record(
+            record,
+            dedup_key=dedup_key,
+            suppression_record=True,
+            expected_signal=signal,
+            expected_generation=metadata.generation,
+        )
+
+    def _candidate_snapshot_locked(
+        self, index_name: str, ttl_seconds: float = 300.0, now_ns: Optional[int] = None
+    ) -> tuple[Optional[CachedRBFNAuctionSignal], Optional[CachedRBFNCandidateMetadata]]:
+        signal = self.cached_rbfn_signals.get(index_name)
+        metadata = self._cached_rbfn_candidate_meta.get(index_name)
+        if signal is None or metadata is None or metadata.status != "AVAILABLE":
+            return None, None
+        current_ns = time.monotonic_ns() if now_ns is None else now_ns
+        if isinstance(current_ns, bool) or not isinstance(current_ns, int) or current_ns < metadata.issued_monotonic_ns:
+            self._clear_cached_rbfn_candidate_locked(index_name, "INVALID_MONOTONIC_CLOCK")
+            return None, None
+        age_ns = current_ns - metadata.issued_monotonic_ns
+        ttl_ns = int(ttl_seconds * 1_000_000_000)
+        if age_ns > ttl_ns:
+            logger.info("[%s] Expiring Mode5 candidate generation=%s after %.3fs", index_name, metadata.generation, age_ns / 1e9)
+            self._clear_cached_rbfn_candidate_locked(index_name, "EXPIRED")
+            return None, None
+        if not signal.is_active or signal.is_vetoed or signal.action not in {"BUY_CALL", "BUY_PUT"}:
+            return None, None
+        return signal, metadata
+
+    def _option_quote_identity(
+        self,
+        index_name: str,
+        depth: UpstoxLevel5DepthRecord,
+        *,
+        wall_now_ms: Optional[int] = None,
+        monotonic_now_ns: Optional[int] = None,
+    ) -> tuple[bool, str, Optional[date], Optional[str], Optional[tuple[int, int]]]:
+        """Validate option quote source/receipt clocks without mutating advisor state."""
+        timestamp_ms = depth.exchange_timestamp_ms
+        ingress_ns = depth.ingress_monotonic_ns
+        sequence_id = depth.sequence_id
+        if (
+            isinstance(timestamp_ms, bool) or not isinstance(timestamp_ms, int) or timestamp_ms <= 0
+            or isinstance(ingress_ns, bool) or not isinstance(ingress_ns, int) or ingress_ns <= 0
+            or isinstance(sequence_id, bool) or not isinstance(sequence_id, int) or sequence_id <= 0
+        ):
+            return False, "OPTION_DEPTH_INVALID_CLOCK_OR_SEQUENCE", None, None, None
+        try:
+            max_age_sec = float(app_config.MAX_QUOTE_AGE_SEC)
+            max_skew_sec = float(app_config.MAX_CLOCK_SKEW_SEC)
+            if not math.isfinite(max_age_sec) or max_age_sec <= 0 or not math.isfinite(max_skew_sec) or max_skew_sec < 0:
+                return False, "OPTION_DEPTH_INVALID_FRESHNESS_CONFIG", None, None, None
+            current_wall_ms = int(time.time() * 1000) if wall_now_ms is None else wall_now_ms
+            current_monotonic_ns = time.monotonic_ns() if monotonic_now_ns is None else monotonic_now_ns
+            source_age_sec = (current_wall_ms - timestamp_ms) / 1000.0
+            ingress_age_sec = (current_monotonic_ns - ingress_ns) / 1_000_000_000.0
+            if source_age_sec > max_age_sec or source_age_sec < -max_skew_sec:
+                return False, "OPTION_DEPTH_SOURCE_STALE_OR_FUTURE", None, None, None
+            if ingress_age_sec < 0 or ingress_age_sec > max_age_sec:
+                return False, "OPTION_DEPTH_INGRESS_STALE_OR_FUTURE", None, None, None
+            quote_day = datetime.fromtimestamp(timestamp_ms / 1000.0, tz=ZoneInfo("Asia/Kolkata")).date()
+            current_day = datetime.fromtimestamp(current_wall_ms / 1000.0, tz=ZoneInfo("Asia/Kolkata")).date()
+            if quote_day != current_day:
+                return False, "OPTION_DEPTH_WRONG_SESSION", None, None, None
+        except (AttributeError, OverflowError, OSError, TypeError, ValueError):
+            return False, "OPTION_DEPTH_INVALID_CLOCK_OR_FRESHNESS", None, None, None
+        instrument_key = self._canonical_option_instrument_key(index_name, depth.token)
+        if instrument_key is None:
+            return False, "OPTION_DEPTH_INVALID_INSTRUMENT_KEY", quote_day, None, None
+        return True, "OPTION_DEPTH_VALID", quote_day, instrument_key, (timestamp_ms, sequence_id)
+
+    def _record_option_depth_order(
+        self, index_name: str, quote_day: date, instrument_key: str, source_order: tuple[int, int]
+    ) -> bool:
+        """Commit a strictly increasing per-token event watermark under the advisor lock."""
+        with self._lock:
+            known_day = self._rp2_session_dates.get(index_name)
+            if known_day is not None and quote_day < known_day:
+                return False
+            if known_day is not None and quote_day > known_day:
+                self._reset_rp2_state_for_session_locked(index_name, quote_day)
+            elif known_day is None:
+                self._reset_rp2_state_for_session_locked(index_name, quote_day)
+            token_watermarks = self._option_depth_watermarks.setdefault(index_name, {})
+            watermark_days = {row[0] for row in token_watermarks.values()}
+            if watermark_days and quote_day not in watermark_days:
+                token_watermarks.clear()
+            candidate_meta = self._cached_rbfn_candidate_meta.get(index_name)
+            if candidate_meta is not None and quote_day != candidate_meta.session_day:
+                self._clear_cached_rbfn_candidate_locked(index_name, "OPTION_SESSION_ROLLOVER")
+                token_watermarks.clear()
+            previous = token_watermarks.get(instrument_key)
+            current = (source_order[0], source_order[1])
+            if previous is not None and previous[0] == quote_day and current <= (previous[1], previous[2]):
+                return False
+            token_watermarks[instrument_key] = (quote_day, current[0], current[1])
+            return True
+
+    def _candidate_for_option_depth(
+        self, index_name: str, depth: UpstoxLevel5DepthRecord, quote_day: date, instrument_key: str,
+        source_order: tuple[int, int], now_ns: Optional[int] = None,
+        validated_decision_timestamp_ms: Optional[int] = None,
+    ) -> tuple[Optional[CachedRBFNAuctionSignal], Optional[int]]:
+        suppressions: list[tuple[CachedRBFNAuctionSignal, CachedRBFNCandidateMetadata, str]] = []
+        result: tuple[Optional[CachedRBFNAuctionSignal], Optional[int]] = (None, None)
+        with self._lock:
+            signal, metadata = self._candidate_snapshot_locked(index_name, now_ns=now_ns)
+            if signal is None or metadata is None:
+                return result
+            try:
+                depth_day = datetime.fromtimestamp(
+                    depth.exchange_timestamp_ms / 1000.0, tz=ZoneInfo("Asia/Kolkata")
+                ).date()
+            except (OverflowError, OSError, TypeError, ValueError):
+                return result
+            if depth_day != metadata.session_day or quote_day != metadata.session_day:
+                return result
+            if depth.exchange_timestamp_ms < metadata.boundary_timestamp_ms:
+                suppressions.append((signal, metadata, "MODE5_QUOTE_BEFORE_BAR_BOUNDARY"))
+            if depth.ingress_monotonic_ns <= metadata.issued_monotonic_ns:
+                suppressions.append((signal, metadata, "MODE5_QUOTE_INGRESS_BEFORE_CANDIDATE_ISSUE"))
+            if not suppressions and self._option_depth_watermarks.get(index_name, {}).get(instrument_key) == (
+                quote_day, source_order[0], source_order[1]
+            ):
+                result = (signal, metadata.generation)
+        if suppressions:
+            decision_ts_ms = (
+                int(time.time() * 1000)
+                if validated_decision_timestamp_ms is None
+                else validated_decision_timestamp_ms
+            )
+            for signal, metadata, reason in suppressions:
+                self._emit_mode5_quote_suppression(
+                    index_name=index_name,
+                    instrument_key=instrument_key,
+                    signal=signal,
+                    metadata=metadata,
+                    depth=depth,
+                    reason=reason,
+                    validated_decision_timestamp_ms=decision_ts_ms,
+                )
+        return result
+
+    def _final_candidate_authorization_locked(
+        self,
+        index_name: str,
+        generation: int,
+        depth: UpstoxLevel5DepthRecord,
+        quote_day: date,
+        instrument_key: str,
+        source_order: tuple[int, int],
+        now_ns: int,
+        wall_now_ms: Optional[int] = None,
+    ) -> tuple[bool, str]:
+        signal, metadata = self._candidate_snapshot_locked(index_name, now_ns=now_ns)
+        if signal is None or metadata is None or metadata.generation != generation:
+            return False, "MODE5_CANDIDATE_SUPERSEDED_OR_EXPIRED"
+        if (
+            metadata.session_day != quote_day
+            or depth.exchange_timestamp_ms < metadata.boundary_timestamp_ms
+            or depth.ingress_monotonic_ns <= metadata.issued_monotonic_ns
+            or self._option_depth_watermarks.get(index_name, {}).get(instrument_key)
+            != (quote_day, source_order[0], source_order[1])
+        ):
+            return False, "MODE5_QUOTE_NO_LONGER_ELIGIBLE"
+        quote_valid, quote_reason, current_day, current_key, current_order = self._option_quote_identity(
+            index_name, depth, wall_now_ms=wall_now_ms, monotonic_now_ns=now_ns
+        )
+        if not quote_valid or current_day != quote_day or current_key != instrument_key or current_order != source_order:
+            return False, quote_reason
+        return True, "MODE5_CANDIDATE_AUTHORIZED"
+
+    def _consume_cached_rbfn_candidate_locked(self, index_name: str, generation: int, status: str) -> bool:
+        metadata = self._cached_rbfn_candidate_meta.get(index_name)
+        if metadata is None or metadata.generation != generation:
+            return False
+        self.cached_rbfn_signals[index_name] = None
+        self._cached_rbfn_candidate_meta[index_name] = CachedRBFNCandidateMetadata(
+            generation=metadata.generation,
+            issued_monotonic_ns=metadata.issued_monotonic_ns,
+            boundary_timestamp_ms=metadata.boundary_timestamp_ms,
+            session_day=metadata.session_day,
+            status=status,
+        )
+        self._replace_mode5_trace_generation_locked(index_name, None)
+        return True
+
     def get_valid_cached_rbfn_signal(
         self,
         index_name: str,
         current_timestamp_ms: Optional[int] = None,
         ttl_seconds: float = 300.0,
     ) -> Optional[CachedRBFNAuctionSignal]:
-        """Returns valid cached RBFN signal if within TTL; evicts and returns None if expired.
+        """Return an unconsumed candidate while its process-local monotonic TTL remains valid.
 
-        ARCH-SENTINEL-OPTIONMATE-HARDENING-001 & ARCH-SENTINEL-HARDENING-002:
-        - Thread-safe under self._lock.
-        - Evaluates age = (current_timestamp_ms - sig.timestamp_ms) / 1000.0.
-        - If current_timestamp_ms is None or <= 0, uses time.time() * 1000.
-        - Bidirectional TTL Guard: Evicts signal if age_sec > ttl_seconds or age_sec < -5.0.
-        - Otherwise returns the cached signal.
+        `current_timestamp_ms` remains for API compatibility; source event time is no
+        longer used to measure candidate lifetime.
         """
         with self._lock:
-            sig = self.cached_rbfn_signals.get(index_name)
-            if sig is None:
-                return None
-
-            now_ms = current_timestamp_ms if (current_timestamp_ms is not None and current_timestamp_ms > 0) else int(time.time() * 1000)
-            sig_ts_ms = getattr(sig, "timestamp_ms", 0)
-            if sig_ts_ms <= 0:
-                logger.info(
-                    f"[{index_name}] Evicting zero/invalid timestamp cached RBFN signal ({sig.setup_reason}) (ts={sig_ts_ms})"
-                )
-                self.cached_rbfn_signals[index_name] = None
-                return None
-            else:
-                age_sec = (now_ms - sig_ts_ms) / 1000.0
-                if age_sec > ttl_seconds or age_sec < -5.0:
-                    logger.info(
-                        f"[{index_name}] Evicting expired/future cached RBFN signal ({sig.setup_reason}) "
-                        f"with age {age_sec:.1f}s (TTL={ttl_seconds}s, bound=[-5.0, {ttl_seconds}])"
-                    )
-                    self.cached_rbfn_signals[index_name] = None
-                    return None
-            return sig
+            signal, _ = self._candidate_snapshot_locked(index_name, ttl_seconds=ttl_seconds)
+            return signal
 
     def clamp_atr(self, index_name: str, raw_atr: float) -> float:
         """Clamps ATR to index-specific floor (NIFTY: 25.0, BANKNIFTY: 100.0, SENSEX: 150.0)."""
@@ -1404,7 +2101,8 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                             if completed_epoch not in reconciled_epochs:
                                 reconciled_epochs.append(completed_epoch)
 
-            return reconciled_epochs
+            result = reconciled_epochs
+        return result
 
     def on_depth(self, depth: UpstoxLevel5DepthRecord) -> None:
         """Handle incoming Level-5 depth snapshot."""
@@ -1915,7 +2613,8 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         self.session_open_prices[index_name] = 0.0
         self.bars_5m_history[index_name].clear()
         self.evaluated_5m_epochs[index_name].clear()
-        self.cached_rbfn_signals[index_name] = None
+        self._clear_cached_rbfn_candidate_locked(index_name, "SESSION_ROLLOVER")
+        self._option_depth_watermarks.setdefault(index_name, {}).clear()
         self._last_completed_5m_epoch[index_name] = -1
         self._last_5m_timestamp_ms[index_name] = 0
         self._last_spot_timestamp_ms[index_name] = 0
@@ -1965,10 +2664,11 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         epoch_5min: int,
     ) -> Optional[CachedRBFNAuctionSignal]:
         with self._lock:
-            return self._on_5m_bar_close_locked(
+            result = self._on_5m_bar_close_locked(
                 index_name, bar_open, bar_high, bar_low, bar_close, bar_volume,
                 bar_time, timestamp_ms, epoch_5min,
             )
+        return result
 
     def _on_5m_bar_close_locked(
         self,
@@ -1997,29 +2697,45 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         """
         if (not isinstance(timestamp_ms, int) or isinstance(timestamp_ms, bool) or timestamp_ms <= 0
                 or not isinstance(epoch_5min, int) or isinstance(epoch_5min, bool) or epoch_5min < 0):
+            if index_name in self._cached_rbfn_candidate_meta:
+                self._clear_cached_rbfn_candidate_locked(index_name, "INVALID_COMPLETED_BAR")
             return None
         if self._source_timestamp_exceeds_future_skew(timestamp_ms):
+            if index_name in self._cached_rbfn_candidate_meta:
+                self._clear_cached_rbfn_candidate_locked(index_name, "INVALID_COMPLETED_BAR_CLOCK")
             return None
         if epoch_5min != timestamp_ms // 300000:
+            if index_name in self._cached_rbfn_candidate_meta:
+                self._clear_cached_rbfn_candidate_locked(index_name, "INVALID_COMPLETED_BAR_EPOCH")
             return None
         try:
             expected_bar_time = datetime.fromtimestamp(
                 (epoch_5min + 1) * 300, tz=ZoneInfo("Asia/Kolkata")
             ).time()
         except (OverflowError, OSError, ValueError):
+            if index_name in self._cached_rbfn_candidate_meta:
+                self._clear_cached_rbfn_candidate_locked(index_name, "INVALID_COMPLETED_BAR_TIME")
             return None
         if not isinstance(bar_time, dt_time) or bar_time != expected_bar_time:
+            if index_name in self._cached_rbfn_candidate_meta:
+                self._clear_cached_rbfn_candidate_locked(index_name, "INVALID_COMPLETED_BAR_TIME")
             return None
         previous_ts = self._last_5m_timestamp_ms.get(index_name, 0)
         previous_epoch = self._last_completed_5m_epoch.get(index_name, -1)
         if timestamp_ms <= previous_ts or epoch_5min <= previous_epoch:
+            if index_name in self._cached_rbfn_candidate_meta:
+                self._clear_cached_rbfn_candidate_locked(index_name, "OUT_OF_ORDER_COMPLETED_BAR")
             return None
         try:
             session_day = datetime.fromtimestamp(timestamp_ms / 1000.0, tz=ZoneInfo("Asia/Kolkata")).date()
         except (OverflowError, OSError, ValueError):
+            if index_name in self._cached_rbfn_candidate_meta:
+                self._clear_cached_rbfn_candidate_locked(index_name, "INVALID_COMPLETED_BAR_SESSION")
             return None
         prior_day = self._rp2_session_dates.get(index_name)
         if prior_day is not None and session_day < prior_day:
+            if index_name in self._cached_rbfn_candidate_meta:
+                self._clear_cached_rbfn_candidate_locked(index_name, "PRIOR_SESSION_COMPLETED_BAR")
             return None
         self._reset_rp2_state_for_session(index_name, session_day)
         self._last_5m_timestamp_ms[index_name] = timestamp_ms
@@ -2045,7 +2761,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 is_vetoed=True,
                 veto_reason="GROUND_TRUTH_LEVELS_REQUIRED",
             )
-            self.cached_rbfn_signals[index_name] = signal
+            self._cache_rbfn_signal_locked(index_name, signal, epoch_5min)
             return signal
         or_valid, or_reason, or_details = self._validate_mode5_or_pair(index_name, timestamp_ms)
         if not or_valid:
@@ -2064,9 +2780,9 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 is_vetoed=True,
                 veto_reason=or_reason,
             )
-            self.cached_rbfn_signals[index_name] = signal
+            self._cache_rbfn_signal_locked(index_name, signal, epoch_5min)
             self.record_veto("MODE5_OR", or_reason)
-            self.log_decision_trace(
+            self._defer_mode5_decision_trace_locked(
                 index_name=index_name,
                 bar_time=bar_time,
                 action="ABSTAIN",
@@ -2115,7 +2831,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 is_vetoed=True,
                 veto_reason="UNSEEDED_PRIOR_DAY_LEVELS",
             )
-            self.cached_rbfn_signals[index_name] = signal
+            self._cache_rbfn_signal_locked(index_name, signal, epoch_5min)
             return signal
 
         macro_daily_atr = float(pd_levels.atr_20)
@@ -2625,7 +3341,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         )
 
         with self._lock:
-            self.cached_rbfn_signals[index_name] = signal
+            self._cache_rbfn_signal_locked(index_name, signal, epoch_5min)
 
             # -------------------------------------------------------------
             # Step 1: Dynamic Per-Index Gear Switching with 3-Bar Hysteresis Lock
@@ -2668,7 +3384,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     self.gear_trend_bar_counters[index_name] = 0
 
         if signal is not None:
-            self.log_decision_trace(
+            self._defer_mode5_decision_trace_locked(
                 index_name=index_name,
                 bar_time=bar_time,
                 action=signal.action,
@@ -2701,6 +3417,16 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 "UNKNOWN_OPTION_UNDERLYING_SYMBOL",
                 "OPTION_DEPTH_BLOCKED_UNKNOWN_OR_UNRECOGNIZED_DISPLAY_SYMBOL",
             )
+            return
+        quote_valid, quote_reason, quote_day, option_instrument_key, source_order = self._option_quote_identity(
+            index_name, depth
+        )
+        if not quote_valid or quote_day is None or option_instrument_key is None or source_order is None:
+            self.record_veto("OPTION_DEPTH_TIMESTAMP", quote_reason)
+            return
+        validated_decision_timestamp_ms = int(time.time() * 1000)
+        if not self._record_option_depth_order(index_name, quote_day, option_instrument_key, source_order):
+            self.record_veto("OPTION_DEPTH_ORDER", "OPTION_DEPTH_DUPLICATE_DECREASING_OR_PRIOR_SESSION")
             return
         sym = depth.symbol.upper()
         if index_name == "SENSEX":
@@ -2806,10 +3532,14 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         if now_time < session_pre_open_cutoff:
             return
 
-        rbfn_sig = self.get_valid_cached_rbfn_signal(
+        mode5_generation: Optional[int] = None
+        rbfn_sig, mode5_generation = self._candidate_for_option_depth(
             index_name=index_name,
-            current_timestamp_ms=depth.exchange_timestamp_ms,
-            ttl_seconds=300.0,
+            depth=depth,
+            quote_day=quote_day,
+            instrument_key=option_instrument_key,
+            source_order=source_order,
+            validated_decision_timestamp_ms=validated_decision_timestamp_ms,
         )
         has_mode_5_signal = (
             rbfn_sig is not None
@@ -2831,6 +3561,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     reason=or_reason,
                     details={"signal_timestamp_ms": rbfn_sig.timestamp_ms, **or_details},
                     timestamp_ms=depth.exchange_timestamp_ms,
+                    candidate_generation=mode5_generation,
                 )
                 return
 
@@ -3560,9 +4291,23 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                             entry_or_valid = True
                             entry_or_reason = "MODE5_OR_VALID"
                             if strategy_name == "OPTIONMATE_RBFN_AUCTION":
-                                entry_or_valid, entry_or_reason, _ = self._validate_mode5_or_pair(
-                                    index_name, depth.exchange_timestamp_ms
-                                )
+                                if mode5_generation is None:
+                                    entry_or_valid = False
+                                    entry_or_reason = "MODE5_CANDIDATE_METADATA_MISSING"
+                                else:
+                                    entry_or_valid, entry_or_reason = self._final_candidate_authorization_locked(
+                                        index_name=index_name,
+                                        generation=mode5_generation,
+                                        depth=depth,
+                                        quote_day=quote_day,
+                                        instrument_key=option_instrument_key,
+                                        source_order=source_order,
+                                        now_ns=time.monotonic_ns(),
+                                    )
+                                if entry_or_valid:
+                                    entry_or_valid, entry_or_reason, _ = self._validate_mode5_or_pair(
+                                        index_name, depth.exchange_timestamp_ms
+                                    )
                             if entry_or_valid:
                                 exec_reason = f"[{shadow_tier}] {setup_reason}"
                                 if strategy_name == "OPTIONMATE_RBFN_AUCTION" and rbfn_sig and rbfn_sig.sustainable_anchor_price > 0:
@@ -3574,57 +4319,106 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                                     if broker_instrument_key is None:
                                         dispatcher_accepted = False
                                         entered = False
+                                        if strategy_name == "OPTIONMATE_RBFN_AUCTION" and mode5_generation is not None:
+                                            self._consume_cached_rbfn_candidate_locked(
+                                                index_name, mode5_generation, "TERMINAL_INVALID_BROKER_KEY"
+                                            )
                                         status_flag = "VETO_BROKER_KEY"
                                         advisory = "WAIT (BROKER_KEY_INVALID)"
                                         self.record_veto("BROKER_INSTRUMENT_KEY", "ENTRY_DISPATCH_BLOCKED_MISSING_OR_MALFORMED_KEY")
-                                        self.log_decision_trace(
+                                        self._defer_mode5_decision_trace_locked(
                                             index_name=index_name,
                                             bar_time=now_time,
                                             action="ABSTAIN",
                                             reason="ENTRY_DISPATCH_BLOCKED_MISSING_OR_MALFORMED_KEY",
                                             details={"authorization_recheck": True},
                                             timestamp_ms=depth.exchange_timestamp_ms,
+                                            candidate_generation=mode5_generation,
                                         )
                                     else:
-                                        res = self.automated_dispatcher.reserve_entry_intent(
-                                            index_name=index_name,
-                                            symbol=broker_instrument_key,
-                                            option_type=required_option_type,
-                                            entry_price=fill_price,
-                                            target_pts=target_pts,
-                                            sl_pts=sl_pts,
-                                            setup_reason=exec_reason,
-                                            qty=int(total_qty),
-                                            intent_id=str(pos_id),
-                                        )
-                                        if not res.accepted:
+                                        try:
+                                            res = self.automated_dispatcher.reserve_entry_intent(
+                                                index_name=index_name,
+                                                symbol=broker_instrument_key,
+                                                option_type=required_option_type,
+                                                entry_price=fill_price,
+                                                target_pts=target_pts,
+                                                sl_pts=sl_pts,
+                                                setup_reason=exec_reason,
+                                                qty=int(total_qty),
+                                                intent_id=str(pos_id),
+                                            )
+                                        except Exception as exc:
                                             dispatcher_accepted = False
                                             entered = False
-                                            status_flag = f"VETO_{res.action}"
-                                            advisory = f"WAIT ({res.action})"
-                                            self.record_veto(res.action, res.reason)
-                                            self.log_decision_trace(
+                                            if strategy_name == "OPTIONMATE_RBFN_AUCTION" and mode5_generation is not None:
+                                                self._consume_cached_rbfn_candidate_locked(
+                                                    index_name, mode5_generation, "RESERVATION_EXCEPTION_UNKNOWN"
+                                                )
+                                            logger.exception("[%s] Entry reservation raised; candidate quarantined", index_name)
+                                            status_flag = "VETO_RESERVATION_UNKNOWN"
+                                            advisory = "WAIT (RESERVATION_OUTCOME_UNKNOWN)"
+                                            self.record_veto("ENTRY_RESERVATION", "ENTRY_RESERVATION_EXCEPTION_UNKNOWN")
+                                            self._defer_mode5_decision_trace_locked(
                                                 index_name=index_name,
                                                 bar_time=now_time,
                                                 action="ABSTAIN",
-                                                reason=res.reason,
-                                                details={"veto_action": res.action, "routed_mode": res.routed_mode},
+                                                reason="ENTRY_RESERVATION_EXCEPTION_UNKNOWN",
+                                                details={"exception_type": type(exc).__name__},
                                                 timestamp_ms=depth.exchange_timestamp_ms,
+                                                candidate_generation=mode5_generation,
                                             )
                                         else:
-                                            entry_dispatch_request = {
-                                                "index_name": index_name,
-                                                "symbol": broker_instrument_key,
-                                                "option_type": required_option_type,
-                                                "entry_price": fill_price,
-                                                "target_pts": target_pts,
-                                                "sl_pts": sl_pts,
-                                                "setup_reason": exec_reason,
-                                                "qty": int(total_qty),
-                                                "intent_id": str(pos_id),
-                                            }
+                                            if not res.accepted:
+                                                dispatcher_accepted = False
+                                                entered = False
+                                                if strategy_name == "OPTIONMATE_RBFN_AUCTION" and mode5_generation is not None:
+                                                    self._consume_cached_rbfn_candidate_locked(
+                                                        index_name, mode5_generation,
+                                                        f"RESERVATION_{res.action or 'UNKNOWN'}",
+                                                    )
+                                                status_flag = f"VETO_{res.action}"
+                                                advisory = f"WAIT ({res.action})"
+                                                self.record_veto(res.action, res.reason)
+                                                self._defer_mode5_decision_trace_locked(
+                                                    index_name=index_name,
+                                                    bar_time=now_time,
+                                                    action="ABSTAIN",
+                                                    reason=res.reason,
+                                                    details={"veto_action": res.action, "routed_mode": res.routed_mode},
+                                                    timestamp_ms=depth.exchange_timestamp_ms,
+                                                    candidate_generation=mode5_generation,
+                                                )
+                                            else:
+                                                if strategy_name == "OPTIONMATE_RBFN_AUCTION" and mode5_generation is not None:
+                                                    # Quarantine immediately after accepted reservation, before the
+                                                    # out-of-lock dispatcher callback can observe another quote.
+                                                    self._consume_cached_rbfn_candidate_locked(
+                                                        index_name, mode5_generation, "RESERVATION_ACCEPTED"
+                                                    )
+                                                entry_dispatch_request = {
+                                                    "index_name": index_name,
+                                                    "symbol": broker_instrument_key,
+                                                    "option_type": required_option_type,
+                                                    "entry_price": fill_price,
+                                                    "target_pts": target_pts,
+                                                    "sl_pts": sl_pts,
+                                                    "setup_reason": exec_reason,
+                                                    "qty": int(total_qty),
+                                                    "intent_id": str(pos_id),
+                                                }
 
                                 if dispatcher_accepted:
+                                    if (
+                                        strategy_name == "OPTIONMATE_RBFN_AUCTION"
+                                        and mode5_generation is not None
+                                        and self.automated_dispatcher is None
+                                    ):
+                                        # Local APM authorization is the one-shot point when no dispatcher
+                                        # reservation is configured.
+                                        self._consume_cached_rbfn_candidate_locked(
+                                            index_name, mode5_generation, "LOCAL_APM_AUTHORIZED"
+                                        )
                                     entered = idx_apm.arm_and_enter(
                                         position_id=pos_id,
                                         direction=required_option_type,
@@ -3652,20 +4446,23 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                                 status_flag = "VETO_MODE5_OR"
                                 advisory = "WAIT (MODE5_OR_UNVERIFIED)"
                                 self.record_veto("MODE5_OR", entry_or_reason)
-                                self.log_decision_trace(
+                                self._defer_mode5_decision_trace_locked(
                                     index_name=index_name,
                                     bar_time=now_time,
                                     action="ABSTAIN",
                                     reason=entry_or_reason,
                                     details={"authorization_recheck": True},
                                     timestamp_ms=depth.exchange_timestamp_ms,
+                                    candidate_generation=mode5_generation,
                                 )
                             if entered:
                                 self.daily_trade_counters[index_name] = curr_trades + 1
                                 idx_apm.daily_trade_count = self.daily_trade_counters[index_name]
                                 idx_apm._persist_wal_atomic(force_sync=True)
-                                if rbfn_sig is not None:
-                                    self.cached_rbfn_signals[index_name] = None
+                                if rbfn_sig is not None and mode5_generation is not None:
+                                    self._consume_cached_rbfn_candidate_locked(
+                                        index_name, mode5_generation, "ENTRY_SUCCEEDED"
+                                    )
                                 self.journal.record_execution(
                                     position_id=pos_id,
                                     index_name=index_name,
@@ -3696,9 +4493,9 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                                     f"Fill: ₹{fill_price:.2f} ({fill_mode}, Saved ₹{savings:.2f}) | "
                                     f"SL: {sl_pts:.1f}pts | TP: {target_pts:.1f}pts"
                                 )
-                    if entry_dispatch_request is not None:
-                        # Do not call the dispatcher while holding the advisor state lock.
-                        self.automated_dispatcher.on_apm_entry(**entry_dispatch_request)
+                    # Reservation/candidate consumption happened under the state lock;
+                    # the bounded writer persists telemetry independently.
+                    self._dispatch_reserved_entry_then_flush_traces(entry_dispatch_request)
         else:
             if is_vetoed:
                 status_flag = "HALTED_SPREAD_VIOLATION"
