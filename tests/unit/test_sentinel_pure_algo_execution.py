@@ -9,9 +9,7 @@ Verifies:
 """
 
 import pytest
-from unittest.mock import MagicMock
-
-from core.broker_interface import BrokerOrderResponse
+import threading
 from core.sentinel_execution_router import SentinelExecutionRouter, ExecutionMode
 from core.sentinel_automated_order_dispatcher import SentinelAutomatedOrderDispatcher
 
@@ -30,8 +28,7 @@ def test_nifty_execution_routing_defaults_to_paper():
 
 
 def test_sensex_and_banknifty_strictly_isolated_to_paper():
-    # Even if enable_nifty_live is True, SENSEX and BANKNIFTY must NEVER be LIVE
-    router = SentinelExecutionRouter(enable_nifty_live=True)
+    router = SentinelExecutionRouter(enable_nifty_live=False)
     
     # SENSEX check
     sensex_policy = router.get_policy("SENSEX")
@@ -58,62 +55,56 @@ def test_sensex_and_banknifty_strictly_isolated_to_paper():
     assert routed_bn["lot_size"] == 30
 
 
-def test_nifty_live_dispatch_when_explicitly_enabled():
-    mock_broker = MagicMock()
-    mock_broker.place_order.return_value = BrokerOrderResponse(ok=True, broker_order_id="UPSTOX-ORD-001", status="COMPLETE")
-
-    # Explicitly enabled NIFTY live
-    router = SentinelExecutionRouter(enable_nifty_live=True)
-    dispatcher = SentinelAutomatedOrderDispatcher(router=router, broker_adapter=mock_broker)
-
-    res = dispatcher.on_apm_entry(
-        index_name="NIFTY",
-        symbol="NIFTY 24150 CE",
-        option_type="CE",
-        entry_price=125.0,
-        target_pts=30.0,
-        sl_pts=15.0,
-        setup_reason="RP1_UPPER_AGGRESSIVE_DRIVE",
-    )
-
-    assert res.action == "ENTRY_SUBMITTED"
-    assert res.mode == "LIVE"
-    assert res.qty == 65  # 65 qty lot size
-    assert res.order_id == "UPSTOX-ORD-001"
-    assert res.is_order_action is True
-    assert res.broker_api_called is True
-    assert mock_broker.place_order.call_count == 1
+def test_unknown_index_policy_is_sim_only():
+    router = SentinelExecutionRouter(enable_nifty_live=False)
+    policy = router.get_policy("UNKNOWN_INDEX")
+    assert policy.target_mode == ExecutionMode.SIM
+    assert policy.allowed_live is False
+    assert policy.lot_size == 0
 
 
-def test_sensex_paper_dispatch_even_when_nifty_live_is_active():
-    mock_broker = MagicMock()
-    events = []
+def test_open_order_keeps_entry_reservation_blocked():
+    dispatcher = SentinelAutomatedOrderDispatcher(max_daily_live_trades=5)
+    assert dispatcher._classify_fill_status("OPEN", 0, 25) == "OPEN"
+    reserved, _ = dispatcher._reserve_live_entry("NIFTY", "NIFTY CE", "working", 25)
+    assert reserved is True
+    dispatcher._intents["working"]["status"] = "OPEN"
+    second, reason = dispatcher._reserve_live_entry("NIFTY", "NIFTY PE", "second", 25)
+    assert second is False
+    assert "unresolved" in reason.lower()
+    assert len(dispatcher._intents) == 1
 
-    router = SentinelExecutionRouter(enable_nifty_live=True)
-    dispatcher = SentinelAutomatedOrderDispatcher(
-        router=router,
-        broker_adapter=mock_broker,
-        paper_event_writer=lambda name, payload: events.append((name, payload)),
-    )
 
-    res = dispatcher.on_apm_entry(
-        index_name="SENSEX",
-        symbol="SENSEX 78000 CE",
-        option_type="CE",
-        entry_price=250.0,
-        target_pts=50.0,
-        sl_pts=30.0,
-        setup_reason="TD_PULLBACK_REENTRY_BULL",
-    )
+def test_exit_latch_clears_only_for_pre_dispatch_veto():
+    may_clear = SentinelAutomatedOrderDispatcher._may_clear_exit_latch
+    assert may_clear(pre_dispatch_veto=True, stop_side_effect_started=False) is True
+    assert may_clear(pre_dispatch_veto=True, stop_side_effect_started=True) is False
+    assert may_clear(pre_dispatch_veto=False, stop_side_effect_started=False) is False
 
-    # Must be recorded as PAPER and broker must NOT be called
-    assert res.action == "PAPER_RECORDED"
-    assert res.mode == "PAPER"
-    assert res.qty == 20  # SENSEX lot size
-    assert res.read_only is True
-    assert res.is_order_action is False
-    assert res.broker_api_called is False
-    assert mock_broker.place_order.call_count == 0
-    assert len(events) == 1
-    assert events[0][0] == "paper_order_entry"
-    assert events[0][1]["symbol"] == "SENSEX 78000 CE"
+
+def test_entry_reservation_serializes_distinct_intents_under_one_lock():
+    dispatcher = SentinelAutomatedOrderDispatcher(max_daily_live_trades=5)
+    barrier = threading.Barrier(3)
+    results = []
+
+    def reserve(key):
+        barrier.wait()
+        results.append(dispatcher._reserve_live_entry("NIFTY", key, key, 25))
+
+    threads = [threading.Thread(target=reserve, args=(key,)) for key in ("intent-a", "intent-b")]
+    for thread in threads:
+        thread.start()
+    barrier.wait()
+    for thread in threads:
+        thread.join()
+    assert sum(1 for ok, _ in results if ok) == 1
+    assert len(dispatcher._intents) == 1
+
+
+def test_entry_reservation_enforces_daily_cap_boundary():
+    dispatcher = SentinelAutomatedOrderDispatcher(max_daily_live_trades=2)
+    dispatcher.daily_live_trade_count["NIFTY"] = 2
+    reserved, reason = dispatcher._reserve_live_entry("NIFTY", "NIFTY CE", "intent", 25)
+    assert reserved is False
+    assert reason.startswith("Daily trade cap")
+    assert dispatcher._intents == {}

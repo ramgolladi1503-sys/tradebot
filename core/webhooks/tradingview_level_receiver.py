@@ -13,10 +13,13 @@ Safety Invariants:
 import hmac
 import hashlib
 import json
+import math
 import os
 import re
+import threading
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
 
@@ -43,11 +46,17 @@ class OptionMateLevelData:
     date: str
     spot_open: Optional[float] = None
     updated_at: Optional[str] = None
+    sequence: Optional[int] = None
 
     def validate_hierarchy(self) -> Tuple[bool, str]:
         """Validates structural price level hierarchy:
         rp2_lower < rp1_lower < trend_decider < rp1_upper < rp2_upper
         """
+        numeric_values = (self.trend_decider, self.rp1_upper, self.rp2_upper, self.rp1_lower, self.rp2_lower)
+        if not all(math.isfinite(value) for value in numeric_values):
+            return False, "All level prices must be finite numbers"
+        if self.spot_open is not None and not math.isfinite(self.spot_open):
+            return False, "spot_open must be a finite number"
         if not (self.rp2_lower < self.rp1_lower):
             return False, f"rp2_lower ({self.rp2_lower}) must be < rp1_lower ({self.rp1_lower})"
         if not (self.rp1_lower < self.trend_decider):
@@ -81,10 +90,13 @@ class TradingViewLevelReceiver:
         secret_key: Optional[str] = None,
         passphrase: Optional[str] = None,
         storage_path: Optional[Union[str, Path]] = None,
+        require_auth: bool = True,
     ):
         self.secret_key = secret_key
         self.passphrase = passphrase
         self.storage_path = Path(storage_path) if storage_path else DEFAULT_RUNTIME_PATH
+        self.require_auth = require_auth
+        self._persist_lock = threading.RLock()
 
     def verify_hmac(self, payload_bytes: bytes, signature_header: Optional[str]) -> bool:
         """Verifies HMAC SHA256 signature if secret_key is configured."""
@@ -126,7 +138,7 @@ class TradingViewLevelReceiver:
     ) -> Tuple[bool, str]:
         """Vector 13: Validates timestamp freshness (abs(now - timestamp) <= 60s) if timestamp present."""
         if timestamp_val is None:
-            return True, "OK"
+            return False, "Missing required timestamp"
         try:
             ts_float: float
             if isinstance(timestamp_val, (int, float)):
@@ -147,6 +159,8 @@ class TradingViewLevelReceiver:
             else:
                 return False, f"Unsupported timestamp format: {type(timestamp_val)}"
 
+            if not math.isfinite(ts_float) or ts_float <= 0:
+                return False, "Timestamp must be finite and positive"
             now_ts = datetime.now(timezone.utc).timestamp()
             drift = abs(now_ts - ts_float)
             if drift > max_drift_seconds:
@@ -157,7 +171,7 @@ class TradingViewLevelReceiver:
 
     def validate_date(self, payload_date: Optional[str], session_date: Optional[str] = None) -> Tuple[bool, str]:
         """Ensures payload date matches current session date (YYYY-MM-DD)."""
-        expected_date = session_date or datetime.now().strftime("%Y-%m-%d")
+        expected_date = session_date or datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d")
         if not payload_date:
             return False, "Missing date in level payload"
         if payload_date != expected_date:
@@ -184,12 +198,28 @@ class TradingViewLevelReceiver:
         else:
             raw_bytes = json.dumps(raw_body).encode("utf-8")
 
+        # Auth Enforcement (ARCH-SENTINEL-HARDENING-003)
+        if self.require_auth and not self.secret_key and not self.passphrase:
+            return {
+                "success": False,
+                "error": "AUTHENTICATION_REQUIRED: No webhook secret or passphrase configured",
+                "persisted": False,
+                "read_only": True,
+                "is_order_action": False,
+                "broker_api_called": False,
+                "allowed_for_live_execution": False,
+            }
+
         # 1. HMAC Verification
         if not self.verify_hmac(raw_bytes, signature_header):
             return {
                 "success": False,
                 "error": "AUTHENTICATION_FAILED: Invalid HMAC signature",
                 "persisted": False,
+                "read_only": True,
+                "is_order_action": False,
+                "broker_api_called": False,
+                "allowed_for_live_execution": False,
             }
 
         try:
@@ -199,6 +229,10 @@ class TradingViewLevelReceiver:
                 "success": False,
                 "error": f"INVALID_JSON: {e}",
                 "persisted": False,
+                "read_only": True,
+                "is_order_action": False,
+                "broker_api_called": False,
+                "allowed_for_live_execution": False,
             }
 
         # 2. Passphrase Verification
@@ -208,15 +242,30 @@ class TradingViewLevelReceiver:
                 "success": False,
                 "error": "AUTHENTICATION_FAILED: Invalid passphrase",
                 "persisted": False,
+                "read_only": True,
+                "is_order_action": False,
+                "broker_api_called": False,
+                "allowed_for_live_execution": False,
             }
 
-        expected_date = session_date or datetime.now().strftime("%Y-%m-%d")
+        expected_date = session_date or datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d")
 
         # Format could be single index {"index": "NIFTY", ...} or multi-index {"NIFTY": {...}, "SENSEX": {...}}
         levels_to_save: Dict[str, Dict[str, Any]] = {}
 
         if "index" in payload or "index_name" in payload or "trend_decider" in payload:
-            idx_name = str(payload.get("index") or payload.get("index_name") or "NIFTY").upper()
+            raw_index = payload.get("index") or payload.get("index_name")
+            idx_name = str(raw_index or "").upper().strip()
+            if idx_name not in SUPPORTED_INDICES:
+                return {
+                    "success": False,
+                    "error": "UNKNOWN_OR_MISSING_INDEX: Explicit supported index required",
+                    "persisted": False,
+                    "read_only": True,
+                    "is_order_action": False,
+                    "broker_api_called": False,
+                    "allowed_for_live_execution": False,
+                }
             indices_payload = {idx_name: payload}
         else:
             # Multi-index or root dict containing indices
@@ -230,13 +279,17 @@ class TradingViewLevelReceiver:
                 "success": False,
                 "error": "NO_VALID_INDEX_DATA: No recognised index data found in payload",
                 "persisted": False,
+                "read_only": True,
+                "is_order_action": False,
+                "broker_api_called": False,
+                "allowed_for_live_execution": False,
             }
 
         validated_levels: Dict[str, OptionMateLevelData] = {}
 
         for idx_name, data in indices_payload.items():
             # Vector 13: Timestamp freshness / replay check
-            ts_val = data.get("timestamp") or payload.get("timestamp")
+            ts_val = data.get("timestamp") if data.get("timestamp") is not None else payload.get("timestamp")
             ok_ts, err_ts = self.validate_timestamp_freshness(ts_val)
             if not ok_ts:
                 return {
@@ -245,7 +298,26 @@ class TradingViewLevelReceiver:
                     "persisted": False,
                 }
 
-            date_val = data.get("date") or expected_date
+            sequence_val = data.get("sequence") if data.get("sequence") is not None else payload.get("sequence")
+            try:
+                sequence_number = float(sequence_val)
+                if isinstance(sequence_val, bool) or not math.isfinite(sequence_number) or not sequence_number.is_integer():
+                    raise ValueError("sequence must be a positive integer")
+                sequence = int(sequence_number)
+                if sequence <= 0:
+                    raise ValueError("sequence must be a positive integer")
+            except (TypeError, ValueError, OverflowError):
+                return {
+                    "success": False,
+                    "error": f"SEQUENCE_VALIDATION_FAILED [{idx_name}]: Missing or invalid positive sequence",
+                    "persisted": False,
+                    "read_only": True,
+                    "is_order_action": False,
+                    "broker_api_called": False,
+                    "allowed_for_live_execution": False,
+                }
+
+            date_val = data.get("date") or payload.get("date")
             ok_date, err_date = self.validate_date(date_val, expected_date)
             if not ok_date:
                 return {
@@ -265,6 +337,7 @@ class TradingViewLevelReceiver:
                     date=date_val,
                     spot_open=float(data.get("spot_open", data["trend_decider"])) if data.get("spot_open") is not None else None,
                     updated_at=datetime.now(timezone.utc).isoformat(),
+                    sequence=sequence,
                 )
             except (KeyError, ValueError, TypeError) as e:
                 return {
@@ -293,7 +366,18 @@ class TradingViewLevelReceiver:
             validated_levels[idx_name] = level_obj
 
         # 4. Atomic File Persistence
-        persisted_file = self.atomic_persist(validated_levels)
+        try:
+            persisted_file = self.atomic_persist(validated_levels)
+        except ValueError as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "persisted": False,
+                "read_only": True,
+                "is_order_action": False,
+                "broker_api_called": False,
+                "allowed_for_live_execution": False,
+            }
 
         return {
             "success": True,
@@ -308,24 +392,33 @@ class TradingViewLevelReceiver:
 
     def atomic_persist(self, validated_levels: Dict[str, OptionMateLevelData]) -> Path:
         """Atomically persists levels to storage_path (.tmp -> os.replace)."""
-        self.storage_path.parent.mkdir(parents=True, exist_ok=True)
+        with self._persist_lock:
+            self.storage_path.parent.mkdir(parents=True, exist_ok=True)
 
-        existing: Dict[str, Any] = {}
-        if self.storage_path.exists():
-            try:
-                with open(self.storage_path, "r", encoding="utf-8") as f:
-                    existing = json.load(f)
-            except Exception:
-                existing = {}
+            existing: Dict[str, Any] = {}
+            if self.storage_path.exists():
+                try:
+                    with open(self.storage_path, "r", encoding="utf-8") as f:
+                        existing = json.load(f)
+                except Exception as exc:
+                    raise ValueError("Existing level state is unreadable; refusing overwrite") from exc
 
-        for idx_name, lvl in validated_levels.items():
-            existing[idx_name] = asdict(lvl)
+            for idx_name, lvl in validated_levels.items():
+                old = existing.get(idx_name) or {}
+                if old.get("date") == lvl.date:
+                    try:
+                        old_sequence = int(old.get("sequence", 0))
+                    except (TypeError, ValueError):
+                        raise ValueError(f"Existing sequence is invalid for {idx_name}; refusing overwrite")
+                    if lvl.sequence is None or lvl.sequence <= old_sequence:
+                        raise ValueError(f"Out-of-order or duplicate sequence for {idx_name}; refusing overwrite")
+                existing[idx_name] = asdict(lvl)
 
-        tmp_path = self.storage_path.with_suffix(".tmp")
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(existing, f, indent=2)
-            f.flush()
-            os.fsync(f.fileno())
+            tmp_path = self.storage_path.with_suffix(".tmp")
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(existing, f, indent=2, allow_nan=False)
+                f.flush()
+                os.fsync(f.fileno())
 
-        os.replace(tmp_path, self.storage_path)
-        return self.storage_path
+            os.replace(tmp_path, self.storage_path)
+            return self.storage_path

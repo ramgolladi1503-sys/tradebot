@@ -168,6 +168,13 @@ class SentinelStructuralGates:
     """
 
     @staticmethod
+    def _finite_values(*values: float) -> bool:
+        try:
+            return all(math.isfinite(float(value)) for value in values)
+        except (TypeError, ValueError, OverflowError):
+            return False
+
+    @staticmethod
     def evaluate_opening_shock(input_data: OpeningShockInput) -> OpeningShockDecision:
         """
         Evaluates Opening Shock Compression Ratio: Omega_15 = OR_15 / ATR_20(T-1).
@@ -175,7 +182,10 @@ class SentinelStructuralGates:
         """
         # Fail-closed validation
         if (
-            input_data.historical_bars_available < 20
+            not SentinelStructuralGates._finite_values(
+                input_data.opening_range_high, input_data.opening_range_low, input_data.daily_atr_20
+            )
+            or input_data.historical_bars_available < 20
             or input_data.daily_atr_20 <= 1e-6
             or input_data.opening_range_high < input_data.opening_range_low
         ):
@@ -220,7 +230,12 @@ class SentinelStructuralGates:
         """
         # Fail-closed validation
         if (
-            input_data.prior_day_high <= input_data.prior_day_low
+            not SentinelStructuralGates._finite_values(
+                input_data.spot_price, input_data.prior_day_high, input_data.prior_day_low,
+                input_data.daily_atr_20, input_data.excursion_bar_volume,
+                input_data.excursion_bar_delta_volume,
+            )
+            or input_data.prior_day_high <= input_data.prior_day_low
             or input_data.daily_atr_20 <= 1e-6
             or input_data.spot_price <= 0.0
             or input_data.excursion_bar_volume < 0.0
@@ -334,7 +349,12 @@ class SentinelStructuralGates:
         """
         # Fail-closed validation
         if (
-            input_data.spot_price <= 0.0
+            not SentinelStructuralGates._finite_values(
+                input_data.spot_price, input_data.wall_strike, input_data.implied_volatility,
+                input_data.dte_days, input_data.wall_total_oi, input_data.wall_unwind_oi,
+                input_data.wall_decay_oi,
+            )
+            or input_data.spot_price <= 0.0
             or input_data.wall_strike <= 0.0
             or input_data.implied_volatility <= 1e-6
             or input_data.wall_total_oi <= 0.0

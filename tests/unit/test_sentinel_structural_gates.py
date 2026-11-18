@@ -601,3 +601,33 @@ def test_statelessness_and_zero_cross_session_leakage():
     # Clean brand new instance returns identical output
     fresh_res2 = SentinelStructuralGates.evaluate_opening_shock(s2)
     assert res2 == fresh_res2
+
+
+@pytest.mark.parametrize("invalid", [float("nan"), float("inf"), float("-inf")])
+def test_structural_gates_reject_non_finite_numeric_inputs(invalid):
+    opening = SentinelStructuralGates.evaluate_opening_shock(
+        OpeningShockInput(opening_range_high=100.0, opening_range_low=90.0, daily_atr_20=invalid)
+    )
+    assert opening.is_valid is False
+    assert opening.action == StructuralGatingAction.BLOCK_ALL_ENTRIES
+
+    auction = SentinelStructuralGates.evaluate_auction_boundary(
+        AuctionBoundaryInput(
+            spot_price=100.0, prior_day_high=110.0, prior_day_low=90.0,
+            daily_atr_20=10.0, excursion_bar_volume=1.0,
+            excursion_bar_delta_volume=invalid, consecutive_outside_closes=0,
+            returned_inside_within_n_bars=False,
+        )
+    )
+    assert auction.is_valid is False
+    assert auction.action == StructuralGatingAction.BLOCK_ALL_ENTRIES
+
+    gamma = SentinelStructuralGates.evaluate_gamma_wall(
+        GammaWallInput(
+            spot_price=100.0, wall_strike=105.0, wall_type=WallType.CALL_WALL,
+            implied_volatility=0.2, dte_days=1.0, wall_total_oi=100.0,
+            wall_unwind_oi=invalid,
+        )
+    )
+    assert gamma.is_valid is False
+    assert gamma.action == StructuralGatingAction.BLOCK_ALL_ENTRIES

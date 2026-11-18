@@ -11,9 +11,11 @@ Implements BrokerAdapter protocol for Upstox API:
 from __future__ import annotations
 
 import json
+import logging
 import socket
 import urllib.request
 import urllib.error
+import math
 from typing import Optional, List, Dict, Any
 
 from core.broker_interface import (
@@ -35,6 +37,8 @@ def _force_ipv4():
 
 # Force IPv4 resolution on module import
 _force_ipv4()
+
+logger = logging.getLogger(__name__)
 
 
 class UpstoxBrokerAdapter:
@@ -67,29 +71,72 @@ class UpstoxBrokerAdapter:
         except Exception:
             return BrokerHealth.DOWN
 
+    @staticmethod
+    def _map_order_type(order_type: Any) -> str:
+        """Map only explicitly supported Upstox order types; never turn a stop into MARKET."""
+        normalized = str(order_type or "").upper().strip().replace("_", "-")
+        supported = {"LIMIT", "MARKET", "SL", "SL-M"}
+        if normalized not in supported:
+            raise ValueError(f"Unsupported Upstox order type: {order_type!r}")
+        return normalized
+
+    @classmethod
+    def build_order_payload(cls, req: BrokerOrderRequest) -> Dict[str, Any]:
+        """Validate and build the Upstox payload without transport side effects."""
+        order_type = cls._map_order_type(getattr(req, "order_type", None))
+        symbol = getattr(req, "symbol", None)
+        if not isinstance(symbol, str) or not symbol.strip() or any(ch.isspace() for ch in symbol):
+            raise ValueError("symbol must be a non-empty instrument token without whitespace")
+        side = str(getattr(req, "side", "") or "").upper().strip()
+        if side not in {"BUY", "SELL"}:
+            raise ValueError("side must be BUY or SELL")
+        qty = getattr(req, "qty", None)
+        if isinstance(qty, bool) or not isinstance(qty, int) or qty <= 0:
+            raise ValueError("quantity must be a positive integer")
+
+        def positive_finite(value: Any, field: str, required: bool = False) -> Optional[float]:
+            if value is None:
+                if required:
+                    raise ValueError(f"{field} is required for {order_type}")
+                return None
+            try:
+                numeric = float(value)
+            except (TypeError, ValueError, OverflowError) as exc:
+                raise ValueError(f"{field} must be finite and positive") from exc
+            if not math.isfinite(numeric) or numeric <= 0:
+                raise ValueError(f"{field} must be finite and positive")
+            return numeric
+
+        limit_required = order_type in {"LIMIT", "SL"}
+        trigger_required = order_type in {"SL", "SL-M"}
+        limit_price = positive_finite(getattr(req, "limit_price", None), "limit_price", limit_required)
+        stop_price = positive_finite(getattr(req, "stop_price", None), "stop_price", trigger_required)
+        return {
+            "quantity": qty,
+            "product": "I",
+            "validity": "DAY",
+            "price": limit_price if limit_price is not None else 0.0,
+            "tag": "sentinel_pure_algo",
+            "instrument_token": symbol.strip(),
+            "order_type": order_type,
+            "transaction_type": side,
+            "disclosed_quantity": 0,
+            "trigger_price": stop_price if stop_price is not None else 0.0,
+            "is_amo": False,
+        }
+
     def place_order(self, req: BrokerOrderRequest) -> BrokerOrderResponse:
-        """Submits a limit or market order to Upstox."""
+        """Submits an explicitly supported order type to Upstox."""
+        try:
+            payload = self.build_order_payload(req)
+        except ValueError as exc:
+            return BrokerOrderResponse(ok=False, reason=str(exc), status="REJECTED_INVALID_REQUEST")
         if not self.is_live_enabled:
             return BrokerOrderResponse(
                 ok=False,
                 reason="LIVE_DISABLED: Adapter in observation mode",
                 status="REJECTED_OFFLINE",
             )
-
-        # Standard Upstox order payload
-        payload = {
-            "quantity": int(req.qty),
-            "product": "I",  # Intraday
-            "validity": "DAY",
-            "price": float(req.limit_price or 0.0),
-            "tag": "sentinel_pure_algo",
-            "instrument_token": str(req.symbol),
-            "order_type": "LIMIT" if req.order_type == "LIMIT" else "MARKET",
-            "transaction_type": str(req.side).upper(),
-            "disclosed_quantity": 0,
-            "trigger_price": float(req.stop_price or 0.0),
-            "is_amo": False,
-        }
 
         url = f"{self.base_url}/order/place"
         try:
@@ -173,5 +220,6 @@ class UpstoxBrokerAdapter:
             with urllib.request.urlopen(http_req, timeout=5) as resp:
                 data = json.loads(resp.read().decode())
                 return data.get("data", [])
-        except Exception:
-            return []
+        except Exception as e:
+            logger.error(f"[UpstoxBrokerAdapter] Failed to fetch open positions from broker: {e}")
+            raise RuntimeError(f"Broker position fetch failed: {e}") from e

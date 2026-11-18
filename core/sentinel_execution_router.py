@@ -65,12 +65,24 @@ class SentinelExecutionRouter:
         }
 
     def get_policy(self, index_name: str) -> IndexExecutionPolicy:
-        norm = (index_name or "NIFTY").upper().strip()
-        if "BANKNIFTY" in norm:
+        norm = str(index_name or "").upper().strip()
+        if norm == "BANKNIFTY" or norm.startswith(("BANKNIFTY ", "BANKNIFTY-", "BANKNIFTY_")):
             return self._policies["BANKNIFTY"]
-        if "SENSEX" in norm:
+        if norm == "SENSEX" or norm.startswith(("SENSEX ", "SENSEX-", "SENSEX_")):
             return self._policies["SENSEX"]
-        return self._policies.get(norm, self._policies["NIFTY"])
+        if norm == "NIFTY":
+            return self._policies["NIFTY"]
+        # Unknown or missing instrument identity must never inherit NIFTY's
+        # potentially live policy. Represent it as an explicit no-route.
+        return IndexExecutionPolicy(
+            index_name=norm or "UNKNOWN",
+            target_mode=ExecutionMode.SIM,
+            allowed_live=False,
+            lot_size=0,
+            read_only=True,
+            is_order_action=False,
+            broker_api_called=False,
+        )
 
     def route_execution_intent(self, index_name: str, intent: Dict[str, Any]) -> Dict[str, Any]:
         """Enforces mode stamping and live execution isolation."""
@@ -80,6 +92,7 @@ class SentinelExecutionRouter:
         routed["mode"] = policy.target_mode.value
         routed["lot_size"] = policy.lot_size
         routed["allowed_for_live"] = policy.allowed_live
+        routed["route_valid"] = policy.lot_size > 0
 
         # Safety override: if not NIFTY, force mode to PAPER regardless of intent
         if policy.index_name in {"SENSEX", "BANKNIFTY"}:

@@ -31,7 +31,7 @@ from __future__ import annotations
 import json
 import math
 import time
-from datetime import datetime, time as dt_time, timedelta
+from datetime import date, datetime, time as dt_time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 import pytest
@@ -46,12 +46,46 @@ from core.sentinel_inmem_adapter import InMemorySentinelAdapter
 from strategies.optionmate_rbfn_strategy import OptionMateGrid
 
 
+def _test_bar_epoch(bar_time: dt_time) -> int:
+    """Return the epoch bucket for a completed five-minute bar on a fixed past IST day."""
+    bar_start = datetime.combine(date(2026, 11, 17), bar_time, tzinfo=ZoneInfo("Asia/Kolkata")) - timedelta(minutes=5)
+    return int(bar_start.timestamp() // 300)
+
+
+def _seed_test_or_pair(advisor, index_name: str, bar_time: dt_time) -> None:
+    """Seed causal local OR evidence for tests exercising non-OR strategy behavior."""
+    session_day = date(2026, 11, 17)
+    ist = ZoneInfo("Asia/Kolkata")
+    start = datetime.combine(session_day, dt_time(9, 15), tzinfo=ist)
+    complete = bar_time >= dt_time(9, 45)
+    source_time = dt_time(9, 44) if complete else dt_time(9, 15)
+    companion = "SENSEX" if index_name == "NIFTY" else "NIFTY"
+    for current in (index_name, companion):
+        if current == "SENSEX":
+            high, low = 81000.0, 80800.0
+        elif current == "BANKNIFTY":
+            high, low = 51000.0, 50000.0
+        else:
+            high, low = 25400.0, 25200.0
+        advisor.or_bounds[current] = {"high": high, "low": low}
+        advisor.or_evidence[current] = {
+            "session_date": session_day.isoformat(),
+            "status": "COMPLETE" if complete else "PARTIAL",
+            "source": "UPSTOX_V2_1M_EXACT_30" if complete else "UPSTOX_TICK_PARTIAL",
+            "source_timestamp_ms": int(datetime.combine(session_day, source_time, tzinfo=ist).timestamp() * 1000),
+            "coverage_count": 30 if complete else 0,
+            "coverage_start_ms": int(start.timestamp() * 1000) if complete else 0,
+            "coverage_end_ms": int(datetime.combine(session_day, dt_time(9, 44), tzinfo=ist).timestamp() * 1000) if complete else 0,
+        }
+
+
 def test_gate_sentinel_01_directional_rp2_piercing(tmp_path: Path):
     """GATE-SENTINEL-01: Directional RP2 Piercing uncouples upper from lower checks."""
     wal = tmp_path / "test_wal_rp2_dir.json"
     advisor = SentinelLiveStreamAdvisor(wal_path=str(wal), enable_stdout=False)
     advisor.seed_prior_day_levels("NIFTY", pdh=24100.0, pdl=23900.0, pdc=24000.0, atr_20=160.0)
     advisor.session_open_prices["NIFTY"] = 24000.0
+    _seed_test_or_pair(advisor, "NIFTY", dt_time(10, 15))
 
     # Grid: TD = 24000, RP1 Upper = 24120, RP2 Upper = 24240, RP1 Lower = 23880, RP2 Lower = 23760
     # At 10:15 AM (before 10:30), spot spikes to 24250 >= RP2 Upper (24240), low is 24170 (nowhere near lower)
@@ -63,8 +97,8 @@ def test_gate_sentinel_01_directional_rp2_piercing(tmp_path: Path):
         bar_close=24220.0,
         bar_volume=80000.0,
         bar_time=dt_time(10, 15),
-        timestamp_ms=1793192100000,
-        epoch_5min=110,
+        timestamp_ms=_test_bar_epoch(dt_time(10, 15)) * 300_000,
+        epoch_5min=_test_bar_epoch(dt_time(10, 15)),
     )
 
     # Prove upper is pierced, but lower is NOT pierced
@@ -75,6 +109,7 @@ def test_gate_sentinel_01_directional_rp2_piercing(tmp_path: Path):
     # Now verify on BANKNIFTY: lower pierce only
     advisor.seed_prior_day_levels("BANKNIFTY", pdh=51000.0, pdl=50000.0, pdc=50500.0, atr_20=400.0)
     advisor.session_open_prices["BANKNIFTY"] = 50500.0
+    _seed_test_or_pair(advisor, "BANKNIFTY", dt_time(10, 20))
     grid_bn = advisor.cached_rbfn_grids["BANKNIFTY"]
 
     advisor._on_5m_bar_close(
@@ -85,8 +120,8 @@ def test_gate_sentinel_01_directional_rp2_piercing(tmp_path: Path):
         bar_close=49700.0,
         bar_volume=50000.0,
         bar_time=dt_time(10, 20),
-        timestamp_ms=1793192400000,
-        epoch_5min=111,
+        timestamp_ms=_test_bar_epoch(dt_time(10, 20)) * 300_000,
+        epoch_5min=_test_bar_epoch(dt_time(10, 20)),
     )
 
     assert advisor.rp2_lower_pierced_before_1030["BANKNIFTY"] is True
@@ -172,8 +207,9 @@ def test_gate_sentinel_04_stale_grid_deprecation(tmp_path: Path):
     """GATE-SENTINEL-04: Reload encountering stale date or missing file resets frozen and is_ground_truth."""
     wal = tmp_path / "test_wal_stale_dep.json"
     levels_file = tmp_path / "optionmate_daily_levels.json"
-    today_str = datetime.now().strftime("%Y-%m-%d")
-    yesterday_str = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+    today_ist = datetime.now(ZoneInfo("Asia/Kolkata"))
+    today_str = today_ist.strftime("%Y-%m-%d")
+    yesterday_str = (today_ist - timedelta(days=1)).strftime("%Y-%m-%d")
 
     advisor = SentinelLiveStreamAdvisor(wal_path=str(wal), enable_stdout=False)
 
@@ -197,7 +233,7 @@ def test_gate_sentinel_04_stale_grid_deprecation(tmp_path: Path):
         force=True,
         session_date=today_str,
     )
-    assert res_init == {"NIFTY": True}
+    assert res_init == {"NIFTY": True, "SENSEX": False, "BANKNIFTY": False}
     grid = advisor.cached_rbfn_grids["NIFTY"]
     assert advisor.rbfn_grids_frozen["NIFTY"] is True
     assert getattr(grid, "is_ground_truth", False) is True
@@ -221,9 +257,10 @@ def test_gate_sentinel_04_stale_grid_deprecation(tmp_path: Path):
         force=True,
         session_date=today_str,
     )
-    assert res_stale == {"NIFTY": False}
-    assert advisor.rbfn_grids_frozen["NIFTY"] is False
-    assert grid.is_ground_truth is False
+    assert res_stale == {"NIFTY": False, "SENSEX": False, "BANKNIFTY": False}
+    assert advisor.rbfn_grids_frozen["NIFTY"] is True
+    assert grid.is_ground_truth is True
+    assert advisor.cached_rbfn_grids["NIFTY"] is grid
 
     # 2. Re-inject fresh levels, then delete the file -> Missing file deprecates grid
     res_reinject = advisor.check_and_reload_optionmate_levels(
@@ -231,7 +268,7 @@ def test_gate_sentinel_04_stale_grid_deprecation(tmp_path: Path):
         force=True,
         session_date=yesterday_str,  # Matches file date
     )
-    assert res_reinject == {"NIFTY": True}
+    assert res_reinject == {"NIFTY": True, "SENSEX": False, "BANKNIFTY": False}
     assert advisor.rbfn_grids_frozen["NIFTY"] is True
     assert advisor.cached_rbfn_grids["NIFTY"].is_ground_truth is True
 
@@ -243,7 +280,7 @@ def test_gate_sentinel_04_stale_grid_deprecation(tmp_path: Path):
     )
     assert res_missing == {}
     assert advisor.rbfn_grids_frozen["NIFTY"] is False
-    assert advisor.cached_rbfn_grids["NIFTY"].is_ground_truth is False
+    assert advisor.cached_rbfn_grids["NIFTY"] is None
 
 
 def test_gate_sentinel_05_decision_trace_telemetry(tmp_path: Path):
@@ -282,6 +319,7 @@ def test_gate_sentinel_06_fast_single_bar_rejection(tmp_path: Path):
     advisor = SentinelLiveStreamAdvisor(wal_path=str(wal), enable_stdout=False)
     advisor.seed_prior_day_levels("NIFTY", pdh=24100.0, pdl=23900.0, pdc=24000.0, atr_20=160.0)
     advisor.session_open_prices["NIFTY"] = 24000.0
+    _seed_test_or_pair(advisor, "NIFTY", dt_time(10, 20))
 
     # Grid: TD = 24000, RP1 Upper = 24120, RP2 Upper = 24240, RP1 Lower = 23880, RP2 Lower = 23760
     # Seed bar 1 (10:15)
@@ -293,8 +331,8 @@ def test_gate_sentinel_06_fast_single_bar_rejection(tmp_path: Path):
         bar_close=24170.0,
         bar_volume=50000.0,
         bar_time=dt_time(10, 15),
-        timestamp_ms=1793192100000,
-        epoch_5min=110,
+        timestamp_ms=_test_bar_epoch(dt_time(10, 15)) * 300_000,
+        epoch_5min=_test_bar_epoch(dt_time(10, 15)),
     )
 
     # Bar 2 at 10:20: High tests RP2 Upper (24245 >= 24240) and closes deep below:
@@ -308,8 +346,8 @@ def test_gate_sentinel_06_fast_single_bar_rejection(tmp_path: Path):
         bar_close=24225.0,
         bar_volume=60000.0,
         bar_time=dt_time(10, 20),
-        timestamp_ms=1793192400000,
-        epoch_5min=111,
+        timestamp_ms=_test_bar_epoch(dt_time(10, 20)) * 300_000,
+        epoch_5min=_test_bar_epoch(dt_time(10, 20)),
     )
 
     assert sig_fast_s5 is not None
@@ -327,8 +365,8 @@ def test_gate_sentinel_06_fast_single_bar_rejection(tmp_path: Path):
         bar_close=23775.0,
         bar_volume=60000.0,
         bar_time=dt_time(10, 25),
-        timestamp_ms=1793192700000,
-        epoch_5min=112,
+        timestamp_ms=_test_bar_epoch(dt_time(10, 25)) * 300_000,
+        epoch_5min=_test_bar_epoch(dt_time(10, 25)),
     )
 
     assert sig_fast_s7 is not None

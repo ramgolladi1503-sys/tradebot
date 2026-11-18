@@ -56,6 +56,7 @@ class OptionMateGrid:
     put_strike: float
     recommended_bias: str
     target_strike: float
+    is_ground_truth: bool = False
     read_only: bool = True
     is_order_action: bool = False
     broker_api_called: bool = False

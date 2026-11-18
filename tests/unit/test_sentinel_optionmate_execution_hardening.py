@@ -26,8 +26,9 @@ from __future__ import annotations
 import json
 import math
 import time
-from datetime import datetime, time as dt_time, timedelta, timezone
+from datetime import date, datetime, time as dt_time, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 import pytest
 
 from core.sentinel_live_stream_advisor import (
@@ -41,11 +42,44 @@ from core.upstox_stream_broadcaster import UpstoxLevel5DepthRecord
 from strategies.optionmate_rbfn_strategy import OptionMateGrid
 
 
+def _test_bar_epoch(bar_time: dt_time) -> int:
+    """Return the epoch bucket for a completed five-minute bar on a fixed past IST day."""
+    bar_start = datetime.combine(date(2026, 11, 17), bar_time, tzinfo=ZoneInfo("Asia/Kolkata")) - timedelta(minutes=5)
+    return int(bar_start.timestamp() // 300)
+
+
+def _seed_test_or_pair(advisor, index_name: str, bar_time: dt_time) -> None:
+    """Seed causal local OR evidence for tests exercising non-OR strategy behavior."""
+    session_day = date(2026, 11, 17)
+    ist = ZoneInfo("Asia/Kolkata")
+    start = datetime.combine(session_day, dt_time(9, 15), tzinfo=ist)
+    complete = bar_time >= dt_time(9, 45)
+    source_time = dt_time(9, 44) if complete else dt_time(9, 15)
+    companion = "SENSEX" if index_name == "NIFTY" else "NIFTY"
+    for current in (index_name, companion):
+        if current == "SENSEX":
+            high, low = 81000.0, 80800.0
+        elif current == "BANKNIFTY":
+            high, low = 51000.0, 50000.0
+        else:
+            high, low = 25400.0, 25200.0
+        advisor.or_bounds[current] = {"high": high, "low": low}
+        advisor.or_evidence[current] = {
+            "session_date": session_day.isoformat(),
+            "status": "COMPLETE" if complete else "PARTIAL",
+            "source": "UPSTOX_V2_1M_EXACT_30" if complete else "UPSTOX_TICK_PARTIAL",
+            "source_timestamp_ms": int(datetime.combine(session_day, source_time, tzinfo=ist).timestamp() * 1000),
+            "coverage_count": 30 if complete else 0,
+            "coverage_start_ms": int(start.timestamp() * 1000) if complete else 0,
+            "coverage_end_ms": int(datetime.combine(session_day, dt_time(9, 44), tzinfo=ist).timestamp() * 1000) if complete else 0,
+        }
+
+
 def test_dynamic_hot_reload_fresh_levels(tmp_path: Path):
     """Dynamic hot-reload detects modified mtime and injects verified levels safely."""
     wal = tmp_path / "test_wal_reload.json"
     levels_file = tmp_path / "optionmate_daily_levels.json"
-    today_str = datetime.now().strftime("%Y-%m-%d")
+    today_str = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d")
 
     advisor = SentinelLiveStreamAdvisor(wal_path=str(wal), enable_stdout=False)
     assert advisor.cached_rbfn_grids["NIFTY"] is None
@@ -69,7 +103,7 @@ def test_dynamic_hot_reload_fresh_levels(tmp_path: Path):
         force=True,
         session_date=today_str,
     )
-    assert res == {"NIFTY": True}
+    assert res == {"NIFTY": True, "SENSEX": False, "BANKNIFTY": False}
     grid = advisor.cached_rbfn_grids["NIFTY"]
     assert isinstance(grid, OptionMateGrid)
     assert grid.trend_decider == 25283.0
@@ -84,8 +118,9 @@ def test_dynamic_hot_reload_rejects_stale_prior_day(tmp_path: Path):
     """Fails closed on stale prior-day date mismatch (returns {idx: False})."""
     wal = tmp_path / "test_wal_stale.json"
     levels_file = tmp_path / "optionmate_daily_levels.json"
-    today_str = datetime.now().strftime("%Y-%m-%d")
-    yesterday_str = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+    today_ist = datetime.now(ZoneInfo("Asia/Kolkata"))
+    today_str = today_ist.strftime("%Y-%m-%d")
+    yesterday_str = (today_ist - timedelta(days=1)).strftime("%Y-%m-%d")
 
     advisor = SentinelLiveStreamAdvisor(wal_path=str(wal), enable_stdout=False)
 
@@ -107,7 +142,7 @@ def test_dynamic_hot_reload_rejects_stale_prior_day(tmp_path: Path):
         force=True,
         session_date=today_str,
     )
-    assert res == {"NIFTY": False}
+    assert res == {"NIFTY": False, "SENSEX": False, "BANKNIFTY": False}
     assert advisor.cached_rbfn_grids["NIFTY"] is None
     assert advisor.rbfn_grids_frozen["NIFTY"] is False
 
@@ -120,6 +155,7 @@ def test_nifty_gate_2_calibrated_65_pts(tmp_path: Path):
     # 1. Under-hurdle: ATR_20 = 50.0 (< 65.0) -> Must ABSTAIN with GATE_2_FRICTIONAL_HURDLE
     advisor.seed_prior_day_levels("NIFTY", pdh=25400.0, pdl=25200.0, pdc=25300.0, atr_20=50.0)
     advisor.session_open_prices["NIFTY"] = 25300.0
+    _seed_test_or_pair(advisor, "NIFTY", dt_time(9, 20))
     sig_vetoed = advisor._on_5m_bar_close(
         index_name="NIFTY",
         bar_open=25310.0,
@@ -128,8 +164,8 @@ def test_nifty_gate_2_calibrated_65_pts(tmp_path: Path):
         bar_close=25440.0,
         bar_volume=50000.0,
         bar_time=dt_time(9, 20),
-        timestamp_ms=1793188800000,
-        epoch_5min=100,
+        timestamp_ms=_test_bar_epoch(dt_time(9, 20)) * 300_000,
+        epoch_5min=_test_bar_epoch(dt_time(9, 20)),
     )
     assert sig_vetoed is not None
     assert sig_vetoed.action == "ABSTAIN"
@@ -140,6 +176,7 @@ def test_nifty_gate_2_calibrated_65_pts(tmp_path: Path):
     advisor2 = SentinelLiveStreamAdvisor(wal_path=str(wal.with_name("test_wal_gate2_pass.json")), enable_stdout=False)
     advisor2.seed_prior_day_levels("NIFTY", pdh=25400.0, pdl=25200.0, pdc=25300.0, atr_20=70.0)
     advisor2.session_open_prices["NIFTY"] = 25300.0
+    _seed_test_or_pair(advisor2, "NIFTY", dt_time(9, 20))
     sig_passed = advisor2._on_5m_bar_close(
         index_name="NIFTY",
         bar_open=25310.0,
@@ -148,8 +185,8 @@ def test_nifty_gate_2_calibrated_65_pts(tmp_path: Path):
         bar_close=25440.0,
         bar_volume=50000.0,
         bar_time=dt_time(9, 20),
-        timestamp_ms=1793188800000,
-        epoch_5min=100,
+        timestamp_ms=_test_bar_epoch(dt_time(9, 20)) * 300_000,
+        epoch_5min=_test_bar_epoch(dt_time(9, 20)),
     )
     assert sig_passed is not None
     assert sig_passed.is_active is True
@@ -163,6 +200,7 @@ def test_1030_rp2_piercing_uncoupled_from_exhaustion_fade(tmp_path: Path):
     advisor = SentinelLiveStreamAdvisor(wal_path=str(wal), enable_stdout=False)
     advisor.seed_prior_day_levels("NIFTY", pdh=24100.0, pdl=23900.0, pdc=24000.0, atr_20=160.0)
     advisor.session_open_prices["NIFTY"] = 24000.0
+    _seed_test_or_pair(advisor, "NIFTY", dt_time(10, 15))
 
     # Grid: TD = 24000, RP1 Upper = 24120, RP2 Upper = 24240
     # Early bar at 10:15 touches RP2 Upper (24250 >= 24240) -> rp2_pierced_before_1030 becomes True
@@ -174,8 +212,8 @@ def test_1030_rp2_piercing_uncoupled_from_exhaustion_fade(tmp_path: Path):
         bar_close=24220.0,
         bar_volume=80000.0,
         bar_time=dt_time(10, 15),
-        timestamp_ms=1793192100000,
-        epoch_5min=110,
+        timestamp_ms=_test_bar_epoch(dt_time(10, 15)) * 300_000,
+        epoch_5min=_test_bar_epoch(dt_time(10, 15)),
     )
     assert advisor.rp2_pierced_before_1030["NIFTY"] is True
 
@@ -189,8 +227,8 @@ def test_1030_rp2_piercing_uncoupled_from_exhaustion_fade(tmp_path: Path):
         bar_close=24215.0,
         bar_volume=40000.0,
         bar_time=dt_time(11, 30),
-        timestamp_ms=1793196600000,
-        epoch_5min=125,
+        timestamp_ms=_test_bar_epoch(dt_time(11, 30)) * 300_000,
+        epoch_5min=_test_bar_epoch(dt_time(11, 30)),
     )
     sig_fade = advisor._on_5m_bar_close(
         index_name="NIFTY",
@@ -200,8 +238,8 @@ def test_1030_rp2_piercing_uncoupled_from_exhaustion_fade(tmp_path: Path):
         bar_close=24205.0,
         bar_volume=45000.0,
         bar_time=dt_time(11, 35),
-        timestamp_ms=1793196900000,
-        epoch_5min=126,
+        timestamp_ms=_test_bar_epoch(dt_time(11, 35)) * 300_000,
+        epoch_5min=_test_bar_epoch(dt_time(11, 35)),
     )
 
     # S5 ceiling fade must NOT be vetoed by 10:30 RP2 piercing!
