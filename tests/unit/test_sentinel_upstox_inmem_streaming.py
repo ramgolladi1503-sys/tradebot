@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import os
 import queue
 import time
@@ -500,3 +501,90 @@ def test_sentinel_opening_range_premarket_guard_and_reconciliation(tmp_path: Pat
         assert advisor.trade_lock_active is False
         assert advisor.or_bounds["SENSEX"]["high"] == 72990.0
         assert advisor.or_bounds["SENSEX"]["low"] == 72514.0
+
+
+@pytest.mark.parametrize("initial_index", [True, -1, 1.0, "2", None])
+def test_recorder_rejects_invalid_initial_chunk_index_before_startup_side_effects(
+    tmp_path: Path, initial_index
+) -> None:
+    output_dir = tmp_path / "must-not-be-created"
+    with pytest.raises(ValueError):
+        UpstoxAsyncParquetRecorder(
+            output_dir=output_dir,
+            initial_chunk_index=initial_index,
+        )
+    assert not output_dir.exists()
+
+
+def test_recorder_restart_uses_last_allocated_index_and_preserves_existing_chunk_hashes(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "chunks"
+    output_dir.mkdir()
+    old_one = output_dir / "level5_chunk_00001.parquet"
+    old_four = output_dir / "level5_chunk_00004.parquet"
+    old_one.write_bytes(b"prior-chunk-one")
+    old_four.write_bytes(b"prior-chunk-four")
+    before = {
+        path: hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in (old_one, old_four)
+    }
+
+    recorder = UpstoxAsyncParquetRecorder(
+        output_dir=output_dir,
+        chunk_size=1,
+        flush_interval_sec=0.05,
+        initial_chunk_index=4,
+    )
+    broadcaster = UpstoxStreamBroadcaster(subscribers=[recorder])
+    broadcaster.dispatch_depth(_make_dummy_depth_payload("restart-token", 0, 1776384000000))
+    recorder.flush_and_stop(timeout=2)
+
+    new_files = recorder.written_files
+    assert [path.name for path in new_files] == ["level5_chunk_00005.parquet"]
+    assert pq.read_table(new_files[0]).num_rows == 1
+    assert all(hashlib.sha256(path.read_bytes()).hexdigest() == digest for path, digest in before.items())
+
+
+def test_recorder_cross_instance_collision_never_overwrites_or_manifests_existing_file(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "collision-chunks"
+    first = UpstoxAsyncParquetRecorder(output_dir=output_dir, initial_chunk_index=0)
+    second = UpstoxAsyncParquetRecorder(output_dir=output_dir, initial_chunk_index=0)
+    first.flush_and_stop(timeout=1)
+    second.flush_and_stop(timeout=1)
+    record = UpstoxStreamBroadcaster().dispatch_depth(
+        _make_dummy_depth_payload("collision-token", 0, 1776384000000)
+    )
+
+    first._flush_buffer([record])
+    target = output_dir / "level5_chunk_00001.parquet"
+    before = hashlib.sha256(target.read_bytes()).hexdigest()
+    with pytest.raises(FileExistsError):
+        second._flush_buffer([record])
+
+    assert hashlib.sha256(target.read_bytes()).hexdigest() == before
+    assert first.written_files == [target]
+    assert second.written_files == []
+    assert not list(output_dir.glob("*.tmp"))
+
+
+def test_recorder_failed_temporary_write_is_not_added_to_written_manifest(tmp_path: Path) -> None:
+    class FailingRecorder(UpstoxAsyncParquetRecorder):
+        def _write_parquet(self, path: Path, table: pa.Table) -> None:
+            path.write_bytes(b"partial temporary bytes")
+            raise OSError("simulated partial write")
+
+    output_dir = tmp_path / "failed-chunks"
+    recorder = FailingRecorder(output_dir=output_dir, initial_chunk_index=0)
+    recorder.flush_and_stop(timeout=1)
+    record = UpstoxStreamBroadcaster().dispatch_depth(
+        _make_dummy_depth_payload("failed-token", 0, 1776384000000)
+    )
+    with pytest.raises(OSError, match="simulated partial write"):
+        recorder._flush_buffer([record])
+
+    assert recorder.written_files == []
+    assert not list(output_dir.glob("level5_chunk_*.parquet"))
+    assert not list(output_dir.glob(".level5_chunk_*.tmp"))

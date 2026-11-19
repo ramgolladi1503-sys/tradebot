@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import datetime as dt
+import os
 import logging
 import queue
 import threading
 import time
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -132,7 +134,10 @@ class UpstoxAsyncParquetRecorder:
         chunk_size: int = 2000,
         flush_interval_sec: float = 1.0,
         fail_closed_on_saturation: bool = False,
+        initial_chunk_index: int = 0,
     ) -> None:
+        if type(initial_chunk_index) is not int or initial_chunk_index < 0:
+            raise ValueError("initial_chunk_index must be a non-negative integer")
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.max_queue_size = int(max_queue_size)
@@ -146,7 +151,7 @@ class UpstoxAsyncParquetRecorder:
         )
         self._stop_event = threading.Event()
         self._worker_thread: threading.Thread | None = None
-        self._chunk_index = 0
+        self._chunk_index = initial_chunk_index
         self._written_files: list[Path] = []
         self._total_records_written = 0
         self._lock = threading.Lock()
@@ -328,10 +333,33 @@ class UpstoxAsyncParquetRecorder:
         table = pa.Table.from_pydict(cols, schema=UPSTOX_LEVEL5_PARQUET_SCHEMA)
 
         with self._lock:
-            self._chunk_index += 1
-            filename = self.output_dir / f"level5_chunk_{self._chunk_index:05d}.parquet"
-            # PyArrow write_table releases GIL during C++ Parquet encoding and disk write
-            self._write_parquet(filename, table)
+            next_index = self._chunk_index + 1
+            filename = self.output_dir / f"level5_chunk_{next_index:05d}.parquet"
+            temporary = self.output_dir / f".{filename.name}.{uuid.uuid4().hex}.tmp"
+            try:
+                self._write_parquet(temporary, table)
+                with temporary.open("rb") as temp_file:
+                    os.fsync(temp_file.fileno())
+                # A hard link publishes the complete same-filesystem file atomically
+                # and fails if another recorder already owns this numeric chunk name.
+                os.link(temporary, filename)
+                directory_fd = os.open(self.output_dir, os.O_RDONLY)
+                try:
+                    os.fsync(directory_fd)
+                finally:
+                    os.close(directory_fd)
+            except Exception as exc:
+                self._emit_telemetry(
+                    "CHUNK_PUBLISH_FAILED",
+                    {"chunk_index": next_index, "error_type": type(exc).__name__},
+                )
+                raise
+            finally:
+                try:
+                    temporary.unlink()
+                except FileNotFoundError:
+                    pass
+            self._chunk_index = next_index
             self._written_files.append(filename)
             self._total_records_written += len(buffer)
 
