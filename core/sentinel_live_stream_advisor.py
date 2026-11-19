@@ -20,11 +20,15 @@ from __future__ import annotations
 
 import copy
 import atexit
+import fcntl
+import hashlib
 import json
 import logging
 import math
 import os
 import queue
+import stat
+import tempfile
 import threading
 import time
 import uuid
@@ -309,6 +313,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         broker_adapter: Optional[any] = None,
         mode5_trace_queue_capacity: int = 1536,
         mode5_trace_max_record_bytes: int = 16384,
+        or_reconciliation_state_path: Optional[str] = None,
     ) -> None:
         if isinstance(mode5_trace_queue_capacity, bool) or not isinstance(mode5_trace_queue_capacity, int) or mode5_trace_queue_capacity < 1:
             raise ValueError("mode5_trace_queue_capacity must be a positive integer")
@@ -395,6 +400,27 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         self.OR_MAX_RETRY_ATTEMPTS: int = 10
         self.OR_MIN_RETRY_INTERVAL_MS: int = 60_000  # 60s throttle
         self.CAUSAL_SKEW_TOLERANCE_MS: int = 1_000   # 1s arrival jitter buffer
+        self.or_reconciliation_state_path = Path(
+            or_reconciliation_state_path
+            if or_reconciliation_state_path is not None
+            else Path(__file__).resolve().parents[1] / "runtime" / "sentinel_or_reconciliation_state.json"
+        ).resolve()
+        self.or_reconciliation_lock_path = Path(
+            f"{self.or_reconciliation_state_path}.lock"
+        )
+        self.or_reconciliation_initialized_path = (
+            self.or_reconciliation_state_path.parent
+            / f".{self.or_reconciliation_state_path.stem}.initialized"
+        )
+        self._or_reconcile_call_lock = threading.Lock()
+        self._or_reconciliation_ledger_degraded = False
+        self._or_reconciliation_loaded_session_day: Optional[date] = None
+        self._or_ledger_retry_after_ms = 0
+        self._or_last_ledger_check_ms: dict[str, int] = {
+            "NIFTY": 0,
+            "BANKNIFTY": 0,
+            "SENSEX": 0,
+        }
         self.spots: dict[str, float] = {"NIFTY": 0.0, "SENSEX": 0.0, "BANKNIFTY": 0.0}
         self.spots_ts_ms: dict[str, int] = {"NIFTY": 0, "SENSEX": 0, "BANKNIFTY": 0}
 
@@ -2133,6 +2159,413 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         }
 
     @staticmethod
+    def _or_candles_digest(candles: list[list[Any]]) -> str:
+        encoded = json.dumps(
+            candles,
+            ensure_ascii=True,
+            allow_nan=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    @staticmethod
+    def _new_or_reconciliation_ledger(session_day: date) -> dict[str, Any]:
+        return {
+            "schema_version": 1,
+            "session_date": session_day.isoformat(),
+            "indices": {
+                index_name: {
+                    "attempt_count": 0,
+                    "last_attempt_timestamp_ms": 0,
+                }
+                for index_name in ("NIFTY", "BANKNIFTY", "SENSEX")
+            },
+        }
+
+    def _acquire_or_reconciliation_lock(self) -> tuple[int, bool]:
+        """Acquire the persistent sidecar flock, reporting whether it was created."""
+        lock_path = self.or_reconciliation_lock_path
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        flags = os.O_RDWR | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+        try:
+            lock_fd = os.open(lock_path, flags | os.O_CREAT | os.O_EXCL, 0o600)
+            created = True
+        except FileExistsError:
+            lock_fd = os.open(lock_path, flags)
+            created = False
+        try:
+            if not stat.S_ISREG(os.fstat(lock_fd).st_mode):
+                raise OSError("OR reconciliation lock is not a regular file")
+            if created:
+                os.fsync(lock_fd)
+                self._fsync_or_reconciliation_directory(lock_path.parent)
+            fcntl.flock(lock_fd, fcntl.LOCK_EX)
+            return lock_fd, created
+        except Exception:
+            os.close(lock_fd)
+            raise
+
+    @staticmethod
+    def _fsync_or_reconciliation_directory(directory: Path) -> None:
+        directory_fd = os.open(directory, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+
+    def _write_or_reconciliation_ledger_locked(self, ledger: dict[str, Any]) -> None:
+        """Atomically persist a ledger while its sidecar flock is held."""
+        path = self.or_reconciliation_state_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = json.dumps(
+            ledger,
+            sort_keys=True,
+            ensure_ascii=True,
+            allow_nan=False,
+            separators=(",", ":"),
+        ).encode("utf-8") + b"\n"
+        fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+        temp_path = Path(temp_name)
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp_path, path)
+            self._fsync_or_reconciliation_directory(path.parent)
+        except Exception:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise
+
+    def _or_reconciliation_marker_identity(self, state: str) -> dict[str, Any]:
+        return {
+            "schema_version": 1,
+            "ledger_path": str(self.or_reconciliation_state_path.resolve()),
+            "lock_path": str(self.or_reconciliation_lock_path.resolve()),
+            "marker_path": str(self.or_reconciliation_initialized_path.resolve()),
+            "state": state,
+        }
+
+    def _write_or_reconciliation_initialized_marker_locked(self, state: str, *, exclusive: bool) -> None:
+        path = self.or_reconciliation_initialized_path
+        flags = os.O_WRONLY | os.O_CREAT | getattr(os, "O_CLOEXEC", 0)
+        flags |= os.O_EXCL if exclusive else os.O_TRUNC
+        flags |= getattr(os, "O_NOFOLLOW", 0)
+        fd = os.open(path, flags, 0o600)
+        try:
+            payload = json.dumps(
+                self._or_reconciliation_marker_identity(state),
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8") + b"\n"
+            with os.fdopen(fd, "wb") as handle:
+                fd = -1
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            self._fsync_or_reconciliation_directory(path.parent)
+        finally:
+            if fd >= 0:
+                os.close(fd)
+
+    def _replace_or_reconciliation_marker_with_ready_locked(self) -> None:
+        path = self.or_reconciliation_initialized_path
+        payload = json.dumps(
+            self._or_reconciliation_marker_identity("READY"),
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8") + b"\n"
+        fd, temp_name = tempfile.mkstemp(
+            prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+        )
+        temp_path = Path(temp_name)
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp_path, path)
+            ready_fd = os.open(path, os.O_RDWR | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0))
+            try:
+                os.fsync(ready_fd)
+            finally:
+                os.close(ready_fd)
+            self._fsync_or_reconciliation_directory(path.parent)
+        except Exception:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise
+
+    def _read_or_reconciliation_initialized_marker_locked(self) -> Optional[dict[str, Any]]:
+        path = self.or_reconciliation_initialized_path
+        flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+        try:
+            fd = os.open(path, flags)
+        except FileNotFoundError:
+            return None
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            os.close(fd)
+            raise ValueError("OR reconciliation initialization marker is not a regular file")
+        with os.fdopen(fd, "r", encoding="utf-8") as handle:
+            raw = json.load(handle)
+        if not isinstance(raw, dict) or raw.get("state") != "READY":
+            raise ValueError("OR reconciliation initialization marker is not READY")
+        if raw != self._or_reconciliation_marker_identity("READY"):
+            raise ValueError("OR reconciliation initialization marker identity mismatch")
+        return raw
+
+    def _validate_or_reconciliation_ledger(
+        self, raw: Any, expected_day: date
+    ) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+        if not isinstance(raw, dict) or type(raw.get("schema_version")) is not int or raw.get("schema_version") != 1:
+            raise ValueError("unsupported or malformed OR reconciliation ledger schema")
+        try:
+            ledger_day = date.fromisoformat(str(raw.get("session_date")))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("malformed OR reconciliation ledger session date") from exc
+        if ledger_day.isoformat() != raw.get("session_date"):
+            raise ValueError("noncanonical OR reconciliation ledger session date")
+        indices = raw.get("indices")
+        expected_indices = {"NIFTY", "BANKNIFTY", "SENSEX"}
+        if not isinstance(indices, dict) or set(indices) != expected_indices:
+            raise ValueError("OR reconciliation ledger must contain exactly all supported indices")
+
+        validated_indices: dict[str, dict[str, Any]] = {}
+        for index_name, state in indices.items():
+            if not isinstance(state, dict):
+                raise ValueError("malformed OR reconciliation index state")
+            attempts = state.get("attempt_count")
+            last_attempt_ms = state.get("last_attempt_timestamp_ms")
+            if (type(attempts) is not int or not 0 <= attempts <= self.OR_MAX_RETRY_ATTEMPTS
+                    or type(last_attempt_ms) is not int or last_attempt_ms < 0
+                    or (attempts == 0) != (last_attempt_ms == 0)):
+                raise ValueError("invalid OR reconciliation attempt counters")
+            normalized = {
+                "attempt_count": attempts,
+                "last_attempt_timestamp_ms": last_attempt_ms,
+            }
+            proof = state.get("completion_proof")
+            if proof is not None:
+                if not isinstance(proof, dict) or attempts <= 0:
+                    raise ValueError("invalid OR completion proof")
+                candles = proof.get("candles")
+                digest = proof.get("sha256")
+                if (not isinstance(candles, list) or len(candles) != 30
+                        or not isinstance(digest, str) or len(digest) != 64
+                        or self._or_candles_digest(candles) != digest):
+                    raise ValueError("OR completion proof digest mismatch")
+                parsed = self._parse_complete_v2_or_candles(candles, ledger_day)
+                if parsed is None:
+                    raise ValueError("OR completion proof failed exact coverage validation")
+                expected_proof = {
+                    "source": "UPSTOX_V2_1M_EXACT_30",
+                    "coverage_count": parsed["coverage_count"],
+                    "coverage_start_ms": parsed["coverage_start_ms"],
+                    "coverage_end_ms": parsed["coverage_end_ms"],
+                    "source_timestamp_ms": parsed["source_timestamp_ms"],
+                }
+                if any(proof.get(key) != value for key, value in expected_proof.items()):
+                    raise ValueError("OR completion proof metadata mismatch")
+                if parsed.get("normalized_candles") != candles:
+                    raise ValueError("OR completion proof candles are not canonical")
+                normalized["completion_proof"] = proof
+            validated_indices[index_name] = normalized
+
+        ledger = {
+            "schema_version": 1,
+            "session_date": ledger_day.isoformat(),
+            "indices": validated_indices,
+        }
+        if ledger_day > expected_day:
+            raise ValueError("stale OR event cannot move ledger session date backward")
+        return ledger, validated_indices
+
+    def _load_or_reconciliation_ledger_locked(
+        self, expected_day: date, lock_created: bool
+    ) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+        path = self.or_reconciliation_state_path
+        flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+        marker = self._read_or_reconciliation_initialized_marker_locked()
+        try:
+            ledger_fd = os.open(path, flags)
+        except FileNotFoundError:
+            ledger_fd = None
+        if lock_created:
+            # A newly-created lock is first-use only when every durable marker
+            # was absent before this process acquired it. Any mixed state is a
+            # crash, deletion, or manual mutation and must not be repaired here.
+            if marker is not None or ledger_fd is not None:
+                if ledger_fd is not None:
+                    os.close(ledger_fd)
+                raise ValueError("partial OR reconciliation initialization state")
+            self._write_or_reconciliation_initialized_marker_locked(
+                "INITIALIZING", exclusive=True
+            )
+            ledger = self._new_or_reconciliation_ledger(expected_day)
+            self._write_or_reconciliation_ledger_locked(ledger)
+            self._replace_or_reconciliation_marker_with_ready_locked()
+            return ledger, ledger["indices"]
+        if marker is None or ledger_fd is None:
+            if ledger_fd is not None:
+                os.close(ledger_fd)
+            raise ValueError("OR reconciliation initialization artifacts are incomplete")
+        if not stat.S_ISREG(os.fstat(ledger_fd).st_mode):
+            os.close(ledger_fd)
+            raise ValueError("OR reconciliation ledger is not a regular file")
+        with os.fdopen(ledger_fd, "r", encoding="utf-8") as handle:
+            raw = json.load(handle)
+        ledger, indices = self._validate_or_reconciliation_ledger(raw, expected_day)
+        ledger_day = date.fromisoformat(ledger["session_date"])
+        if ledger_day < expected_day:
+            ledger = self._new_or_reconciliation_ledger(expected_day)
+            indices = ledger["indices"]
+            self._write_or_reconciliation_ledger_locked(ledger)
+        return ledger, indices
+
+    def _apply_or_ledger_snapshot(
+        self, session_day: date, indices: dict[str, dict[str, Any]]
+    ) -> None:
+        with self._lock:
+            for index_name in self.or_bounds:
+                state = indices[index_name]
+                self.or_reconcile_retry_count[index_name] = state["attempt_count"]
+                self.or_last_reconcile_attempt_ms[index_name] = state["last_attempt_timestamp_ms"]
+                self._or_last_ledger_check_ms[index_name] = state["last_attempt_timestamp_ms"]
+                proof = state.get("completion_proof")
+                if proof is None:
+                    current_evidence = self.or_evidence.get(index_name) or {}
+                    if current_evidence.get("session_date") != session_day.isoformat():
+                        self.or_bounds[index_name] = {"high": -math.inf, "low": math.inf}
+                        self.or_evidence[index_name] = self._empty_or_evidence(session_day)
+                        if index_name == "NIFTY":
+                            self.active_range_high = -math.inf
+                            self.active_range_low = math.inf
+                    continue
+                parsed = self._parse_complete_v2_or_candles(proof["candles"], session_day)
+                if parsed is None:
+                    raise ValueError("validated OR proof failed restore-time parsing")
+                self.or_bounds[index_name] = {"high": parsed["high"], "low": parsed["low"]}
+                self.or_evidence[index_name] = {
+                    "session_date": session_day.isoformat(),
+                    "status": "COMPLETE",
+                    "source": proof["source"],
+                    "source_timestamp_ms": proof["source_timestamp_ms"],
+                    "coverage_count": proof["coverage_count"],
+                    "coverage_start_ms": proof["coverage_start_ms"],
+                    "coverage_end_ms": proof["coverage_end_ms"],
+                }
+                if index_name == "NIFTY":
+                    self.active_range_high = parsed["high"]
+                    self.active_range_low = parsed["low"]
+            self.or_reconciliation_frozen = all(
+                (self.or_evidence.get(index_name) or {}).get("session_date") == session_day.isoformat()
+                and (self.or_evidence.get(index_name) or {}).get("status") == "COMPLETE"
+                for index_name in self.or_bounds
+            )
+            self._or_reconciliation_loaded_session_day = session_day
+
+    def _read_or_ledger_snapshot(self, expected_day: date) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+        lock_fd, lock_created = self._acquire_or_reconciliation_lock()
+        try:
+            ledger, indices = self._load_or_reconciliation_ledger_locked(expected_day, lock_created)
+            self._apply_or_ledger_snapshot(expected_day, indices)
+            return ledger, indices
+        finally:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            os.close(lock_fd)
+
+    def _reserve_or_reconciliation_attempt(
+        self, expected_day: date, index_name: str, now_ms: int, force: bool
+    ) -> tuple[bool, str, int]:
+        lock_fd, lock_created = self._acquire_or_reconciliation_lock()
+        try:
+            ledger, indices = self._load_or_reconciliation_ledger_locked(expected_day, lock_created)
+            self._apply_or_ledger_snapshot(expected_day, indices)
+            state = indices[index_name]
+            if state.get("completion_proof") is not None:
+                with self._lock:
+                    self._or_last_ledger_check_ms[index_name] = now_ms
+                return False, "COMPLETE", state["attempt_count"]
+            attempts = state["attempt_count"]
+            last_attempt_ms = state["last_attempt_timestamp_ms"]
+            if attempts >= self.OR_MAX_RETRY_ATTEMPTS:
+                with self._lock:
+                    self._or_last_ledger_check_ms[index_name] = now_ms
+                return False, "ATTEMPT_CAP_REACHED", attempts
+            if now_ms < last_attempt_ms:
+                raise ValueError("OR retry clock moved backward")
+            if not force and last_attempt_ms > 0 and now_ms - last_attempt_ms < self.OR_MIN_RETRY_INTERVAL_MS:
+                with self._lock:
+                    self._or_last_ledger_check_ms[index_name] = now_ms
+                return False, "THROTTLED", attempts
+
+            next_attempt = attempts + 1
+            indices[index_name] = {
+                "attempt_count": next_attempt,
+                "last_attempt_timestamp_ms": now_ms,
+            }
+            ledger["indices"] = indices
+            self._write_or_reconciliation_ledger_locked(ledger)
+            with self._lock:
+                self.or_reconcile_retry_count[index_name] = next_attempt
+                self.or_last_reconcile_attempt_ms[index_name] = now_ms
+                self._or_last_ledger_check_ms[index_name] = now_ms
+                self._or_reconciliation_loaded_session_day = expected_day
+            return True, "RESERVED", next_attempt
+        finally:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            os.close(lock_fd)
+
+    def _persist_or_completion_proof(
+        self, expected_day: date, index_name: str, parsed: dict[str, Any]
+    ) -> bool:
+        candles = parsed.get("normalized_candles")
+        if not isinstance(candles, list) or len(candles) != 30:
+            return False
+        proof = {
+            "source": "UPSTOX_V2_1M_EXACT_30",
+            "coverage_count": parsed["coverage_count"],
+            "coverage_start_ms": parsed["coverage_start_ms"],
+            "coverage_end_ms": parsed["coverage_end_ms"],
+            "source_timestamp_ms": parsed["source_timestamp_ms"],
+            "candles": candles,
+            "sha256": self._or_candles_digest(candles),
+        }
+        lock_fd: Optional[int] = None
+        try:
+            lock_fd, lock_created = self._acquire_or_reconciliation_lock()
+            ledger, indices = self._load_or_reconciliation_ledger_locked(expected_day, lock_created)
+            state = indices.get(index_name)
+            if state is None or state["attempt_count"] <= 0:
+                raise ValueError("OR completion has no durable retry reservation")
+            previous = state.get("completion_proof")
+            if previous is not None and previous["sha256"] != proof["sha256"]:
+                raise ValueError("conflicting exact OR completion proof")
+            state["completion_proof"] = proof
+            indices[index_name] = state
+            ledger["indices"] = indices
+            self._write_or_reconciliation_ledger_locked(ledger)
+            return True
+        except Exception as exc:
+            logger.error(
+                "OR completion ledger persist failed for %s session=%s (%s)",
+                index_name,
+                expected_day.isoformat(),
+                type(exc).__name__,
+            )
+            self._or_reconciliation_ledger_degraded = True
+            return False
+        finally:
+            if lock_fd is not None:
+                fcntl.flock(lock_fd, fcntl.LOCK_UN)
+                os.close(lock_fd)
+
+    @staticmethod
     def _parse_complete_v2_or_candles(candles: Any, session_day: date) -> Optional[dict[str, Any]]:
         """Prove exact 09:15-09:45 IST one-minute coverage from aware v2 candle rows."""
         if not isinstance(candles, list):
@@ -2143,6 +2576,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             for minute in range(30)
         }
         selected: dict[datetime, tuple[float, float]] = {}
+        selected_candles: dict[datetime, list[Any]] = {}
         seen_timestamps: set[datetime] = set()
         for row in candles:
             if not isinstance(row, (list, tuple)) or len(row) < 5 or not isinstance(row[0], str):
@@ -2176,6 +2610,9 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             if local_dt not in expected:
                 return None
             selected[local_dt] = (high, low)
+            selected_candles[local_dt] = [
+                local_dt.isoformat(), open_price, high, low, close,
+            ]
 
         if set(selected) != expected or len(selected) != 30:
             return None
@@ -2193,6 +2630,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             "coverage_start_ms": int(start_dt.timestamp() * 1000),
             "coverage_end_ms": end_ms,
             "source_timestamp_ms": end_ms,
+            "normalized_candles": [selected_candles[item] for item in sorted(expected)],
         }
 
     def _reset_opening_range_for_session_locked(self, index_name: str, session_day: date) -> None:
@@ -2208,15 +2646,63 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         current_time_ms: Optional[int] = None,
         force: bool = False,
     ) -> bool:
-        """Seed complete OR only from exact, aware v2 one-minute source coverage.
-        
-        GATE-SENTINEL-15: Retries periodically until all indices achieve status == COMPLETE,
-        at which point reconciliation freezes permanently (or_reconciliation_frozen = True).
-        Rate-limited with a 60-second backoff throttle per index and max 10 attempts.
-        """
+        """Serialize same-process reconciliation while durable reservations span restarts."""
+        with self._or_reconcile_call_lock:
+            return self._seed_or_bounds_from_api_serialized(
+                session_day=session_day,
+                current_time_ms=current_time_ms,
+                force=force,
+            )
+
+    def _seed_or_bounds_from_api_serialized(
+        self,
+        session_day: Optional[date],
+        current_time_ms: Optional[int],
+        force: bool,
+    ) -> bool:
+        """Retry exact OR reconciliation with a durable per-index attempt budget."""
         now_dt = datetime.now(ZoneInfo("Asia/Kolkata"))
         expected_day = session_day or now_dt.date()
         if now_dt.time() < self.opening_shock_end_time:
+            return False
+
+        now_ms = current_time_ms if current_time_ms is not None else int(now_dt.timestamp() * 1000)
+        if type(now_ms) is not int or now_ms <= 0:
+            logger.error("OR reconciliation blocked: invalid event timestamp")
+            return False
+        try:
+            event_day = datetime.fromtimestamp(
+                now_ms / 1000.0, tz=ZoneInfo("Asia/Kolkata")
+            ).date()
+        except (OverflowError, OSError, ValueError):
+            logger.error("OR reconciliation blocked: invalid event timestamp")
+            return False
+        if expected_day != now_dt.date() or event_day != expected_day:
+            logger.warning(
+                "OR reconciliation blocked for non-current session event=%s expected=%s current=%s",
+                event_day.isoformat(),
+                expected_day.isoformat(),
+                now_dt.date().isoformat(),
+            )
+            return False
+
+        if self._or_reconciliation_loaded_session_day != expected_day:
+            if now_ms < self._or_ledger_retry_after_ms:
+                return False
+            try:
+                self._read_or_ledger_snapshot(expected_day)
+                self._or_reconciliation_ledger_degraded = False
+                self._or_ledger_retry_after_ms = 0
+            except Exception as exc:
+                logger.error(
+                    "OR reconciliation ledger unavailable for session=%s (%s); no API request issued",
+                    expected_day.isoformat(),
+                    type(exc).__name__,
+                )
+                self._or_reconciliation_ledger_degraded = True
+                self._or_ledger_retry_after_ms = now_ms + self.OR_MIN_RETRY_INTERVAL_MS
+                return False
+        elif now_ms < self._or_ledger_retry_after_ms:
             return False
 
         with self._lock:
@@ -2236,25 +2722,59 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             ("SENSEX", "BSE_INDEX%7CSENSEX"),
         ]
         all_valid = True
-        now_ms = current_time_ms if current_time_ms is not None else int(now_dt.timestamp() * 1000)
 
         for index_name, instrument in indices:
             with self._lock:
                 current = self.or_evidence.get(index_name) or {}
                 if current.get("session_date") == expected_day.isoformat() and current.get("status") == "COMPLETE":
                     continue
+                last_attempt_ms = self.or_last_reconcile_attempt_ms.get(index_name, 0)
+                last_check_ms = self._or_last_ledger_check_ms.get(index_name, 0)
+                attempt_count = self.or_reconcile_retry_count.get(index_name, 0)
 
-                if not force:
-                    last_attempt = self.or_last_reconcile_attempt_ms.get(index_name, 0)
-                    if (now_ms - last_attempt) < self.OR_MIN_RETRY_INTERVAL_MS:
+            if now_ms < max(last_attempt_ms, last_check_ms):
+                logger.error(
+                    "OR reconciliation clock regressed for %s session=%s; request suppressed",
+                    index_name,
+                    expected_day.isoformat(),
+                )
+                all_valid = False
+                continue
+            if not force:
+                if attempt_count >= self.OR_MAX_RETRY_ATTEMPTS:
+                    if last_check_ms > 0 and now_ms - last_check_ms < self.OR_MIN_RETRY_INTERVAL_MS:
                         all_valid = False
                         continue
-                    if self.or_reconcile_retry_count.get(index_name, 0) >= self.OR_MAX_RETRY_ATTEMPTS:
-                        all_valid = False
-                        continue
+                elif last_attempt_ms > 0 and now_ms - last_attempt_ms < self.OR_MIN_RETRY_INTERVAL_MS:
+                    all_valid = False
+                    continue
 
-                self.or_last_reconcile_attempt_ms[index_name] = now_ms
-                self.or_reconcile_retry_count[index_name] = self.or_reconcile_retry_count.get(index_name, 0) + 1
+            try:
+                reserved, reserve_reason, retry_count = self._reserve_or_reconciliation_attempt(
+                    expected_day, index_name, now_ms, force
+                )
+            except Exception as exc:
+                logger.error(
+                    "OR retry reservation failed for %s session=%s (%s); no API request issued",
+                    index_name,
+                    expected_day.isoformat(),
+                    type(exc).__name__,
+                )
+                self._or_reconciliation_ledger_degraded = True
+                self._or_ledger_retry_after_ms = now_ms + self.OR_MIN_RETRY_INTERVAL_MS
+                all_valid = False
+                continue
+            if not reserved:
+                if reserve_reason != "COMPLETE":
+                    all_valid = False
+                    if reserve_reason == "ATTEMPT_CAP_REACHED":
+                        logger.warning(
+                            "OR reconciliation retry cap reached for %s session=%s attempts=%s",
+                            index_name,
+                            expected_day.isoformat(),
+                            retry_count,
+                        )
+                continue
 
             try:
                 url = f"https://api.upstox.com/v2/historical-candle/intraday/{instrument}/1minute"
@@ -2276,11 +2796,25 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                             "session_date": expected_day.isoformat(),
                             "status": "PENDING_RECONCILIATION",
                             "source": "UPSTOX_V2_1M_RETRY",
-                            "retry_count": self.or_reconcile_retry_count.get(index_name, 0),
+                            "retry_count": retry_count,
                         })
                         self.or_evidence[index_name] = pending
                     continue
 
+            if not self._persist_or_completion_proof(expected_day, index_name, parsed):
+                all_valid = False
+                with self._lock:
+                    current = dict(self.or_evidence.get(index_name) or {})
+                    current.update({
+                        "session_date": expected_day.isoformat(),
+                        "status": "PENDING_RECONCILIATION",
+                        "source": "OR_LEDGER_PERSIST_FAILED",
+                        "retry_count": retry_count,
+                    })
+                    self.or_evidence[index_name] = current
+                continue
+
+            with self._lock:
                 self.or_bounds[index_name] = {"high": parsed["high"], "low": parsed["low"]}
                 self.or_evidence[index_name] = {
                     "session_date": expected_day.isoformat(),
