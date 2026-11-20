@@ -193,6 +193,7 @@ class CachedRBFNAuctionSignal:
     trade_phase: str  # 'OPENING_DRIVE' or 'MIDDAY_REVERSAL'
     bar_time: dt_time
     sustainable_anchor_price: float = 0.0
+    triggering_reference_price: Optional[float] = None
     is_active: bool = True
     is_vetoed: bool = False
     veto_reason: str = ""
@@ -241,6 +242,35 @@ MODE_5_EXHAUSTION_FADES: set[str] = {
     "RP1_UPPER_REVERSAL_CONFIRMED",
     "RP1_LOWER_REVERSAL_CONFIRMED",
 }
+
+def mode5_rp_exhaustion_displacement(
+    setup_reason: str,
+    triggering_reference_price: Optional[float],
+    spot: float,
+    fallback_displacement: float,
+) -> tuple[float, Optional[str]]:
+    """Resolve the gate-local displacement for exact RP reversal/fade families.
+
+    Returns the existing displacement unchanged for unrelated setup families.
+    Unknown RP1/RP2 reversal/fade names and missing/invalid snapshots fail closed.
+    """
+    if setup_reason not in MODE_5_EXHAUSTION_FADES:
+        is_unmapped_rp_fade = (
+            setup_reason.startswith(("RP1_", "RP2_"))
+            and any(token in setup_reason for token in ("REVERSAL", "FADE", "BOUNCE", "FLOOR", "CEILING", "REJECTION"))
+        )
+        if is_unmapped_rp_fade:
+            return fallback_displacement, "UNKNOWN_RP_BOUNDARY_SETUP"
+        return fallback_displacement, None
+
+    try:
+        reference = float(triggering_reference_price)
+        current_spot = float(spot)
+    except (TypeError, ValueError, OverflowError):
+        return fallback_displacement, "MISSING_RP_BOUNDARY_REFERENCE"
+    if not math.isfinite(reference) or reference <= 0.0 or not math.isfinite(current_spot) or current_spot <= 0.0:
+        return fallback_displacement, "MISSING_RP_BOUNDARY_REFERENCE"
+    return abs(current_spot - reference), None
 
 
 def is_mode_5_structural_breakout(reason: str) -> bool:
@@ -3644,6 +3674,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         trade_phase="EXTREME_EXHAUSTION_REVERSAL",
                         bar_time=bar_time,
                         sustainable_anchor_price=calc_anchor,
+                        triggering_reference_price=grid.rp2_lower,
                         is_active=True,
                         is_vetoed=False,
                         veto_reason="",
@@ -3668,6 +3699,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         trade_phase="EXTREME_EXHAUSTION_REVERSAL",
                         bar_time=bar_time,
                         sustainable_anchor_price=calc_anchor,
+                        triggering_reference_price=grid.rp2_upper,
                         is_active=True,
                         is_vetoed=False,
                         veto_reason="",
@@ -3763,6 +3795,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         trade_phase="MIDDAY_REVERSAL",
                         bar_time=bar_time,
                         sustainable_anchor_price=calc_anchor,
+                        triggering_reference_price=grid.rp1_upper,
                         is_active=True,
                         is_vetoed=False,
                         veto_reason="",
@@ -3787,6 +3820,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         trade_phase="MIDDAY_REVERSAL",
                         bar_time=bar_time,
                         sustainable_anchor_price=calc_anchor,
+                        triggering_reference_price=grid.rp1_lower,
                         is_active=True,
                         is_vetoed=False,
                         veto_reason="",
@@ -4487,11 +4521,51 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 is_expiry_session=is_exp,
             )
 
+            vol_displacement = displacement
+            vol_input_error = None
+            if strategy_name == "OPTIONMATE_RBFN_AUCTION" and rbfn_sig is not None:
+                vol_displacement, vol_input_error = mode5_rp_exhaustion_displacement(
+                    setup_reason=rbfn_sig.setup_reason,
+                    triggering_reference_price=rbfn_sig.triggering_reference_price,
+                    spot=spot,
+                    fallback_displacement=displacement,
+                )
+
             vol_ok, vol_reason, _ = self.vol_compression_gate.evaluate_compression(
                 atr_15m=eff_atr_15m,
                 atr_60m=eff_atr_60m,
-                recent_displacement_pts=displacement,
+                recent_displacement_pts=vol_displacement,
             )
+            if vol_input_error is not None:
+                vol_ok = False
+                vol_reason = vol_input_error
+            elif (
+                vol_ok is False
+                and rbfn_sig is not None
+                and rbfn_sig.setup_reason in MODE_5_EXHAUSTION_FADES
+                and "EXHAUSTED_EXPANSION" in vol_reason
+            ):
+                try:
+                    rp_reference = float(rbfn_sig.triggering_reference_price)
+                    rp_spot = float(spot)
+                except (TypeError, ValueError, OverflowError):
+                    rp_reference = math.nan
+                    rp_spot = math.nan
+                if (
+                    math.isfinite(rp_reference)
+                    and rp_reference > 0.0
+                    and math.isfinite(rp_spot)
+                    and rp_spot > 0.0
+                ):
+                    rp_name, reference_side, _ = rbfn_sig.setup_reason.split("_", 2)
+                    reference_name = f"{'U' if reference_side == 'UPPER' else 'L'}{rp_name}"
+                    vol_reason = (
+                        f"DISTANCE_TO_BOUNDARY (distance={vol_displacement:.1f} pts, "
+                        f"reference={reference_name} {rp_reference:.1f}, "
+                        f"setup={rbfn_sig.setup_reason}, "
+                        f"limit={self.vol_compression_gate.exhaustion_multiplier:g}x "
+                        f"ATR60={eff_atr_60m:.1f} pts)"
+                    )
 
             # Gate 2: SentinelWallGate pre-entry check (0.5 * ATR Adverse Wall Clamping)
             # ARCH-SENTINEL-OPTIONMATE-HARDENING-001: Wall-Gate Exemption for Mode 5 Structural Breakouts & Exhaustion Fades

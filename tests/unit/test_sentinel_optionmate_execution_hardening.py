@@ -42,6 +42,7 @@ from core.sentinel_live_stream_advisor import (
     CachedRBFNAuctionSignal,
     is_mode_5_structural_breakout,
     is_mode_5_exhaustion_fade,
+    mode5_rp_exhaustion_displacement,
 )
 from core.sentinel_inmem_adapter import InMemorySentinelAdapter
 from core.upstox_stream_broadcaster import UpstoxLevel5DepthRecord
@@ -342,8 +343,93 @@ def test_1030_rp2_piercing_uncoupled_from_exhaustion_fade(tmp_path: Path):
     assert sig_fade is not None
     assert sig_fade.action == "BUY_PUT"
     assert sig_fade.setup_reason == "RP2_UPPER_10M_CEILING_FADE"
+    assert sig_fade.triggering_reference_price == advisor.cached_rbfn_grids["NIFTY"].rp2_upper
     assert sig_fade.is_active is True
     assert sig_fade.is_vetoed is False
+
+
+@pytest.mark.parametrize(
+    ("side", "variant", "expected_reason", "reference_field"),
+    [
+        ("upper", "fast", "RP2_UPPER_FAST_REJECTION", "rp2_upper"),
+        ("upper", "10m", "RP2_UPPER_10M_CEILING_FADE", "rp2_upper"),
+        ("lower", "fast", "RP2_LOWER_FAST_BOUNCE", "rp2_lower"),
+        ("lower", "10m", "RP2_LOWER_10M_FLOOR_BOUNCE", "rp2_lower"),
+    ],
+)
+def test_rp2_fade_producers_snapshot_their_triggering_boundary(
+    tmp_path: Path, side: str, variant: str, expected_reason: str, reference_field: str
+):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / f"rp2-{side}-{variant}.json"), enable_stdout=False
+    )
+    _seed_test_or_pair(advisor, "NIFTY", dt_time(11, 25))
+    advisor.or_reconciliation_frozen = True
+    advisor.seed_prior_day_levels("NIFTY", pdh=24300.0, pdl=23700.0, pdc=24000.0, atr_20=160.0)
+    advisor.session_open_prices["NIFTY"] = 24000.0
+    grid = OptionMateGrid(
+        date="2026-11-17",
+        spot_open=24000.0,
+        trend_decider=24000.0,
+        rp1_upper=24120.0,
+        rp2_upper=24240.0,
+        rp1_lower=23880.0,
+        rp2_lower=23760.0,
+        call_strike=24200.0,
+        put_strike=23800.0,
+        recommended_bias="RANGE",
+        target_strike=24000.0,
+    )
+    advisor.cached_rbfn_grids["NIFTY"] = grid
+    advisor.rbfn_grids_frozen["NIFTY"] = True
+
+    def evaluate(bar_time: dt_time, open_price: float, high: float, low: float, close: float):
+        timestamp_ms = _test_bar_epoch(bar_time) * 300_000
+        return advisor._on_5m_bar_close(
+            index_name="NIFTY",
+            bar_open=open_price,
+            bar_high=high,
+            bar_low=low,
+            bar_close=close,
+            bar_volume=45000.0,
+            bar_time=bar_time,
+            timestamp_ms=timestamp_ms,
+            epoch_5min=timestamp_ms // 300_000,
+        )
+
+    if variant == "fast":
+        current_epoch = _test_bar_epoch(dt_time(11, 25))
+        advisor._rp2_session_dates["NIFTY"] = date(2026, 11, 17)
+        advisor.bars_5m_history["NIFTY"] = [
+            {
+                "open": 24000.0, "high": 24020.0, "low": 23980.0, "close": 24000.0,
+                "volume": 45000.0, "time": dt_time(11, 15), "timestamp_ms": (current_epoch - 2) * 300_000,
+                "epoch_5min": current_epoch - 2,
+            },
+            {
+                "open": 24000.0, "high": 24020.0, "low": 23980.0, "close": 24000.0,
+                "volume": 45000.0, "time": dt_time(11, 20), "timestamp_ms": (current_epoch - 1) * 300_000,
+                "epoch_5min": current_epoch - 1,
+            },
+        ]
+        advisor._last_completed_5m_epoch["NIFTY"] = current_epoch - 1
+        advisor._last_5m_timestamp_ms["NIFTY"] = (current_epoch - 1) * 300_000
+        if side == "upper":
+            signal = evaluate(dt_time(11, 25), 24240.0, 24270.0, 24190.0, 24225.0)
+        else:
+            signal = evaluate(dt_time(11, 25), 23770.0, 23850.0, 23730.0, 23775.0)
+    elif side == "upper":
+        evaluate(dt_time(11, 25), 24220.0, 24250.0, 24180.0, 24235.0)
+        evaluate(dt_time(11, 30), 24230.0, 24235.0, 24190.0, 24235.0)
+        signal = evaluate(dt_time(11, 35), 24230.0, 24235.0, 24190.0, 24235.0)
+    else:
+        evaluate(dt_time(11, 25), 23780.0, 23840.0, 23750.0, 23765.0)
+        evaluate(dt_time(11, 30), 23770.0, 23810.0, 23765.0, 23765.0)
+        signal = evaluate(dt_time(11, 35), 23770.0, 23810.0, 23765.0, 23765.0)
+
+    assert signal is not None
+    assert signal.setup_reason == expected_reason
+    assert signal.triggering_reference_price == getattr(grid, reference_field)
 
 
 @pytest.mark.parametrize(
@@ -376,6 +462,8 @@ def test_rp1_reversal_requires_current_bar_direction(
     else:
         assert signal is not None
         assert signal.setup_reason == expected_reason
+        expected_reference = advisor.cached_rbfn_grids["NIFTY"].rp1_lower if side == "lower" else advisor.cached_rbfn_grids["NIFTY"].rp1_upper
+        assert signal.triggering_reference_price == expected_reference
 
 
 def _make_dummy_depth(
@@ -440,6 +528,131 @@ def test_wall_gate_exemption_for_structural_breakout_and_fade():
     # Wall gate exemption predicate ensures is_wall_exempt is True for S2/S4/S5/S7
     assert (is_mode_5_structural_breakout(breakout_reason) or is_mode_5_exhaustion_fade(breakout_reason)) is True
     assert (is_mode_5_structural_breakout(fade_reason) or is_mode_5_exhaustion_fade(fade_reason)) is True
+
+
+@pytest.mark.parametrize(
+    "setup_reason,reference",
+    [
+        ("RP2_UPPER_10M_CEILING_FADE", 25000.0),
+        ("RP2_LOWER_10M_FLOOR_BOUNCE", 24000.0),
+        ("RP2_UPPER_FAST_REJECTION", 25000.0),
+        ("RP2_LOWER_FAST_BOUNCE", 24000.0),
+        ("RP1_UPPER_REVERSAL_CONFIRMED", 24800.0),
+        ("RP1_LOWER_REVERSAL_CONFIRMED", 24200.0),
+    ],
+)
+def test_mode5_rp_fade_uses_frozen_trigger_boundary(setup_reason, reference):
+    displacement, reason = mode5_rp_exhaustion_displacement(
+        setup_reason, reference, spot=reference + 17.5, fallback_displacement=900.0
+    )
+    assert displacement == 17.5
+    assert reason is None
+
+
+def test_mode5_rp_fade_boundary_snapshot_survives_grid_replacement(tmp_path: Path):
+    advisor = SentinelLiveStreamAdvisor(wal_path=str(tmp_path / "rp-snapshot.json"), enable_stdout=False)
+    original_grid = OptionMateGrid(
+        date="2026-11-17",
+        spot_open=24500.0,
+        trend_decider=24500.0,
+        rp1_upper=24800.0,
+        rp2_upper=25000.0,
+        rp1_lower=24200.0,
+        rp2_lower=24000.0,
+        call_strike=25000.0,
+        put_strike=24000.0,
+        recommended_bias="RANGE",
+        target_strike=24500.0,
+    )
+    replacement_grid = OptionMateGrid(
+        date="2026-11-17",
+        spot_open=24500.0,
+        trend_decider=24600.0,
+        rp1_upper=24900.0,
+        rp2_upper=25100.0,
+        rp1_lower=24100.0,
+        rp2_lower=23900.0,
+        call_strike=25100.0,
+        put_strike=23900.0,
+        recommended_bias="RANGE",
+        target_strike=24600.0,
+    )
+    signal = CachedRBFNAuctionSignal(
+        timestamp_ms=1793196900000,
+        index_name="NIFTY",
+        action="BUY_PUT",
+        direction="PE",
+        target_strike=24500.0,
+        target_pts=20.0,
+        sl_pts=15.0,
+        setup_reason="RP2_UPPER_FAST_REJECTION",
+        trade_phase="EXTREME_EXHAUSTION_REVERSAL",
+        bar_time=dt_time(11, 35),
+        triggering_reference_price=original_grid.rp2_upper,
+    )
+    advisor.cached_rbfn_grids["NIFTY"] = original_grid
+    advisor.cached_rbfn_signals["NIFTY"] = signal
+    advisor.cached_rbfn_grids["NIFTY"] = replacement_grid
+
+    displacement, reason = mode5_rp_exhaustion_displacement(
+        signal.setup_reason,
+        signal.triggering_reference_price,
+        spot=25020.0,
+        fallback_displacement=700.0,
+    )
+
+    assert displacement == 20.0
+    assert reason is None
+    with pytest.raises((AttributeError, TypeError)):
+        signal.triggering_reference_price = replacement_grid.rp2_upper
+
+
+@pytest.mark.parametrize("bad_reference", [None, 0.0, -1.0, math.nan, math.inf, -math.inf])
+def test_mode5_known_rp_fade_missing_or_nonfinite_boundary_fails_closed(bad_reference):
+    displacement, reason = mode5_rp_exhaustion_displacement(
+        "RP1_LOWER_REVERSAL_CONFIRMED",
+        bad_reference,
+        spot=24400.0,
+        fallback_displacement=10.0,
+    )
+    assert displacement == 10.0
+    assert reason == "MISSING_RP_BOUNDARY_REFERENCE"
+
+
+def test_mode5_unknown_rp_fade_fails_closed_but_continuation_keeps_fallback():
+    unknown_displacement, unknown_reason = mode5_rp_exhaustion_displacement(
+        "RP2_UPPER_NEW_FADE_FAMILY",
+        25000.0,
+        spot=24900.0,
+        fallback_displacement=80.0,
+    )
+    continuation_displacement, continuation_reason = mode5_rp_exhaustion_displacement(
+        "RP1_UPPER_10M_EXPANSION_BREAKOUT",
+        None,
+        spot=24900.0,
+        fallback_displacement=80.0,
+    )
+
+    assert (unknown_displacement, unknown_reason) == (80.0, "UNKNOWN_RP_BOUNDARY_SETUP")
+    assert (continuation_displacement, continuation_reason) == (80.0, None)
+
+
+@pytest.mark.parametrize("multiple,expected_allowed", [(2.5 - 1e-6, True), (2.5, True), (2.5 + 1e-6, False)])
+def test_mode5_rp_boundary_displacement_preserves_strict_atr_threshold(multiple, expected_allowed):
+    atr60 = 20.0
+    displacement, error = mode5_rp_exhaustion_displacement(
+        "RP1_UPPER_REVERSAL_CONFIRMED",
+        24800.0,
+        spot=24800.0 + multiple * atr60,
+        fallback_displacement=700.0,
+    )
+    allowed, _, _ = advisor_module.VolatilityCompressionGate().evaluate_compression(
+        atr_15m=25.0,
+        atr_60m=atr60,
+        recent_displacement_pts=displacement,
+    )
+    assert error is None
+    assert allowed is expected_allowed
 
 
 def test_cached_rbfn_signal_300s_monotonic_ttl_eviction(tmp_path: Path, monkeypatch):
@@ -2240,6 +2453,8 @@ def _configure_production_mode5_entry(
     reservation_exception: Exception | None = None,
     callback_exception: Exception | None = None,
     strike_oi_allowed: bool = True,
+    setup_reason: str = "RP1_UPPER_REVERSAL_CONFIRMED",
+    triggering_reference_price: float | None = 24600.0,
 ):
     """Set deterministic local dependencies around the real option-depth entry path."""
     boundary_ms = int(boundary.timestamp() * 1000)
@@ -2298,9 +2513,10 @@ def _configure_production_mode5_entry(
         target_strike=24100.0,
         target_pts=30.0,
         sl_pts=20.0,
-        setup_reason="RP1_UPPER_REVERSAL_CONFIRMED",
+        setup_reason=setup_reason,
         trade_phase="MIDDAY_REVERSAL",
         bar_time=dt_time(boundary.hour, boundary.minute),
+        triggering_reference_price=triggering_reference_price,
         is_active=True,
     )
     epoch = boundary_ms // 300_000 - 1
@@ -2343,6 +2559,99 @@ def test_production_mode5_exact_bucket_boundary_accepts_once_before_dispatch_cal
     advisor.apms["NIFTY"].arm_and_enter.assert_called_once()
     assert advisor.cached_rbfn_signals["NIFTY"] is None
     assert advisor._cached_rbfn_candidate_meta["NIFTY"].status == "ENTRY_SUCCEEDED"
+
+
+def test_mode5_rp_reference_changes_only_volatility_gate_displacement(tmp_path: Path, monkeypatch):
+    advisor = SentinelLiveStreamAdvisor(wal_path=str(tmp_path / "rp-gate-inputs.json"), enable_stdout=False)
+    boundary = datetime.combine(date(2026, 11, 18), dt_time(10, 0), tzinfo=ZoneInfo("Asia/Kolkata"))
+    depth, _, _, _, _ = _configure_production_mode5_entry(
+        advisor, tmp_path, monkeypatch, boundary=boundary, monotonic_base_ns=51_000_000_000,
+        reservation_result=SimpleNamespace(
+            accepted=False, reason="test-terminal", action="VETOED_TEST", routed_mode="PAPER"
+        ),
+    )
+    confidence_spy = Mock(return_value=SimpleNamespace(
+        is_actionable=True, total_score=90, grade="A", probable_win_rate_pct=70,
+        sizing_recommendation="FULL",
+    ))
+    volatility_spy = Mock(return_value=(True, "OK", 1.0))
+    advisor.confidence_scorer.evaluate_confidence = confidence_spy
+    advisor.vol_compression_gate.evaluate_compression = volatility_spy
+    monkeypatch.setattr(
+        advisor_module.SentinelOptionStrikeResolver,
+        "resolve_mode5_strike",
+        staticmethod(lambda **kwargs: SimpleNamespace(target_strike=24100.0)),
+    )
+
+    advisor._evaluate_option_depth(depth)
+
+    confidence_spy.assert_called_once()
+    volatility_spy.assert_called_once()
+    assert confidence_spy.call_args.kwargs["displacement_pts"] == 100.0
+    assert volatility_spy.call_args.kwargs["recent_displacement_pts"] == 600.0
+
+
+@pytest.mark.parametrize(
+    ("setup_reason", "reference", "spot_distance", "expected_veto", "expected_label"),
+    [
+        ("RP1_UPPER_REVERSAL_CONFIRMED", 24600.0, 162.5, False, None),
+        ("RP1_UPPER_REVERSAL_CONFIRMED", 24600.0, 162.0, False, None),
+        ("RP1_UPPER_REVERSAL_CONFIRMED", 24600.0, 163.0, True, "DISTANCE_TO_BOUNDARY"),
+        ("RP1_UPPER_10M_EXPANSION_BREAKOUT", None, 163.0, True, "EXHAUSTED_EXPANSION (Displacement"),
+        ("RP1_UPPER_REVERSAL_CONFIRMED", None, 163.0, True, "MISSING_RP_BOUNDARY_REFERENCE"),
+        ("RP2_UPPER_NEW_FADE_FAMILY", 24240.0, 163.0, True, "UNKNOWN_RP_BOUNDARY_SETUP"),
+    ],
+)
+def test_mode5_distance_label_override_is_reason_only_and_narrow(
+    tmp_path: Path,
+    monkeypatch,
+    setup_reason: str,
+    reference: float | None,
+    spot_distance: float,
+    expected_veto: bool,
+    expected_label: str | None,
+):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / f"distance-label-{setup_reason}-{spot_distance}.json"),
+        enable_stdout=False,
+    )
+    boundary = datetime.combine(date(2026, 11, 18), dt_time(10, 0), tzinfo=ZoneInfo("Asia/Kolkata"))
+    depth, _, _, _, _ = _configure_production_mode5_entry(
+        advisor,
+        tmp_path,
+        monkeypatch,
+        boundary=boundary,
+        monotonic_base_ns=52_000_000_000,
+        reservation_result=SimpleNamespace(
+            accepted=False, reason="test-terminal", action="VETOED_TEST", routed_mode="PAPER"
+        ),
+        setup_reason=setup_reason,
+        triggering_reference_price=reference,
+    )
+    advisor.vol_compression_gate = advisor_module.VolatilityCompressionGate()
+    advisor.spots["NIFTY"] = (reference if reference is not None else 24600.0) + spot_distance
+    monkeypatch.setattr(
+        advisor_module.SentinelOptionStrikeResolver,
+        "resolve_mode5_strike",
+        staticmethod(lambda **kwargs: SimpleNamespace(target_strike=24100.0)),
+    )
+
+    advisor._evaluate_option_depth(depth)
+
+    assert advisor.alerts_history
+    alert = advisor.alerts_history[-1]
+    assert (alert.status_flag == "VETO_VOLATILITY_EXHAUSTED") is expected_veto
+    if expected_label is not None:
+        assert expected_label in alert.advisory
+    else:
+        assert "DISTANCE_TO_BOUNDARY" not in alert.advisory
+    if expected_veto:
+        veto_calls = [
+            call.kwargs for call in advisor.journal.record_veto.call_args_list
+            if call.kwargs.get("veto_reason") == "VOLATILITY_EXHAUSTED"
+        ]
+        assert veto_calls
+        assert alert.status_flag == "VETO_VOLATILITY_EXHAUSTED"
 
 
 def test_production_mode5_queue_full_does_not_veto_entry_or_repeat_candidate(
