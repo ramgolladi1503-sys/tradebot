@@ -15,6 +15,7 @@ import math
 from pathlib import Path
 import pytest
 import numpy as np
+import pandas as pd
 
 from core.analytics.multi_session_aggregator import (
     MultiSessionAggregator,
@@ -28,6 +29,32 @@ from core.analytics.quant_metrics_engine import (
     BootstrapConfidenceInterval,
 )
 from scripts.run_multi_session_analytics import generate_multi_session_report, OUTPUT_PATH
+from core.analytics.sentinel_multi_session_simulator import SentinelMultiSessionSimulator
+
+
+def test_regime_replay_omits_removed_orb_metric_and_keeps_other_metrics(monkeypatch):
+    bars = pd.DataFrame(
+        [{
+            "timestamp": pd.Timestamp("2026-10-15 09:40:00"),
+            "close": 24500.0,
+            "volume": 50000.0,
+            "open": 24490.0,
+            "high": 24510.0,
+            "low": 24480.0,
+        }]
+    )
+    monkeypatch.setattr(
+        "core.analytics.sentinel_multi_session_simulator.pd.read_parquet",
+        lambda _path: bars,
+    )
+
+    result = SentinelMultiSessionSimulator().replay_session("2026-10-15")
+
+    assert "orb_green_bars" not in result
+    assert result["reversal_armed_bars"] >= 0
+    assert result["capital_defense_bars"] >= 0
+    assert result["regime_dwell_counts"]
+    assert "ORB" not in result["timeline"][0]["permissions"]
 
 
 class TestDataGapDetection:

@@ -1,4 +1,4 @@
-"""Unit Tests for Sentinel Invariant 4.1 Bar Discretization & Mode 2 ORB Permission Gating.
+"""Unit Tests for Sentinel Invariant 4.1 Bar Discretization.
 
 Strict Safety Invariants:
 read_only = True
@@ -14,18 +14,9 @@ from core.sentinel_live_stream_advisor import (
     SyntheticBarBucket,
 )
 from core.sentinel_regime_router import (
-    RegimePosteriorState,
     SentinelRegimeRouter,
-    REGIME_RUNAWAY_EXPANSION,
-    REGIME_ROTATIONAL_CHOP,
-    REGIME_AMBIGUOUS_NO_TRADE,
-    REGIME_EXHAUSTION_REVERSAL,
-    REGIME_VOLATILITY_COMPRESSION,
 )
-from core.upstox_stream_broadcaster import (
-    UpstoxTickRecord,
-    UpstoxLevel5DepthRecord,
-)
+from core.upstox_stream_broadcaster import UpstoxTickRecord
 
 
 def test_synthetic_bar_bucket_slots_and_initialization():
@@ -141,158 +132,6 @@ def test_synthetic_bar_aggregation_crossing_boundary_invokes_router_once():
     assert bucket.open == 24050.0
     assert bucket.close == 24050.0
     assert bucket.volume == 50.0
-
-
-def test_mode2_orb_gating_rotational_chop_veto():
-    """ROTATIONAL_CHOP blocks ORB breakout."""
-    advisor = SentinelLiveStreamAdvisor(enable_stdout=False)
-    router = MagicMock(spec=SentinelRegimeRouter)
-    advisor.regime_routers["NIFTY"] = router
-
-    post = RegimePosteriorState(
-        probabilities={REGIME_ROTATIONAL_CHOP: 0.85, REGIME_RUNAWAY_EXPANSION: 0.05, REGIME_EXHAUSTION_REVERSAL: 0.05, REGIME_VOLATILITY_COMPRESSION: 0.05},
-        dominant_regime=REGIME_ROTATIONAL_CHOP,
-        entropy=0.5,
-        normalized_entropy=0.35,
-        regime_epoch=1,
-        bar_timestamp_ms=100000,
-        dwell_bars=5,
-        session_switch_count=1,
-        permissions={"ORB": False, "APM_REENTRY": False, "REVERSAL": True},
-        is_trading_permitted=True,
-        fail_closed_reason="",
-    )
-    router.current_state = post
-
-    assert advisor._evaluate_orb_regime_permission(router) is False
-
-
-def test_mode2_orb_gating_is_trading_permitted_false_veto():
-    """is_trading_permitted=False blocks ORB breakout."""
-    advisor = SentinelLiveStreamAdvisor(enable_stdout=False)
-    router = MagicMock(spec=SentinelRegimeRouter)
-    advisor.regime_routers["NIFTY"] = router
-
-    post = RegimePosteriorState(
-        probabilities={REGIME_RUNAWAY_EXPANSION: 0.90, REGIME_ROTATIONAL_CHOP: 0.04, REGIME_EXHAUSTION_REVERSAL: 0.03, REGIME_VOLATILITY_COMPRESSION: 0.03},
-        dominant_regime=REGIME_RUNAWAY_EXPANSION,
-        entropy=0.2,
-        normalized_entropy=0.15,
-        regime_epoch=2,
-        bar_timestamp_ms=100000,
-        dwell_bars=3,
-        session_switch_count=0,
-        permissions={"ORB": True, "APM_REENTRY": True, "REVERSAL": False},
-        is_trading_permitted=False,  # Emergency circuit or data guard tripped
-        fail_closed_reason="DATA_GUARD_FAIL_CLOSED",
-    )
-    router.current_state = post
-
-    assert advisor._evaluate_orb_regime_permission(router) is False
-
-
-def test_mode2_orb_gating_runaway_expansion_permits():
-    """RUNAWAY_EXPANSION permits ORB breakout."""
-    advisor = SentinelLiveStreamAdvisor(enable_stdout=False)
-    router = MagicMock(spec=SentinelRegimeRouter)
-    advisor.regime_routers["NIFTY"] = router
-
-    post = RegimePosteriorState(
-        probabilities={REGIME_RUNAWAY_EXPANSION: 0.85, REGIME_ROTATIONAL_CHOP: 0.05, REGIME_EXHAUSTION_REVERSAL: 0.05, REGIME_VOLATILITY_COMPRESSION: 0.05},
-        dominant_regime=REGIME_RUNAWAY_EXPANSION,
-        entropy=0.4,
-        normalized_entropy=0.3,
-        regime_epoch=3,
-        bar_timestamp_ms=100000,
-        dwell_bars=4,
-        session_switch_count=1,
-        permissions={"ORB": True, "APM_REENTRY": True, "REVERSAL": False},
-        is_trading_permitted=True,
-        fail_closed_reason="",
-    )
-    router.current_state = post
-
-    assert advisor._evaluate_orb_regime_permission(router) is True
-
-
-def test_mode2_orb_gating_volatility_compression_entropy_threshold():
-    """Low entropy VOLATILITY_COMPRESSION permits ORB breakout, while high entropy blocks it."""
-    advisor = SentinelLiveStreamAdvisor(enable_stdout=False)
-    router = MagicMock(spec=SentinelRegimeRouter)
-    advisor.regime_routers["NIFTY"] = router
-
-    # Case A: Low entropy (< 0.70) under VOLATILITY_COMPRESSION
-    post_low_entropy = RegimePosteriorState(
-        probabilities={REGIME_VOLATILITY_COMPRESSION: 0.75, REGIME_RUNAWAY_EXPANSION: 0.15, REGIME_ROTATIONAL_CHOP: 0.05, REGIME_EXHAUSTION_REVERSAL: 0.05},
-        dominant_regime=REGIME_VOLATILITY_COMPRESSION,
-        entropy=0.6,
-        normalized_entropy=0.45,  # < 0.70
-        regime_epoch=4,
-        bar_timestamp_ms=100000,
-        dwell_bars=10,
-        session_switch_count=2,
-        permissions={"ORB": False, "APM_REENTRY": False, "REVERSAL": False},
-        is_trading_permitted=True,
-        fail_closed_reason="",
-    )
-    router.current_state = post_low_entropy
-    assert advisor._evaluate_orb_regime_permission(router) is True
-
-    # Case B: High entropy (>= 0.70) under VOLATILITY_COMPRESSION
-    post_high_entropy = RegimePosteriorState(
-        probabilities={REGIME_VOLATILITY_COMPRESSION: 0.40, REGIME_RUNAWAY_EXPANSION: 0.25, REGIME_ROTATIONAL_CHOP: 0.20, REGIME_EXHAUSTION_REVERSAL: 0.15},
-        dominant_regime=REGIME_VOLATILITY_COMPRESSION,
-        entropy=1.1,
-        normalized_entropy=0.78,  # >= 0.70
-        regime_epoch=5,
-        bar_timestamp_ms=100000,
-        dwell_bars=2,
-        session_switch_count=3,
-        permissions={"ORB": False, "APM_REENTRY": False, "REVERSAL": False},
-        is_trading_permitted=True,
-        fail_closed_reason="",
-    )
-    router.current_state = post_high_entropy
-    assert advisor._evaluate_orb_regime_permission(router) is False
-
-
-def test_mode2_orb_gating_ambiguous_and_exhaustion_veto():
-    """AMBIGUOUS_NO_TRADE and EXHAUSTION_REVERSAL veto ORB breakout."""
-    advisor = SentinelLiveStreamAdvisor(enable_stdout=False)
-    router = MagicMock(spec=SentinelRegimeRouter)
-    advisor.regime_routers["NIFTY"] = router
-
-    post_ambiguous = RegimePosteriorState(
-        probabilities={REGIME_AMBIGUOUS_NO_TRADE: 0.50, REGIME_RUNAWAY_EXPANSION: 0.20, REGIME_ROTATIONAL_CHOP: 0.15, REGIME_VOLATILITY_COMPRESSION: 0.15},
-        dominant_regime=REGIME_AMBIGUOUS_NO_TRADE,
-        entropy=1.2,
-        normalized_entropy=0.85,
-        regime_epoch=6,
-        bar_timestamp_ms=100000,
-        dwell_bars=1,
-        session_switch_count=4,
-        permissions={"ORB": False, "APM_REENTRY": False, "REVERSAL": False},
-        is_trading_permitted=True,
-        fail_closed_reason="",
-    )
-    router.current_state = post_ambiguous
-    assert advisor._evaluate_orb_regime_permission(router) is False
-
-    post_exhaustion = RegimePosteriorState(
-        probabilities={REGIME_EXHAUSTION_REVERSAL: 0.80, REGIME_RUNAWAY_EXPANSION: 0.10, REGIME_ROTATIONAL_CHOP: 0.05, REGIME_VOLATILITY_COMPRESSION: 0.05},
-        dominant_regime=REGIME_EXHAUSTION_REVERSAL,
-        entropy=0.5,
-        normalized_entropy=0.35,
-        regime_epoch=7,
-        bar_timestamp_ms=100000,
-        dwell_bars=2,
-        session_switch_count=4,
-        permissions={"ORB": False, "APM_REENTRY": False, "REVERSAL": True},
-        is_trading_permitted=True,
-        fail_closed_reason="",
-    )
-    router.current_state = post_exhaustion
-    assert advisor._evaluate_orb_regime_permission(router) is False
 
 
 def test_safety_invariants_preserved():

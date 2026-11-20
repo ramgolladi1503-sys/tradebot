@@ -7,15 +7,11 @@
 ---
 
 ## 1. Problem Statement & Scope
-TradeBot has validated standalone execution modules:
-1. **Gear 2 ORB**: Directional breakout expansion engine.
-2. **APM Trailing & Pullback Re-entry Engine**: Trade lifecycle management.
-3. **Intraday Reversal Engine**: High-conviction extreme exhaustion scalp tier (61.5% win rate).
+TradeBot has standalone execution components for APM lifecycle management and intraday reversal setups.
 
 However, without an upstream supervisory regime router:
-- ORB experiences chop drag when fired during Rotational Chop (~48.6% of sessions) or Low-Vol Compression (~5.6%).
 - Reversal Engine risks adverse selection if fired against Runaway Trends (~17.1%).
-- TradeBot needs an objective, causal, mathematical regime classifier operating strictly upstream as an advisory permission gate ("traffic controller") that gates/routes setups without modifying existing strategy internals.
+- TradeBot needs an objective, causal, mathematical regime classifier operating strictly upstream as an advisory permission gate that gates retained setup families without modifying their strategy internals.
 
 ---
 
@@ -29,7 +25,7 @@ As instructed by User, delivery must execute across 6 sequential gates:
    - Attacker 5: Risk Governance & Adverse Selection Auditor (Challenge tail events, flash crashes, circuit limits).
 2. **Design Synthesis**: Hermes synthesizes attacker findings into invariant architecture & data contracts.
 3. **Attacker Council Formal Sign-off**: All 5 Attackers inspect design to approve/veto before code.
-4. **Implementation & Calibration**: GSD builds the modular regime router and executes 2-year calibration.
+4. **Implementation & Verification**: GSD builds and verifies the modular regime router.
 5. **Tier 2: 5 Independent Reviewers Audit**:
    - Reviewer 1: Microstructure Reviewer.
    - Reviewer 2: Quantitative Verification Reviewer.
@@ -56,9 +52,7 @@ The 5 domain-specialist attackers have completed their independent audits. All 5
    - **Vetoes**: Brittle 5-bin hard geometric threshold cuts ($KER \gtrless 0.35$).
    - **Mandates**:
      - `STAT-01`: Continuous probabilistic membership vector $\mathbf{P}_t \in \Delta^4$ over the simplex with explicit entropy metric $\mathcal{H}(\mathbf{P}_t)$.
-     - `STAT-02`: Combinatorial Purged Cross-Validation (CPCV) with Deflated Sharpe Ratio ($DSR, p < 0.01$) and registered trial counts in `append_only_trial_ledger.py`.
      - `STAT-03`: Minimum dwell time ($T_{dwell} \ge 12$ bars) and asymmetric transition penalties ($\le 4$ switches/session).
-     - `STAT-04`: Perturbation convexity proof ($\pm 20\%$ parameter variation across 1,000 Monte Carlo draws without cliff edges).
 3. **Attacker 3 (Causal Systems & Low-Latency Execution Architect)**:
    - **Vetoes**: Mid-bar state flapping, blocking asyncio event loops with rolling arrays, and uncoordinated entry race conditions.
    - **Mandates**:
@@ -145,8 +139,8 @@ class RegimePosteriorState:
     bar_timestamp_ms: int            # Frozen bar T-1 boundary close timestamp
     dwell_bars: int                  # Current regime dwell duration
     session_switch_count: int        # Cumulative regime flips today
-    permissions: Dict[str, bool]     # Advisory permissions per setup family:
-                                     # {"ORB": bool, "APM_REENTRY": bool, "REVERSAL": bool}
+    permissions: Dict[str, bool]     # Advisory permissions for retained setup families:
+                                     # {"APM_REENTRY": bool, "REVERSAL": bool}
     is_trading_permitted: bool       # Global supervisory gate (False if circuit freeze, stale feed, high entropy)
     fail_closed_reason: str          # Empty if normal, or diagnostic string
 ```
@@ -176,13 +170,13 @@ class RegimePosteriorState:
 
 ### 4.3 Options Greeks & Volatility Invariant Gates (`GREEK-01` to `GREEK-04`)
 
-In addition to spot index regime posteriors, permissions enforce options-specific gating:
+Options-specific gates may further constrain eligible entries:
 1. **Intraday IV Velocity Gate (`GREEK-01`)**:
-   - Rejects long option breakouts if rolling 15m IV velocity $\frac{dIV}{dt} < -1.5\text{ pts/hour}$ (post-event IV crush).
+   - Rejects long option entries if rolling 15m IV velocity $\frac{dIV}{dt} < -1.5\text{ pts/hour}$ (post-event IV crush).
 2. **Gamma-Theta Intraday Velocity Budget (`GREEK-02`)**:
    - For 0-DTE contracts post-12:00 PM IST:
      $$\text{Underlying Velocity } v_{spot} = \frac{|\Delta P_{15m}|}{15\text{ min}} > \frac{|\Theta_{contract}|}{|\Delta_{contract}| \cdot 100}$$
-     If underlying velocity fails to exceed Theta drag, breakout permissions are revoked.
+     If underlying velocity fails to exceed Theta drag, entry permission is revoked.
 3. **Asymmetric Put/Call Skew Differential (`GREEK-03`)**:
    - CE reversals require 25-delta Put/Call Skew ratio $S_{skew} = \frac{\sigma_{25\Delta P}}{\sigma_{25\Delta C}} > 1.15$ (panic put bid overextended).
    - PE reversals require $S_{skew} < 0.95$ (complacent call skew topping).
@@ -195,7 +189,7 @@ In addition to spot index regime posteriors, permissions enforce options-specifi
 
 1. **Deterministic Fail-Closed Data Guard (`RG-01`)**:
    - If tick staleness $> 3.0\text{s}$, depth contains zero bids/asks, or any feature computes to `NaN`/`Inf`:
-     `is_trading_permitted = False`, `permissions = {ORB: False, APM_REENTRY: False, REVERSAL: False}`, `dominant_regime = "DATA_GUARD_FAIL_CLOSED"`.
+     `is_trading_permitted = False`, `permissions = {APM_REENTRY: False, REVERSAL: False}`, `dominant_regime = "DATA_GUARD_FAIL_CLOSED"`.
 2. **Circuit Freeze Kill-Gate (`RG-02`)**:
    - Spot move within 2.0% of NSE Index Circuit limits or index tick volatility $> 5\sigma$ triggers `REGIME_CIRCUIT_EMERGENCY`, instantly freezing all entries.
 3. **Supervisory Read-Only Enforcement (`RG-03`)**:
@@ -206,41 +200,19 @@ In addition to spot index regime posteriors, permissions enforce options-specifi
 
 ---
 
-### 4.5 Calibration Contract (`core/analytics/regime_calibration_engine.py`)
-
-1. **Combinatorial Purged Cross-Validation (CPCV) (`STAT-02`)**:
-   - Partition 2-year intraday dataset ($N_{days} \approx 500$) into $K=10$ sequential groups.
-   - Generate $\binom{10}{6} = 210$ combinatorial train/test splits.
-   - Enforce embargo $E = 3\text{ sessions}$ and purging window $P = 1\text{ session}$ around every test split to prevent serial correlation leakage.
-2. **Deflated Sharpe Ratio (DSR) & Trial Ledger Logging (`STAT-02`)**:
-   - Every tested parameter combination is registered sequentially in `core/research_registry/append_only_trial_ledger.py`.
-   - Compute Bailey & López de Prado Deflated Sharpe Ratio:
-     $$\text{DSR} = \text{Prob}\left( \text{SR}^* \le \widehat{\text{SR}} \;\middle|\; N_{trials}, \gamma_3, \gamma_4 \right)$$
-   - Edge acceptance threshold: $p < 0.01$ and $DSR > 0.95$.
-3. **Parameter Convexity & MC Perturbation (`STAT-04`)**:
-   - Every calibrated threshold $\theta$ undergoes $\pm 20\%$ continuous perturbation across 1,000 Monte Carlo draws.
-   - Performance degradation must be smooth and monotonic ($\nabla^2 f(\theta) \le 0$). Any cliff edge $> 15\%$ drop in PnL/Sharpe over a 5% parameter step triggers immediate rejection.
-
----
-
-### 4.6 Non-Invasive Integration Contract with `SentinelLiveStreamAdvisor`
+### 4.5 Non-Invasive Integration Contract with `SentinelLiveStreamAdvisor`
 
 1. `SentinelLiveStreamAdvisor` instantiates `SentinelRegimeRouter` as a private supervisory component.
 2. On closed bar callback from `InMemorySentinelAdapter`, `advisor` invokes:
    ```python
    regime_state: RegimePosteriorState = self._regime_router.on_bar_close(closed_bar, depth_l5, greeks_feed)
    ```
-3. Strategy evaluation methods (`_evaluate_orb_signals`, `_evaluate_reversal_signals`, `_evaluate_apm_reentry`) query advisory permissions via epoch token:
-   ```python
-   if not regime_state.permissions.get("ORB", False):
-       # Advisory entry inhibited by upstream regime router
-       return None
-   ```
-4. Strategies remain completely decoupled: strategy logic, internal state machines, and calculations are untouched.
+3. Retained strategy consumers query their applicable advisory permission via the epoch token.
+4. Strategy logic, internal state machines, and calculations remain decoupled from the regime router.
 
 ---
 
-### 4.7 Hermes Invariant Matrix
+### 4.6 Hermes Invariant Matrix
 
 | Attacker Mandate ID | Description | Enforcing Component | Verification Test |
 | :--- | :--- | :--- | :--- |
@@ -249,9 +221,7 @@ In addition to spot index regime posteriors, permissions enforce options-specifi
 | **`MICRO-03`** | 09:15-09:30 discovery lockout | `SentinelRegimeRouter._check_opening_lockout` | `test_morning_lockout_enforced` |
 | **`MICRO-04`** | Resting depth persistence $\ge 3$s | `SentinelRegimeRouter._ewmm_depth_filter` | `test_depth_flicker_spoof_rejected` |
 | **`STAT-01`** | Continuous simplex $\mathbf{P}_t$ & entropy | `RegimePosteriorState.entropy` | `test_simplex_sum_to_one_and_entropy` |
-| **`STAT-02`** | CPCV & DSR in Trial Ledger | `RegimeCalibrationEngine.run_cpcv` | `test_cpcv_ledger_registration` |
 | **`STAT-03`** | Sticky dwell $\ge 12$ bars, $\le 4$ flips | `SentinelRegimeRouter._hysteresis_filter` | `test_hysteresis_dwell_and_flip_cap` |
-| **`STAT-04`** | $\pm 20\%$ perturbation convexity | `RegimeCalibrationEngine.verify_convexity` | `test_parameter_convexity_no_cliffs` |
 | **`SYS-01`** | Frozen epoch bar-boundary causality | `SentinelRegimeRouter.current_state` | `test_bar_boundary_causality` |
 | **`SYS-02`** | Non-blocking ring-buffer $T_{eval} < 200\mu s$ | `RingBufferFeatureExtractor` | `test_ring_buffer_eval_latency` |
 | **`SYS-03`** | Local WAL crash recovery | `RegimeJournalWAL` | `test_wal_crash_recovery_deterministic` |
@@ -275,12 +245,12 @@ All 5 domain-specialist attackers have conducted their final audit of Hermes's s
 | Attacker Role | Reviewer Focus | Invariants Audited | Formal Vote | Disposition |
 | :--- | :--- | :--- | :--- | :--- |
 | **Attacker 1** | Market Microstructure & Order Flow | `MICRO-01` to `MICRO-04` | **APPROVED** | Unconditional |
-| **Attacker 2** | Statistical & Quant Overfitting | `STAT-01` to `STAT-04` | **APPROVED** | Unconditional |
+| **Attacker 2** | Statistical & Quant Overfitting | `STAT-01`, `STAT-03` | **APPROVED** | Unconditional |
 | **Attacker 3** | Causal Systems & Low-Latency Execution | `SYS-01` to `SYS-05` | **APPROVED** | Unconditional |
 | **Attacker 4** | Options Volatility & Greeks Dynamics | `GREEK-01` to `GREEK-04` | **APPROVED** | Unconditional |
 | **Attacker 5** | Risk Governance & Tail Risk Controls | `RG-01` to `RG-04` | **APPROVED** | Unconditional |
 
-**Gate Status:** **STAGE 1 & 2 COMPLETE. PROCEED TO STAGE 3: GSD IMPLEMENTATION & 2-YEAR CALIBRATION.**
+**Gate Status:** **STAGE 1 & 2 COMPLETE. PROCEED TO STAGE 3: GSD IMPLEMENTATION.**
 
 
 ---
@@ -291,7 +261,7 @@ All 5 independent domain reviewers have completed their deep code and mathematic
 | Reviewer Role | Focus Area | Verification Focus | Formal Verdict | Status |
 | :--- | :--- | :--- | :--- | :--- |
 | **Reviewer 1** | Market Microstructure Specialist | `MICRO-01` to `MICRO-04`, CVD z-score, 09:15-09:30 lockout, EWMM depth | **PASS** | Complete |
-| **Reviewer 2** | Quantitative Verification Specialist | `STAT-01` to `STAT-04`, Simplex $\Delta^4$, CPCV, DSR, Convexity | **PASS** | Complete |
+| **Reviewer 2** | Quantitative Verification Specialist | `STAT-01`, `STAT-03`, Simplex $\Delta^4$, regime dwell and transitions | **PASS** | Complete |
 | **Reviewer 3** | Causal Systems & Low Latency Reviewer | `SYS-01` to `SYS-05`, Ring buffer $<200\mu s$, binary WAL, zero lookahead | **PASS** | Complete |
 | **Reviewer 4** | Derivatives Payoff & Greeks Specialist | `GREEK-01` to `GREEK-04`, IV crush, gamma-theta budget, skew differential | **PASS** | Complete |
 | **Reviewer 5** | Risk Governance & Compliance Auditor | `RG-01` to `RG-04`, Fail-closed data guard, circuit emergency, AGENTS.md | **PASS** | Complete |

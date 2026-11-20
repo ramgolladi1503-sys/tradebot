@@ -375,11 +375,11 @@ def test_spot_timestamp_rejects_duplicate_or_decreasing_before_mutation(tmp_path
     _freeze_advisor_clock(monkeypatch, timestamp_ms)
     assert advisor._update_spot("NIFTY", 24000.0, timestamp_ms) is True
     original_spot = advisor.spots["NIFTY"]
-    original_history_len = len(advisor.spot_history["NIFTY"])
+    original_spot_timestamp = advisor.spots_ts_ms["NIFTY"]
     assert advisor._update_spot("NIFTY", 23900.0, timestamp_ms) is False
     assert advisor._update_spot("NIFTY", 23900.0, timestamp_ms - 1) is False
     assert advisor.spots["NIFTY"] == original_spot
-    assert len(advisor.spot_history["NIFTY"]) == original_history_len
+    assert advisor.spots_ts_ms["NIFTY"] == original_spot_timestamp
 
 
 def test_stale_recognized_spot_tick_is_full_aggregation_noop(tmp_path: Path, monkeypatch):
@@ -392,7 +392,6 @@ def test_stale_recognized_spot_tick_is_full_aggregation_noop(tmp_path: Path, mon
     router = advisor.regime_routers["NIFTY"]
     before = (
         advisor.spots["NIFTY"], advisor.spots_ts_ms["NIFTY"],
-        tuple(advisor.spot_history["NIFTY"]),
         _bucket_snapshot(advisor.bar_buckets["NIFTY"]),
         _bucket_snapshot(advisor.bar_buckets_5m["NIFTY"]),
         advisor._last_spot_timestamp_ms["NIFTY"],
@@ -404,7 +403,6 @@ def test_stale_recognized_spot_tick_is_full_aggregation_noop(tmp_path: Path, mon
     advisor.on_tick(_spot_tick(ts_ms, 23900.0, 2))  # exact duplicate timestamp
     after = (
         advisor.spots["NIFTY"], advisor.spots_ts_ms["NIFTY"],
-        tuple(advisor.spot_history["NIFTY"]),
         _bucket_snapshot(advisor.bar_buckets["NIFTY"]),
         _bucket_snapshot(advisor.bar_buckets_5m["NIFTY"]),
         advisor._last_spot_timestamp_ms["NIFTY"],
@@ -438,7 +436,6 @@ def test_concurrent_spot_updates_serialize_to_latest_timestamp(tmp_path: Path, m
     assert advisor._last_spot_timestamp_ms["NIFTY"] == base_ts + 1000
     assert advisor.spots_ts_ms["NIFTY"] == base_ts + 1000
     assert advisor.spots["NIFTY"] == 24001.0
-    assert advisor.spot_history["NIFTY"][-1] == 24001.0
     assert advisor.bar_buckets["NIFTY"].last_timestamp_ms == base_ts + 1000
     assert advisor.bar_buckets_5m["NIFTY"].last_timestamp_ms == base_ts + 1000
 
@@ -513,12 +510,12 @@ def test_future_clock_skew_exact_bound_and_just_over_rejected_before_mutation(tm
     assert spot_advisor._update_spot("NIFTY", 24000, now_ms + 5000) is True
     spot_snapshot = (
         spot_advisor.spots["NIFTY"], spot_advisor.spots_ts_ms["NIFTY"],
-        tuple(spot_advisor.spot_history["NIFTY"]), spot_advisor._last_spot_timestamp_ms["NIFTY"],
+        spot_advisor._last_spot_timestamp_ms["NIFTY"],
     )
     assert spot_advisor._update_spot("NIFTY", 23900, now_ms + 5001) is False
     assert (
         spot_advisor.spots["NIFTY"], spot_advisor.spots_ts_ms["NIFTY"],
-        tuple(spot_advisor.spot_history["NIFTY"]), spot_advisor._last_spot_timestamp_ms["NIFTY"],
+        spot_advisor._last_spot_timestamp_ms["NIFTY"],
     ) == spot_snapshot
 
     bar_advisor = SentinelLiveStreamAdvisor(wal_path=str(tmp_path / "bar-skew.json"), enable_stdout=False)
@@ -983,7 +980,10 @@ def test_mode5_or_v2_seed_requires_exact_aware_same_session_coverage(tmp_path: P
     for index_name in ("NIFTY", "BANKNIFTY", "SENSEX"):
         assert advisor.or_evidence[index_name]["status"] == "COMPLETE"
         assert advisor.or_evidence[index_name]["coverage_count"] == 30
-        assert advisor._validate_mode5_or_evidence(index_name, _india_ts(day, dt_time(10, 0)))[0] is True
+        complete_boundary = _india_ts(day, dt_time(10, 0))
+        assert advisor._validate_mode5_or_evidence(
+            index_name, complete_boundary, complete_boundary
+        )[0] is True
 
 
 def test_mode5_or_later_rows_are_validated_but_excluded_from_bounds():
@@ -1054,12 +1054,12 @@ def test_mode5_or_recheck_blocks_apm_after_session_rollover(tmp_path: Path, monk
     validate = advisor._validate_mode5_or_pair
     calls = 0
 
-    def roll_between_checks(index_name, decision_timestamp_ms):
+    def roll_between_checks(index_name, decision_timestamp_ms, completed_bar_boundary_ms=None):
         nonlocal calls
         calls += 1
         if calls == 2:
             advisor._reset_rp2_state_for_session("NIFTY", day + timedelta(days=1))
-        return validate(index_name, decision_timestamp_ms)
+        return validate(index_name, decision_timestamp_ms, completed_bar_boundary_ms)
 
     advisor._validate_mode5_or_pair = roll_between_checks
     with patch.object(advisor_module, "calculate_discrete_lots", return_value=(1, "FULL")), \
@@ -1097,9 +1097,10 @@ def test_mode5_or_partial_is_causal_and_expires_at_shock_end(tmp_path: Path, mon
     advisor = SentinelLiveStreamAdvisor(wal_path=str(tmp_path / "partial-or.json"), enable_stdout=False)
     assert advisor._update_spot("NIFTY", 24000.0, event_ts)
     assert advisor._update_spot("SENSEX", 81000.0, event_ts)
-    assert advisor._validate_mode5_or_pair("NIFTY", event_ts)[0] is True
-    assert advisor._validate_mode5_or_evidence("NIFTY", event_ts - 1)[1] == "OR_SOURCE_NONCAUSAL"
-    assert advisor._validate_mode5_or_pair("NIFTY", _india_ts(day, dt_time(9, 45)))[1] == "MODE5_TARGET_OR_COMPLETE_REQUIRED"
+    assert advisor._validate_mode5_or_pair("NIFTY", event_ts, event_ts)[0] is True
+    assert advisor._validate_mode5_or_evidence("NIFTY", event_ts - 1, event_ts)[0] is True
+    ts_0945 = _india_ts(day, dt_time(9, 45))
+    assert advisor._validate_mode5_or_pair("NIFTY", ts_0945, ts_0945)[1] == "MODE5_TARGET_OR_COMPLETE_REQUIRED"
 
 
 def test_mode5_bar_abstains_before_history_mutation_without_valid_or(tmp_path: Path, monkeypatch):

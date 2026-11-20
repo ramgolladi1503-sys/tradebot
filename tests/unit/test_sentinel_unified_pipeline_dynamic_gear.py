@@ -154,10 +154,9 @@ def test_priority_cool_off_early_release_and_dual_stream_tagging():
 
     # Verify strategy priority weights
     assert advisor.strategy_priority_weights["OPTIONMATE_RBFN_AUCTION"] == 1.00
-    assert advisor.strategy_priority_weights["LIQUIDITY_SWEEP"] == 0.50
 
-    # Low-priority same-direction trade (LIQUIDITY_SWEEP CE) cannot bypass cool-off
-    low_prio = advisor.strategy_priority_weights["LIQUIDITY_SWEEP"]
+    # Retained lower-priority same-direction strategy cannot bypass cool-off.
+    low_prio = advisor.strategy_priority_weights["INTRADAY_REVERSAL"]
     can_bypass_low = (
         apm.state == STATE_COOL_OFF
         and (low_prio >= 0.90 or apm.cool_off_direction != "CE")

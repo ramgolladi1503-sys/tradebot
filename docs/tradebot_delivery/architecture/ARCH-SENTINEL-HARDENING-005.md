@@ -40,13 +40,14 @@ Because `_seed_or_bounds_from_api_if_late_boot` was executed as a **one-shot att
    `MODE5_TARGET_OR_COMPLETE_REQUIRED` or `MODE5_COMPANION_OR_COMPLETE_REQUIRED`.
 6. Even though all 30/30 candles were available on Upstox from 09:45:50 onward, the engine remained permanently poisoned and starved for the entire session.
 
-### 1.3 Sub-Second Timestamp Jitter & Causal Skew Hazard
-In addition to REST propagation delay, multi-index causal cross-validation (`_validate_mode5_or_evidence`) enforces:
+### 1.3 Completed-Bar Source Boundary
+Multi-index causal cross-validation (`_validate_mode5_or_evidence`) uses the completed boundary of the 5-minute bar being evaluated:
 ```python
-if source_timestamp_ms <= 0 or source_timestamp_ms > decision_timestamp_ms:
+completed_bar_boundary_ms = (epoch_5min + 1) * 300_000
+if source_timestamp_ms <= 0 or source_timestamp_ms > completed_bar_boundary_ms:
     return False, "OR_SOURCE_NONCAUSAL", details
 ```
-When evaluating companion or target index timestamps at bar close boundaries (e.g. nominal 09:30:00.000 bar close or 09:45:00 OR closure), sub-second tick arrival jitter (e.g., companion tick arriving at `09:29:59.907` while target is at `09:30:00.000`, or OR coverage end at `09:44:00.000` evaluated against a tick arriving fractions of a second early) can trigger false `OR_SOURCE_NONCAUSAL` rejections if microsecond/millisecond network skew is not bounded with a strict point-in-time tolerance window.
+A source timestamp equal to the completed boundary is valid. Any source timestamp later than that boundary, including by 1 ms, is rejected. Transport arrival time and decision-time jitter do not extend the boundary.
 
 ---
 
@@ -88,23 +89,12 @@ SAFETY_DECLARATIONS = {
    - Until `or_evidence[target]["status"] == "COMPLETE"` AND `or_evidence[companion]["status"] == "COMPLETE"`, all Mode 5 and OptionMate candidate entries **must fail closed and abstain**.
    - No speculative or unproven bounds may ever be used to authorize live or paper trade entries.
 
-### Contract 2: Millisecond Causal Skew Tolerance Boundary
+### Contract 2: Completed 5-Minute Causal Boundary
 
-1. **Microstructure Jitter Definition**:
-   - Intraday index ticks across heterogeneous exchanges (NSE for NIFTY, BSE for SENSEX) or candle close timestamps versus tick arrivals exhibit small transport and queue latencies (typically 50–500ms).
-   - In `_validate_mode5_or_evidence`:
-     ```python
-     # Strict nominal check:
-     source_timestamp_ms <= decision_timestamp_ms
-     ```
-     For a completed OR, `source_timestamp_ms` represents the bar timestamp of the 30th 1m candle: `09:44:00.000 IST` (or coverage end ms `09:44:00.000` / `09:44:59.999`).
-2. **Causal Tolerance Rule**:
-   - The decision timestamp `decision_timestamp_ms` must be strictly after the completion of the opening range:
-     `decision_dt.time() >= 09:45:00 IST`.
-   - To account for sub-second clock drift or companion tick arrival skew between NSE and BSE feeds at bar boundaries:
-     - A maximum permissible causal clock skew tolerance of `skew_tolerance_ms = 1000` (1 second) is permitted **only** when comparing companion feed timestamps against the local decision boundary, provided both events fall within the same discrete 5-minute bar window.
-     - `source_timestamp_ms <= (decision_timestamp_ms + skew_tolerance_ms)` is strictly forbidden from looking forward into unclosed bars. The skew tolerance applies only to boundary latching of already completed historical bars.
-     - If `decision_timestamp_ms < expected_or_close_ms` (09:45:00.000 IST), skew tolerance is 0; it must unconditionally reject.
+1. `_on_5m_bar_close_locked` derives the boundary from the bar epoch as `completed_bar_boundary_ms = (epoch_5min + 1) * 300_000`.
+2. `_validate_mode5_or_evidence` rejects missing, invalid, or nonpositive source timestamps and rejects any `source_timestamp_ms > completed_bar_boundary_ms`.
+3. Equality is accepted: `source_timestamp_ms == completed_bar_boundary_ms` is causal for that completed bar. `source_timestamp_ms == completed_bar_boundary_ms + 1` is rejected.
+4. There is no arrival-jitter allowance. Decision timestamp and network arrival time do not extend the completed-bar boundary. Session-date and opening-range completeness checks remain in force.
 
 ---
 
@@ -127,7 +117,6 @@ self.or_reconcile_retry_count: dict[str, int] = {
 }
 self.OR_MAX_RETRY_ATTEMPTS: int = 10
 self.OR_MIN_RETRY_INTERVAL_MS: int = 60_000  # 60s throttle
-self.CAUSAL_SKEW_TOLERANCE_MS: int = 1_000   # 1s arrival jitter buffer
 ```
 
 ### 3.2 Idempotent Periodic Reconciliation Method
@@ -172,12 +161,13 @@ Key algorithmic rules:
      - If `not self.or_reconciliation_complete`:
        - Check throttle and invoke `_reconcile_or_bounds_from_api(session_day=tick_day, current_time_ms=timestamp_ms)`.
 3. **In `_validate_mode5_or_evidence`**:
-   - Support `skew_tolerance_ms`:
+   - Validate source provenance against the explicit completed 5-minute bar boundary:
      ```python
-     # Allow up to 1000ms clock skew only if source is completed historical bar
-     if source_timestamp_ms <= 0 or source_timestamp_ms > (decision_timestamp_ms + self.CAUSAL_SKEW_TOLERANCE_MS):
+     completed_bar_boundary_ms = (epoch_5min + 1) * 300_000
+     if source_timestamp_ms <= 0 or source_timestamp_ms > completed_bar_boundary_ms:
          return False, "OR_SOURCE_NONCAUSAL", details
      ```
+   - A source timestamp exactly equal to the completed boundary is accepted; a timestamp even 1 ms later is rejected. The decision timestamp does not grant additional skew allowance.
 
 ---
 
@@ -220,10 +210,9 @@ A new, dedicated test suite `tests/unit/test_sentinel_advisor_hardening_005.py` 
    - Once all indices reach `COMPLETE`, fire ticks at 09:50, 09:55, 10:00.
    - Verify zero additional REST API calls are dispatched (`or_reconciliation_complete` short-circuits).
 
-4. **Test Case 4: Causal Skew Tolerance Boundary**:
-   - Decision timestamp at `09:45:00.000 IST`. Source timestamp of 30th candle at `09:44:00.000 IST` (with coverage end `09:44:00.000` / `09:44:59.999`).
-   - Companion tick arriving with 500ms arrival jitter (`09:44:59.500 IST`) vs decision time.
-   - Verify skew tolerance accepts valid causal timestamps and rejects timestamps exceeding +1000ms.
+4. **Test Case 4: Completed 5-Minute Boundary**:
+   - Derive `completed_bar_boundary_ms` from the evaluated 5-minute epoch.
+   - Verify source evidence exactly at the boundary passes and source evidence at boundary + 1 ms fails with `OR_SOURCE_NONCAUSAL`.
 
 5. **Test Case 5: Maximum Retry Exhaustion Fail-Closed**:
    - If REST API continuously returns 404 or incomplete candles past 10 retries, verify advisor stops retrying and continues to fail closed (abstain from trading).
@@ -233,6 +222,6 @@ A new, dedicated test suite `tests/unit/test_sentinel_advisor_hardening_005.py` 
 ## 6. Architecture Acceptance Sign-Off
 
 - **Contract GATE-SENTINEL-15**: `RETRY_OR_RECONCILIATION_UNTIL_COMPLETE` strictly defined.
-- **Microstructure Alignment**: Propagation latency accommodated, causal skew bounded.
+- **Microstructure Alignment**: Operational retries accommodate delayed source availability. Causal eligibility is bounded by the validated completed-bar boundary: timestamps at the boundary are accepted; later timestamps are rejected.
 - **Safety Proof**: Fail-closed until verified; zero runtime risk changes; read-only verification.
 - **Ready for Stage 2 (GSD Execution)**.

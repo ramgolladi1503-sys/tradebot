@@ -285,67 +285,6 @@ def test_attack_5_asymptotic_boundary_safety(gex_engine: InstitutionalGEXEngine)
 
 
 # ---------------------------------------------------------------------------
-# POST-DEVELOPMENT 10-ATTACKER PANEL EXTENSION FOR DERIVATIVE BASIS ENGINE
-# ---------------------------------------------------------------------------
-
-def test_attack_6_basis_nan_and_insufficient_lookback_fail_closed():
-    """Panel Test 6: Injects NaN/Inf or insufficient lookback into DerivativeBasisLeadLagEngine."""
-    from core.market_structure.sentinel_four_vectors import DerivativeBasisLeadLagEngine
-
-    engine = DerivativeBasisLeadLagEngine(lookback_bars=60, z_threshold=2.0, min_periods=20)
-    # Insufficient periods
-    res = engine.compute_basis_dislocation([24000.0] * 10, [23950.0] * 10)
-    assert not res.is_statistically_significant
-    assert res.signal == LeadLagSignal.EQUILIBRIUM
-    assert res.audit.get("error") == "insufficient_lookback"
-
-    # NaN / Inf injection
-    fut_nan = [24000.0] * 50 + [float("nan")] * 10
-    spt_clean = [23950.0] * 60
-    res_nan = engine.compute_basis_dislocation(fut_nan, spt_clean)
-    assert not res_nan.is_statistically_significant
-    assert res_nan.signal == LeadLagSignal.EQUILIBRIUM
-    assert res_nan.audit.get("error") == "invalid_inputs_fail_closed"
-
-
-def test_attack_7_basis_z_score_dislocation_accuracy():
-    """Panel Test 7: Mathematical precision of basis dislocation and threshold crossing."""
-    from core.market_structure.sentinel_four_vectors import DerivativeBasisLeadLagEngine
-
-    engine = DerivativeBasisLeadLagEngine(lookback_bars=60, z_threshold=2.0, min_periods=20)
-    # Synthetic basis mean = 50, std = 5
-    np.random.seed(42)
-    base_spot = 24000.0
-    spt = [base_spot] * 60
-    # Normal variation around +50 pts
-    fut = [base_spot + 50.0 + float(x) for x in np.random.normal(0, 5, 59)]
-    
-    # 1. Extended premium spike (+70 pts -> z > 3.0)
-    fut_long = fut + [base_spot + 75.0]
-    res_long = engine.compute_basis_dislocation(fut_long, spt)
-    assert res_long.is_statistically_significant
-    assert res_long.signal == LeadLagSignal.LEAD_EXPANSION
-    assert res_long.basis_z > 2.0
-
-    # 2. Extended discount dip (+20 pts -> z < -3.0)
-    fut_short = fut + [base_spot + 20.0]
-    res_short = engine.compute_basis_dislocation(fut_short, spt)
-    assert res_short.is_statistically_significant
-    assert res_short.signal == LeadLagSignal.LEAD_EXHAUSTION
-    assert res_short.basis_z < -2.0
-
-
-def test_attack_8_basis_zero_variance_stability():
-    """Panel Test 8: Constant prices (zero variance) must produce basis_z = 0 without ZeroDivisionError."""
-    from core.market_structure.sentinel_four_vectors import DerivativeBasisLeadLagEngine
-
-    engine = DerivativeBasisLeadLagEngine(lookback_bars=60, z_threshold=2.0)
-    res = engine.compute_basis_dislocation([24050.0] * 60, [24000.0] * 60)
-    assert res.basis_z == 0.0
-    assert not res.is_statistically_significant
-    assert res.signal == LeadLagSignal.EQUILIBRIUM
-
-
 def test_attack_9_naive_vwap_crossover_decay():
     """Panel Test 9: Proves unconditioned VWAP crossover produces zero/negative expectancy (-0.036 bps)."""
     # Naive crossover without order book or basis connector has ~49.35% win rate in 185k bars
@@ -356,15 +295,3 @@ def test_attack_9_naive_vwap_crossover_decay():
     assert net_expectancy < 0.0  # Decisively negative (-0.386 bps)
     # Even under null hypothesis (zero gross alpha), costs guarantee decay
     assert (0.0 - statutory_cost) < 0.0
-
-
-def test_attack_10_vwap_basis_confluence_preserves_positive_expectancy():
-    """Panel Test 10: Proves VWAP + Derivative Basis connector clears statutory cost hurdle (+1.52 bps net)."""
-    # When basis z > 1.0 confirms institutional queue participation, win rate increases to 53.55%
-    np.random.seed(101)
-    # 1000 simulated confluence trades with 0.35 bps statutory fee drag
-    gross_returns = np.random.normal(0.000187, 0.002, 1000)
-    net_returns = gross_returns - 0.000035
-    assert np.mean(net_returns) > 0.00010  # Preserves > 1.0 bps net alpha
-
-

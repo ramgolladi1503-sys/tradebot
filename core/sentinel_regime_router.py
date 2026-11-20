@@ -56,7 +56,7 @@ class RegimePosteriorState:
     bar_timestamp_ms: int            # Frozen bar T-1 boundary close timestamp
     dwell_bars: int                  # Current regime dwell duration
     session_switch_count: int        # Cumulative regime flips today
-    permissions: Dict[str, bool]     # Advisory permissions per setup family: {"ORB", "APM_REENTRY", "REVERSAL"}
+    permissions: Dict[str, bool]     # Advisory permissions for retained setup families
     is_trading_permitted: bool       # Global supervisory gate
     fail_closed_reason: str          # Empty if normal, or diagnostic string
 
@@ -115,9 +115,9 @@ class RegimeJournalWAL:
         self.wal_path.parent.mkdir(parents=True, exist_ok=True)
 
     def write_state(self, state: RegimePosteriorState) -> None:
+        # Bit 0 is reserved for the removed ORB permission to keep the WAL
+        # schema and all remaining bit assignments backward-compatible.
         bitmask = 0
-        if state.permissions.get("ORB", False):
-            bitmask |= 1
         if state.permissions.get("APM_REENTRY", False):
             bitmask |= 2
         if state.permissions.get("REVERSAL", False):
@@ -176,7 +176,6 @@ class RegimeJournalWAL:
                 "regime_epoch": epoch,
                 "dominant_regime": dominant,
                 "permissions": {
-                    "ORB": bool(bitmask & 1),
                     "APM_REENTRY": bool(bitmask & 2),
                     "REVERSAL": bool(bitmask & 4),
                 },
@@ -493,7 +492,7 @@ class SentinelRegimeRouter:
                 bar_timestamp_ms=timestamp_ms,
                 dwell_bars=self.current_dwell_bars,
                 session_switch_count=self.session_switch_count,
-                permissions={"ORB": False, "APM_REENTRY": False, "REVERSAL": False},
+                permissions={"APM_REENTRY": False, "REVERSAL": False},
                 is_trading_permitted=False,
                 fail_closed_reason=data_fail,
             )
@@ -514,7 +513,7 @@ class SentinelRegimeRouter:
                 bar_timestamp_ms=timestamp_ms,
                 dwell_bars=self.current_dwell_bars,
                 session_switch_count=self.session_switch_count,
-                permissions={"ORB": False, "APM_REENTRY": False, "REVERSAL": False},
+                permissions={"APM_REENTRY": False, "REVERSAL": False},
                 is_trading_permitted=False,
                 fail_closed_reason=circuit_fail,
             )
@@ -655,10 +654,9 @@ class SentinelRegimeRouter:
 
         # Advisory permissions mapping (SYS-05: entry permissions only)
         if not is_trading_permitted:
-            permissions = {"ORB": False, "APM_REENTRY": False, "REVERSAL": False}
+            permissions = {"APM_REENTRY": False, "REVERSAL": False}
         else:
             permissions = {
-                "ORB": dominant_regime == REGIME_RUNAWAY_EXPANSION,
                 "APM_REENTRY": dominant_regime in (REGIME_RUNAWAY_EXPANSION, REGIME_VOLATILITY_COMPRESSION),
                 "REVERSAL": dominant_regime == REGIME_EXHAUSTION_REVERSAL,
             }

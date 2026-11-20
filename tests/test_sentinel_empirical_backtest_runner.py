@@ -81,30 +81,3 @@ def test_october_2026_counterfactual_replay():
     assert cf_win_rate > 50.0
     assert t_stat > 3.0
     assert p_val < 0.01
-
-
-def test_historical_2024_2026_lead_lag_backtest():
-    """Empirical verification on 185,681 bars of 2024-2026 NIFTY Spot-Futures data."""
-    df = pd.read_parquet("data/research/nifty_futures_alignment_v1/NIFTY_SPOT_FUTURES_ALIGNED_V1.parquet")
-    assert len(df) == 185681
-
-    df["basis"] = df["futures_close"] - df["spot_close"]
-    rolling_mean = df["basis"].rolling(60, min_periods=20).mean()
-    rolling_std = df["basis"].rolling(60, min_periods=20).std() + 1e-6
-    df["basis_z"] = (df["basis"] - rolling_mean) / rolling_std
-
-    fwd_ret_5m = (df["spot_close"].shift(-5) - df["spot_close"]) / df["spot_close"]
-    long_signals = df["basis_z"] > 2.0
-    short_signals = df["basis_z"] < -2.0
-
-    long_rets = fwd_ret_5m[long_signals].dropna()
-    short_rets = fwd_ret_5m[short_signals].dropna()
-    strategy_rets = pd.concat([long_rets, -short_rets])
-
-    assert len(strategy_rets) > 15000
-    win_rate = (strategy_rets > 0).mean() * 100.0
-    assert win_rate > 54.0
-
-    t_stat, p_val = stats.ttest_1samp(strategy_rets, 0.0)
-    assert t_stat > 10.0
-    assert p_val < 1e-20

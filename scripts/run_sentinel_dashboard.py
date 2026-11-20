@@ -576,7 +576,7 @@ def get_all_executed_trades_today() -> list:
                 trades_dict[pid] = {
                     "trade_time": time_str,
                     "position_id": pid,
-                    "strategy": item.get("strategy_name") or ("ORB_BREAKDOWN" if "PE" in str(item.get("direction")) else "ORB_BREAKOUT"),
+                    "strategy": item.get("strategy_name") or "UNSPECIFIED",
                     "strike_contract": item.get("strike_contract", "N/A"),
                     "entry_price": item.get("entry_price"),
                     "exit_price": item.get("exit_price"),
@@ -618,7 +618,7 @@ def get_all_executed_trades_today() -> list:
         trades_dict[cur_pid] = {
             "trade_time": time_str,
             "position_id": cur_pid,
-            "strategy": wal_payload.get("strategy_name") or ("ORB_BREAKDOWN" if "PE" in str(wal_payload.get("direction")) else "ORB_BREAKOUT"),
+            "strategy": wal_payload.get("strategy_name") or "UNSPECIFIED",
             "strike_contract": wal_payload.get("strike_contract", "N/A"),
             "entry_price": wal_payload.get("entry_price"),
             "exit_price": None,
@@ -1721,7 +1721,7 @@ with tab_regimes:
                 dom_color = "🟢" if "EXPANSION" in selected_session['dominant_session_regime'] else "🟠"
                 st.metric("Dominant Regime", f"{dom_color} {selected_session['dominant_session_regime']}")
             with sc3:
-                st.metric("ORB Green Bars", f"{selected_session['orb_green_bars']} / {selected_session['total_bars']}")
+                st.metric("Reversal Armed Bars", f"{selected_session['reversal_armed_bars']} / {selected_session['total_bars']}")
             with sc4:
                 st.metric("Capital Defense Bars", f"{selected_session['capital_defense_bars']} / {selected_session['total_bars']}")
 

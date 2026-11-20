@@ -4,7 +4,6 @@ Proves:
 1. Gate A: An 85-point excursion with Target 1 booked can NEVER exit below entry + friction.
 2. Gate B: Liquidated trades enter STATE_COOL_OFF and reject repeat entries during cooldown.
 3. Gate C: Multi-tranche accounting preserves 50% booked Target 1 gain and reports accurate blended PnL.
-4. Gate D: Mode 2 ORB is blocked during ROTATIONAL_CHOP.
 """
 
 import pytest
@@ -18,7 +17,6 @@ from core.active_position_manager import (
     STATE_COOL_OFF,
     STATE_LIQUIDATED
 )
-from core.sentinel_regime_router import SentinelRegimeRouter, RegimePosteriorState
 
 
 def test_gate_a_85_pt_gain_cannot_exit_negative(tmp_path):

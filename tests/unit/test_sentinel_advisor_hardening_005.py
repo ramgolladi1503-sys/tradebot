@@ -317,7 +317,7 @@ def test_incomplete_first_response_at_0945_does_not_latch_invalid(tmp_path: Path
     assert advisor.or_reconciliation_frozen is False
 
     # Verify Mode 5 fails closed and abstains because OR is not yet COMPLETE
-    or_ok, reason, details = advisor._validate_mode5_or_pair("NIFTY", ts_0945)
+    or_ok, reason, details = advisor._validate_mode5_or_pair("NIFTY", ts_0945, ts_0945)
     assert or_ok is False
     assert "OR_BOUNDS_INVALID" in reason or "OR_COMPLETE_REQUIRED" in reason
 
@@ -387,7 +387,7 @@ def test_bounded_retry_succeeds_at_0950_unblocking_mode5(tmp_path: Path, monkeyp
 
     # Mode 5 pair validation succeeds at 09:50
     ts_0950 = _india_ts(day, dt_time(9, 50))
-    or_ok, reason, details = advisor._validate_mode5_or_pair("NIFTY", ts_0950)
+    or_ok, reason, details = advisor._validate_mode5_or_pair("NIFTY", ts_0950, ts_0950)
     assert or_ok is True
     assert reason == "MODE5_OR_VALID"
 
@@ -445,17 +445,13 @@ def test_permanent_freeze_once_all_indices_complete(tmp_path: Path, monkeypatch)
         assert get_mock.call_count == 3
 
 
-def test_subsecond_causal_skew_tolerance_boundary(tmp_path: Path, monkeypatch):
-    """Test 4: Sub-second arrival jitter within 1000ms does not trigger OR_SOURCE_NONCAUSAL.
-    
-    Timestamps with arrival jitter <= 1000ms pass causal check; timestamps > 1000ms are rejected.
-    """
+def test_mode5_or_evidence_uses_completed_bar_boundary(tmp_path: Path, monkeypatch):
+    """Accept exact completed-bar equality; reject any source timestamp after it."""
     day = date(2026, 11, 18)
     ts_0945 = _india_ts(day, dt_time(9, 45))
     _freeze_advisor_clock(monkeypatch, ts_0945)
 
-    advisor = _new_advisor(tmp_path, "test_skew")
-    # Manually seed COMPLETE OR evidence
+    advisor = _new_advisor(tmp_path, "test_boundary")
     expected_start = int(datetime.combine(day, dt_time(9, 15), tzinfo=ZoneInfo("Asia/Kolkata")).timestamp() * 1000)
     expected_end = int(datetime.combine(day, dt_time(9, 44), tzinfo=ZoneInfo("Asia/Kolkata")).timestamp() * 1000)
 
@@ -471,30 +467,52 @@ def test_subsecond_causal_skew_tolerance_boundary(tmp_path: Path, monkeypatch):
             "coverage_end_ms": expected_end,
         }
 
-    # At decision time exactly 09:45:00.000, source timestamp is 09:44:00.000 (diff is 60s, completely causal)
-    ok, reason, details = advisor._validate_mode5_or_evidence("NIFTY", ts_0945)
+    # Complete OR evidence uses the last in-range 09:44 candle and is valid at 09:45.
+    ok, reason, _ = advisor._validate_mode5_or_pair("NIFTY", ts_0945, ts_0945)
     assert ok is True
-    assert reason == "OR_COMPLETE_VERIFIED"
+    assert reason == "MODE5_OR_VALID"
 
-    # Now test artificial skew: decision time at 09:45:00.000, but source timestamp set to 09:45:00.500 (+500ms jitter)
-    advisor.or_evidence["NIFTY"]["source_timestamp_ms"] = ts_0945 + 500
-    advisor.or_evidence["NIFTY"]["coverage_end_ms"] = ts_0945 + 500
-    ok, reason, _ = advisor._validate_mode5_or_evidence("NIFTY", ts_0945)
-    # Within 1000ms tolerance, it is NOT rejected as OR_SOURCE_NONCAUSAL
-    assert reason != "OR_SOURCE_NONCAUSAL"
+    # Partial evidence may be timestamped exactly at the completed 09:20 boundary.
+    boundary_0920 = _india_ts(day, dt_time(9, 20))
+    decision_before_boundary = boundary_0920 - 1_000
+    for idx in ("NIFTY", "SENSEX"):
+        advisor.or_evidence[idx] = {
+            "session_date": day.isoformat(),
+            "status": "PARTIAL",
+            "source": "UPSTOX_TICK_PARTIAL",
+            "source_timestamp_ms": boundary_0920,
+            "coverage_count": 0,
+            "coverage_start_ms": 0,
+            "coverage_end_ms": 0,
+        }
+    ok, reason, _ = advisor._validate_mode5_or_pair(
+        "NIFTY", decision_before_boundary, boundary_0920
+    )
+    assert ok is True
+    assert reason == "MODE5_OR_VALID"
 
-    # Now set source timestamp to ts_0945 + 1001ms (exceeds 1000ms tolerance)
-    advisor.or_evidence["NIFTY"]["source_timestamp_ms"] = ts_0945 + 1001
-    ok, reason, _ = advisor._validate_mode5_or_evidence("NIFTY", ts_0945)
+    # Future source timestamps fail at +1ms even inside the former post-opening skew allowance.
+    advisor.or_evidence["NIFTY"]["source_timestamp_ms"] = boundary_0920 + 1
+    ok, reason, _ = advisor._validate_mode5_or_pair(
+        "NIFTY", decision_before_boundary, boundary_0920
+    )
     assert ok is False
-    assert reason == "OR_SOURCE_NONCAUSAL"
+    assert reason == "MODE5_TARGET_OR_SOURCE_NONCAUSAL"
 
-    # Negative or 0 source timestamp also rejected
+    advisor.or_evidence["NIFTY"]["source_timestamp_ms"] = boundary_0920
+    advisor.or_evidence["SENSEX"]["source_timestamp_ms"] = boundary_0920 + 1
+    ok, reason, _ = advisor._validate_mode5_or_pair(
+        "NIFTY", decision_before_boundary, boundary_0920
+    )
+    assert ok is False
+    assert reason == "MODE5_COMPANION_OR_SOURCE_NONCAUSAL"
+
     advisor.or_evidence["NIFTY"]["source_timestamp_ms"] = 0
-    ok, reason, _ = advisor._validate_mode5_or_evidence("NIFTY", ts_0945)
+    ok, reason, _ = advisor._validate_mode5_or_evidence(
+        "NIFTY", decision_before_boundary, boundary_0920
+    )
     assert ok is False
     assert reason == "OR_SOURCE_NONCAUSAL"
-
 
 def test_zero_api_spamming_rate_limited_throttle(tmp_path: Path, monkeypatch):
     """Test 5: Zero API spamming: 60-second backoff throttle strictly enforced.

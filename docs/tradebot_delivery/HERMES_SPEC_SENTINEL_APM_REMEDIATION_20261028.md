@@ -4,7 +4,7 @@
 **Pipeline Stage:** Stage 1 (Hermes Architecture & Contracts)  
 **Target Subsystems:**
 1. `core/active_position_manager.py` (Finite State Machine, Trailing Stop, Tranche Accounting)
-2. `core/sentinel_live_stream_advisor.py` (Mode 2 ORB Regime Gating, Anti-Churn Cooldown Admission)
+2. `core/sentinel_live_stream_advisor.py` (Anti-Churn Cooldown Admission)
 3. `core/analytics/multi_session_aggregator.py` & `core/analytics/quant_metrics_engine.py` (Tranche Accounting Integration)
 
 **Safety Invariants:**
@@ -34,7 +34,7 @@ append = False
 ---
 
 ### Mandate 2: Finite State Machine Expansion (`STATE_COOL_OFF`)
-- **Problem:** Liquidating a trade moves the APM to `STATE_LIQUIDATED`. In `sentinel_live_stream_advisor.py`, `STATE_LIQUIDATED` is treated as an immediately eligible state for entry. Because price remains past the static Opening Range breakout level, the engine re-enters the exact same direction within 2 seconds into trend exhaustion.
+- **Problem:** Liquidating a trade moves the APM to `STATE_LIQUIDATED`. If an upstream setup remains qualified, a new same-direction entry can be considered rapidly, creating re-entry churn risk. The APM cool-off constrains post-liquidation re-entry through time and reference-price checks; this rationale is independent of any particular setup family.
 - **Contract Invariant 2.1 (FSM Transitions):**
   Add `STATE_COOL_OFF` to `VALID_TRANSITIONS`:
   ```text
@@ -70,23 +70,6 @@ append = False
   `NormalizedTrade` in `multi_session_aggregator.py` ingests `tranche_1_pnl_pts`, `runner_pnl_pts`, and `blended_opt_pnl_pts`. When present, `QuantMetricsEngine` computes gross and net PnL from the blended points.
 
 ---
-
-### Mandate 4: Mode 2 ORB Regime Gating & De-Mocking
-- **Problem:** In `sentinel_live_stream_advisor.py`, Mode 2 ORB triggers directional trades blindly without checking `RegimeRouter`, and lines 554 and 657 hardcode `writer_conviction = 0.75` and `session_gear = "GEAR_2_TREND"`.
-- **Contract Invariant 4.1 (Regime Admission Gate):**
-  Mode 2 ORB MUST evaluate `regime_router`:
-  ```python
-  router = self.regime_routers.get(index_name)
-  if router:
-      post = router.get_posterior()
-      if not post.permissions.get("ORB", False) or post.dominant_regime == "ROTATIONAL_CHOP":
-          # Suppress breakout during chop
-          return
-  ```
-- **Contract Invariant 4.2 (Orderbook Conviction Derivation):**
-  Derive `writer_conviction` dynamically from L2 book depth imbalance rather than hardcoding `0.75`:
-  $$\text{depth\_imbalance} = \frac{\sum \text{Bids} - \sum \text{Asks}}{\sum \text{Bids} + \sum \text{Asks}}$$
-  $$\text{writer\_conviction} = \text{clamp}(0.5 + 0.5 \times \text{depth\_imbalance}, 0.20, 0.95)$$
 
 ---
 

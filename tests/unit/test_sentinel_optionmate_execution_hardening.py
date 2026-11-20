@@ -466,6 +466,75 @@ def test_rp1_reversal_requires_current_bar_direction(
         assert signal.triggering_reference_price == expected_reference
 
 
+def test_rp1_upper_expansion_producer_snapshots_frozen_rp1_boundary(tmp_path: Path):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / "rp1-upper-expansion.json"), enable_stdout=False
+    )
+    bar_time = dt_time(11, 35)
+    _seed_test_or_pair(advisor, "NIFTY", bar_time)
+    advisor.or_reconciliation_frozen = True
+    advisor.seed_prior_day_levels("NIFTY", pdh=25700.0, pdl=25000.0, pdc=25350.0, atr_20=160.0)
+    advisor.session_open_prices["NIFTY"] = 25370.0
+    grid = OptionMateGrid(
+        date="2026-11-17",
+        spot_open=25370.0,
+        trend_decider=25370.0,
+        rp1_upper=25575.0,
+        rp2_upper=25770.0,
+        rp1_lower=25160.0,
+        rp2_lower=25052.0,
+        call_strike=25600.0,
+        put_strike=25100.0,
+        recommended_bias="CALL",
+        target_strike=25600.0,
+    )
+    advisor.cached_rbfn_grids["NIFTY"] = grid
+    advisor.rbfn_grids_frozen["NIFTY"] = True
+    prior_epoch = _test_bar_epoch(dt_time(11, 30))
+    advisor._rp2_session_dates["NIFTY"] = date(2026, 11, 17)
+    advisor.bars_5m_history["NIFTY"] = [
+        {
+            "open": 25570.0,
+            "high": 25595.0,
+            "low": 25560.0,
+            "close": 25580.0,
+            "volume": 1000.0,
+            "time": dt_time(11, 25),
+            "timestamp_ms": (prior_epoch - 1) * 300_000,
+            "epoch_5min": prior_epoch - 1,
+        },
+        {
+            "open": 25580.0,
+            "high": 25605.0,
+            "low": 25575.0,
+            "close": 25590.0,
+            "volume": 1000.0,
+            "time": dt_time(11, 30),
+            "timestamp_ms": prior_epoch * 300_000,
+            "epoch_5min": prior_epoch,
+        },
+    ]
+    advisor._last_completed_5m_epoch["NIFTY"] = prior_epoch
+    advisor._last_5m_timestamp_ms["NIFTY"] = prior_epoch * 300_000
+
+    timestamp_ms = _test_bar_epoch(bar_time) * 300_000
+    signal = advisor._on_5m_bar_close(
+        index_name="NIFTY",
+        bar_open=25600.0,
+        bar_high=25640.0,
+        bar_low=25595.0,
+        bar_close=25618.8,
+        bar_volume=1000.0,
+        bar_time=bar_time,
+        timestamp_ms=timestamp_ms,
+        epoch_5min=timestamp_ms // 300_000,
+    )
+
+    assert signal is not None
+    assert signal.setup_reason == "RP1_UPPER_10M_EXPANSION_BREAKOUT"
+    assert signal.triggering_reference_price == grid.rp1_upper
+
+
 def _make_dummy_depth(
     token: str = "NSE_FO|45408",
     symbol: str = "NIFTY 25400 CE",
@@ -549,6 +618,17 @@ def test_mode5_rp_fade_uses_frozen_trigger_boundary(setup_reason, reference):
     assert reason is None
 
 
+def test_mode5_rp1_upper_breakout_uses_frozen_trigger_boundary():
+    displacement, reason = mode5_rp_exhaustion_displacement(
+        "RP1_UPPER_10M_EXPANSION_BREAKOUT",
+        25575.0,
+        spot=25618.8,
+        fallback_displacement=248.8,
+    )
+    assert displacement == pytest.approx(43.8)
+    assert reason is None
+
+
 def test_mode5_rp_fade_boundary_snapshot_survives_grid_replacement(tmp_path: Path):
     advisor = SentinelLiveStreamAdvisor(wal_path=str(tmp_path / "rp-snapshot.json"), enable_stdout=False)
     original_grid = OptionMateGrid(
@@ -619,7 +699,7 @@ def test_mode5_known_rp_fade_missing_or_nonfinite_boundary_fails_closed(bad_refe
     assert reason == "MISSING_RP_BOUNDARY_REFERENCE"
 
 
-def test_mode5_unknown_rp_fade_fails_closed_but_continuation_keeps_fallback():
+def test_mode5_unknown_rp_fade_fails_closed_and_unmapped_continuation_keeps_fallback():
     unknown_displacement, unknown_reason = mode5_rp_exhaustion_displacement(
         "RP2_UPPER_NEW_FADE_FAMILY",
         25000.0,
@@ -627,7 +707,7 @@ def test_mode5_unknown_rp_fade_fails_closed_but_continuation_keeps_fallback():
         fallback_displacement=80.0,
     )
     continuation_displacement, continuation_reason = mode5_rp_exhaustion_displacement(
-        "RP1_UPPER_10M_EXPANSION_BREAKOUT",
+        "RP1_LOWER_10M_EXPANSION_BREAKDOWN",
         None,
         spot=24900.0,
         fallback_displacement=80.0,
@@ -635,6 +715,17 @@ def test_mode5_unknown_rp_fade_fails_closed_but_continuation_keeps_fallback():
 
     assert (unknown_displacement, unknown_reason) == (80.0, "UNKNOWN_RP_BOUNDARY_SETUP")
     assert (continuation_displacement, continuation_reason) == (80.0, None)
+
+
+def test_mode5_rp1_upper_breakout_missing_boundary_fails_closed():
+    displacement, reason = mode5_rp_exhaustion_displacement(
+        "RP1_UPPER_10M_EXPANSION_BREAKOUT",
+        None,
+        spot=25618.8,
+        fallback_displacement=248.8,
+    )
+    assert displacement == 248.8
+    assert reason == "MISSING_RP_BOUNDARY_REFERENCE"
 
 
 @pytest.mark.parametrize("multiple,expected_allowed", [(2.5 - 1e-6, True), (2.5, True), (2.5 + 1e-6, False)])
@@ -2597,7 +2688,8 @@ def test_mode5_rp_reference_changes_only_volatility_gate_displacement(tmp_path: 
         ("RP1_UPPER_REVERSAL_CONFIRMED", 24600.0, 162.5, False, None),
         ("RP1_UPPER_REVERSAL_CONFIRMED", 24600.0, 162.0, False, None),
         ("RP1_UPPER_REVERSAL_CONFIRMED", 24600.0, 163.0, True, "DISTANCE_TO_BOUNDARY"),
-        ("RP1_UPPER_10M_EXPANSION_BREAKOUT", None, 163.0, True, "EXHAUSTED_EXPANSION (Displacement"),
+        ("RP1_UPPER_10M_EXPANSION_BREAKOUT", 24600.0, 43.0, False, None),
+        ("RP1_UPPER_10M_EXPANSION_BREAKOUT", None, 163.0, True, "MISSING_RP_BOUNDARY_REFERENCE"),
         ("RP1_UPPER_REVERSAL_CONFIRMED", None, 163.0, True, "MISSING_RP_BOUNDARY_REFERENCE"),
         ("RP2_UPPER_NEW_FADE_FAMILY", 24240.0, 163.0, True, "UNKNOWN_RP_BOUNDARY_SETUP"),
     ],

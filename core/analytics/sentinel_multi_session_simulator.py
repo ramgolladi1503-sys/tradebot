@@ -1,8 +1,8 @@
 """Offline Multi-Session Regime Simulation & Replay Engine for Sentinel.
 
 Replays actual historical session bars through the calibrated SentinelRegimeRouter
-to verify how the 5-regime supervisory gates (ORB green-lighting, Chop drag protection,
-and Reversal setup arming) performed across recent live captured sessions.
+to measure regime dwell, reversal arming, and capital-defense behavior across
+recent captured sessions.
 
 Preserves trading safety invariants:
 - read_only = True
@@ -84,7 +84,6 @@ class SentinelMultiSessionSimulator:
         regime_dwell_counts["OPENING_DISCOVERY_LOCKOUT"] = 0
         regime_dwell_counts["AMBIGUOUS_NO_TRADE"] = 0
         
-        orb_green_bars = 0
         reversal_armed_bars = 0
         capital_defense_bars = 0
         
@@ -121,8 +120,6 @@ class SentinelMultiSessionSimulator:
             else:
                 regime_dwell_counts[dominant] = 1
                 
-            if state.permissions.get("ORB", False):
-                orb_green_bars += 1
             if state.permissions.get("REVERSAL", False):
                 reversal_armed_bars += 1
             if not state.is_trading_permitted:
@@ -153,7 +150,6 @@ class SentinelMultiSessionSimulator:
             "day_range": float(df["high"].max() - df["low"].min()),
             "dominant_session_regime": dominant_session_regime,
             "regime_dwell_counts": regime_dwell_counts,
-            "orb_green_bars": orb_green_bars,
             "reversal_armed_bars": reversal_armed_bars,
             "capital_defense_bars": capital_defense_bars,
             "regime_switches": router.session_switch_count,
@@ -194,4 +190,4 @@ if __name__ == "__main__":
     report = sim.run_multi_session_simulation(max_sessions=10)
     print(f"Simulation completed for {report['total_sessions']} sessions.")
     for s in report["sessions"]:
-        print(f"  {s['date']} | Range: {s['day_range']:.1f} pts | Dominant: {s['dominant_session_regime']} | ORB Green: {s['orb_green_bars']} bars | Defense: {s['capital_defense_bars']} bars")
+        print(f"  {s['date']} | Range: {s['day_range']:.1f} pts | Dominant: {s['dominant_session_regime']} | Reversal armed: {s['reversal_armed_bars']} bars | Defense: {s['capital_defense_bars']} bars")

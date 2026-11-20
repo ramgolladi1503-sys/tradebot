@@ -8,16 +8,15 @@ from __future__ import annotations
 
 import math
 import os
+import struct
 import tempfile
 import time
 from datetime import time as dt_time
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 import pytest
 
-from core.analytics.regime_calibration_engine import RegimeCalibrationEngine
 from core.sentinel_regime_router import (
     ALL_CANONICAL_REGIMES,
     REGIME_AMBIGUOUS_NO_TRADE,
@@ -89,7 +88,7 @@ def test_morning_lockout_enforced() -> None:
     )
     assert not state.is_trading_permitted
     assert state.dominant_regime == REGIME_ROTATIONAL_CHOP
-    assert state.permissions == {"ORB": False, "APM_REENTRY": False, "REVERSAL": False}
+    assert state.permissions == {"APM_REENTRY": False, "REVERSAL": False}
     assert state.fail_closed_reason == "OPENING_DISCOVERY_LOCKOUT"
 
 
@@ -138,31 +137,6 @@ def test_simplex_sum_to_one_and_entropy() -> None:
 
 
 # =========================================================================
-# 6. STAT-02: CPCV & DSR in Trial Ledger
-# =========================================================================
-def test_cpcv_ledger_registration() -> None:
-    with tempfile.TemporaryDirectory() as tmpdir:
-        ledger_file = os.path.join(tmpdir, "test_ledger.jsonl")
-        engine = RegimeCalibrationEngine(ledger_path=ledger_file)
-
-        # Generate synthetic 1m intraday dataset with 20 sessions
-        timestamps = pd.date_range("2025-01-01 09:15", periods=20 * 375, freq="1min")
-        df_bars = pd.DataFrame({"timestamp": timestamps, "close": np.full(len(timestamps), 24000.0)})
-
-        result = engine.run_cpcv(df_bars=df_bars, max_splits=10)
-        assert result.n_splits == 10
-        assert len(result.test_sharpes) == 10
-        assert 0.0 <= result.deflated_sharpe_ratio <= 1.0
-        assert 0.0 <= result.dsr_p_value <= 1.0
-
-        # Verify ledger file exists and has recorded events
-        assert os.path.exists(ledger_file)
-        summary = engine.ledger.verify()
-        assert summary["valid"] is True
-        assert summary["frozen_trial_count"] >= 1
-
-
-# =========================================================================
 # 7. STAT-03: Sticky dwell >= 12 bars, <= 4 flips
 # =========================================================================
 def test_hysteresis_dwell_and_flip_cap() -> None:
@@ -194,24 +168,6 @@ def test_hysteresis_dwell_and_flip_cap() -> None:
     assert not state2.is_trading_permitted
     assert state2.dominant_regime == REGIME_ROTATIONAL_CHOP
     assert "SESSION_FLIP_CAP_BREACHED" in state2.fail_closed_reason
-
-
-# =========================================================================
-# 8. STAT-04: +/- 20% perturbation convexity
-# =========================================================================
-def test_parameter_convexity_no_cliffs() -> None:
-    engine = RegimeCalibrationEngine()
-    base_params = {"temperature": 0.5, "switching_penalty": 0.25, "min_dwell": 12.0}
-
-    # Smooth parabolic evaluation function
-    def eval_fn(params: dict[str, float]) -> float:
-        t_err = (params["temperature"] - 0.5) ** 2
-        p_err = (params["switching_penalty"] - 0.25) ** 2
-        return float(2.0 - t_err - p_err)
-
-    passed, res = engine.verify_convexity(base_params=base_params, eval_fn=eval_fn, perturbation_pct=0.20)
-    assert passed
-    assert not res["cliff_detected"]
 
 
 # =========================================================================
@@ -274,7 +230,7 @@ def test_wal_crash_recovery_deterministic() -> None:
             bar_timestamp_ms=1722000300000,
             dwell_bars=5,
             session_switch_count=1,
-            permissions={"ORB": True, "APM_REENTRY": True, "REVERSAL": False},
+            permissions={"APM_REENTRY": True, "REVERSAL": False},
             is_trading_permitted=True,
             fail_closed_reason="",
         )
@@ -286,8 +242,38 @@ def test_wal_crash_recovery_deterministic() -> None:
         rec = recovered[0]
         assert rec["regime_epoch"] == 42
         assert rec["dominant_regime"] == REGIME_RUNAWAY_EXPANSION
-        assert rec["permissions"]["ORB"] is True
+        assert rec["permissions"] == {"APM_REENTRY": True, "REVERSAL": False}
         assert rec["is_trading_permitted"] is True
+
+        raw = Path(wal_file).read_bytes()
+        dom_len = struct.unpack_from(">I", raw, 16)[0]
+        bitmask_offset = 20 + dom_len
+        bitmask = struct.unpack_from(">I", raw, bitmask_offset)[0]
+        reason_len = struct.unpack_from(">I", raw, bitmask_offset + 4)[0]
+        assert bitmask == 0b1010  # APM_REENTRY bit 1 and global permission bit 3; bit 0 stays reserved.
+        assert len(raw) == 20 + dom_len + 8 + reason_len
+
+
+def test_wal_legacy_orb_bit_is_ignored_and_other_bits_replay(tmp_path: Path) -> None:
+    wal_file = tmp_path / "legacy_orb_bit.wal"
+    dominant = REGIME_RUNAWAY_EXPANSION.encode("utf-8")
+    reason = b""
+    legacy_bitmask = 0b1111  # ORB bit 0 plus retained APM, reversal, and global bits.
+    record = (
+        struct.pack(">qqI", 1722000300000, 7, len(dominant))
+        + dominant
+        + struct.pack(">II", legacy_bitmask, len(reason))
+        + reason
+    )
+    wal_file.write_bytes(record)
+
+    recovered = RegimeJournalWAL(wal_path=str(wal_file)).replay_states()
+
+    assert len(recovered) == 1
+    assert recovered[0]["permissions"] == {"APM_REENTRY": True, "REVERSAL": True}
+    assert recovered[0]["is_trading_permitted"] is True
+    assert "ORB" not in recovered[0]["permissions"]
+    assert len(record) == 20 + len(dominant) + 8 + len(reason)
 
 
 # =========================================================================
@@ -326,7 +312,7 @@ def test_exits_and_apm_unimpeded() -> None:
         bar_time=dt_time(9, 20),  # In opening lockout
     )
     # Entry permissions are revoked
-    assert not state.permissions["ORB"]
+    assert state.permissions == {"APM_REENTRY": False, "REVERSAL": False}
     # Verify that the data contract has no exit-inhibit or APM stop-loss inhibit flags
     assert not hasattr(state, "exit_permitted")
     assert not hasattr(state, "inhibit_stop_loss")

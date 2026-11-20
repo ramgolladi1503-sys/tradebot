@@ -52,12 +52,6 @@ from core.active_position_manager import (
     STATE_PULLBACK_WAIT,
 )
 from core.expiry_calendar_resolver import ExpiryCalendarResolver
-from core.liquidity_sweep_engine import LiquiditySweepEngine
-from core.market_structure.sentinel_four_vectors import (
-    DerivativeBasisLeadLagEngine,
-    DerivativeBasisResult,
-    LeadLagSignal,
-)
 from core.intraday_reversal_engine import (
     IntradayReversalEngine,
     ReversalDirection,
@@ -243,17 +237,36 @@ MODE_5_EXHAUSTION_FADES: set[str] = {
     "RP1_LOWER_REVERSAL_CONFIRMED",
 }
 
+MODE_5_RP1_UPPER_EXPANSIONS: set[str] = {
+    "RP1_UPPER_10M_EXPANSION_BREAKOUT",
+}
+
 def mode5_rp_exhaustion_displacement(
     setup_reason: str,
     triggering_reference_price: Optional[float],
     spot: float,
     fallback_displacement: float,
 ) -> tuple[float, Optional[str]]:
-    """Resolve the gate-local displacement for exact RP reversal/fade families.
+    """Resolve gate-local displacement for explicitly mapped frozen RP setups.
 
     Returns the existing displacement unchanged for unrelated setup families.
     Unknown RP1/RP2 reversal/fade names and missing/invalid snapshots fail closed.
     """
+    if setup_reason in MODE_5_RP1_UPPER_EXPANSIONS:
+        try:
+            reference = float(triggering_reference_price)
+            current_spot = float(spot)
+        except (TypeError, ValueError, OverflowError):
+            return fallback_displacement, "MISSING_RP_BOUNDARY_REFERENCE"
+        if (
+            not math.isfinite(reference)
+            or reference <= 0.0
+            or not math.isfinite(current_spot)
+            or current_spot <= 0.0
+        ):
+            return fallback_displacement, "MISSING_RP_BOUNDARY_REFERENCE"
+        return abs(current_spot - reference), None
+
     if setup_reason not in MODE_5_EXHAUSTION_FADES:
         is_unmapped_rp_fade = (
             setup_reason.startswith(("RP1_", "RP2_"))
@@ -429,7 +442,6 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         }
         self.OR_MAX_RETRY_ATTEMPTS: int = 10
         self.OR_MIN_RETRY_INTERVAL_MS: int = 60_000  # 60s throttle
-        self.CAUSAL_SKEW_TOLERANCE_MS: int = 1_000   # 1s arrival jitter buffer
         self.or_reconciliation_state_path = Path(
             or_reconciliation_state_path
             if or_reconciliation_state_path is not None
@@ -461,9 +473,8 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         self.strike_resolver = ITMStrikeResolver()
         self.max_premium_cap = 250.0  # Stream 1 Invariant: Enforce strike premium cap to eliminate deep-ITM tail drawdowns
 
-        # Strategy A & Hypothesis 2: Expiry Calendar and Liquidity Sweep Reversal Engine
+        # Expiry calendar feeds session-aware confidence and shared schedule checks.
         self.expiry_resolver = ExpiryCalendarResolver()
-        self.sweep_engine = LiquiditySweepEngine()
         self.expiry_info = self.expiry_resolver.classify_session(datetime.now(ZoneInfo("Asia/Kolkata")).date())
 
         # FEAT-SENTINEL-INTRADAY-REVERSAL-001: Decoupled Intraday Reversal Engines per index
@@ -482,24 +493,6 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         }
         self.midday_engine = self.midday_engines["NIFTY"]
 
-        # Mode 3: Derivative Basis Lead-Lag Dislocation Mean-Reversion Engines
-        self.basis_engines: dict[str, DerivativeBasisLeadLagEngine] = {
-            "NIFTY": DerivativeBasisLeadLagEngine(lookback_bars=60, z_threshold=2.0),
-            "SENSEX": DerivativeBasisLeadLagEngine(lookback_bars=60, z_threshold=2.0),
-            "BANKNIFTY": DerivativeBasisLeadLagEngine(lookback_bars=60, z_threshold=2.0),
-        }
-        self.basis_engine = self.basis_engines["NIFTY"]
-        # History buffers for spot and futures per index
-        self.spot_history: dict[str, deque[float]] = {
-            "NIFTY": deque(maxlen=120),
-            "SENSEX": deque(maxlen=120),
-            "BANKNIFTY": deque(maxlen=120),
-        }
-        self.futures_history: dict[str, deque[float]] = {
-            "NIFTY": deque(maxlen=120),
-            "SENSEX": deque(maxlen=120),
-            "BANKNIFTY": deque(maxlen=120),
-        }
         # Previous Day Reference Levels (PDH / PDL / PDC) - Initialized unseeded with verified=False (Zero Hardcoding)
         self.prior_day_levels: dict[str, PriorDayReferenceLevels] = {
             "NIFTY": PriorDayReferenceLevels(index_name="NIFTY", verified=False),
@@ -515,10 +508,6 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         }
 
         # Midday Liquidity Slump Guard configuration (11:30 - 12:30 IST)
-        self.midday_slump_start = dt_time(11, 30, 0)
-        self.midday_slump_end = dt_time(12, 30, 0)
-        self.current_ker = 0.50
-        self.current_rvol = 1.00
 
         # Multi-Factor Option Confidence Scorer
         self.confidence_scorer = OptionConfidenceScorer(min_actionable_score=60)
@@ -691,11 +680,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         self.strategy_priority_weights: dict[str, float] = {
             "OPTIONMATE_RBFN_AUCTION": 1.00,
             "MIDDAY_MOMENTUM_EXTENSION": 0.85,
-            "OPENING_RANGE_BREAKOUT": 0.75,
-            "OPENING_RANGE_BREAKDOWN": 0.75,
-            "LIQUIDITY_SWEEP": 0.50,
             "INTRADAY_REVERSAL": 0.40,
-            "DERIVATIVE_BASIS_REVERSION": 0.40,
         }
         # Daily canonical trade counters per index for dual-stream shadow tagging
         # Vector 1 / 13: Seed from APM WAL so daily trade count survives restarts/reboots
@@ -711,7 +696,6 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         # Invariant 3.1: Granular Per-Gate Veto Ledger and Opportunity Starvation Counters
         self.veto_counters: dict[str, int] = {
             "SPREAD": 0,
-            "SLUMP": 0,
             "PREMIUM_CAP": 0,
             "ADVERSE_WALL": 0,
             "MACRO_DIVERGENCE": 0,
@@ -1913,60 +1897,6 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
         return True, f"NIFTY_FRICTIONAL_HURDLE_CLEARED (ATR={atr_15m:.1f}, HurdleReq={hurdle_req:.1f}pts)"
 
-    def is_midday_slump_active(
-        self,
-        check_time: Optional[dt_time] = None,
-        ker: Optional[float] = None,
-        rvol: Optional[float] = None,
-    ) -> bool:
-        """Evaluates whether Midday Slump Guard (11:30 - 12:30 IST) is active.
-        
-        Returns True if within [11:30:00, 12:30:00] IST unless trend override is active:
-        (ker >= 0.70 and rvol >= 1.50).
-        """
-        t = check_time or datetime.now(ZoneInfo("Asia/Kolkata")).time()
-        # Strictly between 11:30:00 and 12:30:00 inclusive
-        in_window = (self.midday_slump_start <= t <= self.midday_slump_end)
-        if not in_window:
-            return False
-
-        # Trend override active if KER >= 0.70 and RVOL >= 1.50
-        eff_ker = self.current_ker if ker is None else float(ker)
-        eff_rvol = self.current_rvol if rvol is None else float(rvol)
-        if eff_ker >= 0.70 and eff_rvol >= 1.50:
-            return False
-
-        return True
-
-    def _evaluate_orb_regime_permission(self, router: Optional[SentinelRegimeRouter]) -> bool:
-        """Evaluates whether current regime state allows Mode 2 Opening Range Breakout (ORB).
-        
-        Hermes Invariant 4.1 Specification:
-        * If router is None or post is None: allow default.
-        * If post.is_trading_permitted is False: veto.
-        * If post.dominant_regime in ("ROTATIONAL_CHOP", "AMBIGUOUS_NO_TRADE", "EXHAUSTION_REVERSAL"): veto.
-        * If not post.permissions.get("ORB", False) and post.dominant_regime != "RUNAWAY_EXPANSION":
-            - allow if post.dominant_regime == "VOLATILITY_COMPRESSION" and post.normalized_entropy < 0.70, else veto.
-        """
-        if router is None:
-            return True
-        post = getattr(router, "current_state", None) or (router.get_posterior() if hasattr(router, "get_posterior") else None)
-        if post is None:
-            return True
-
-        if post.is_trading_permitted is False:
-            return False
-
-        if post.dominant_regime in ("ROTATIONAL_CHOP", "AMBIGUOUS_NO_TRADE", "EXHAUSTION_REVERSAL"):
-            return False
-
-        if not post.permissions.get("ORB", False) and post.dominant_regime != "RUNAWAY_EXPANSION":
-            if post.dominant_regime == "VOLATILITY_COMPRESSION" and post.normalized_entropy < 0.70:
-                return True
-            return False
-
-        return True
-
     def on_tick(self, tick: UpstoxTickRecord) -> None:
         """Handle incoming tick for NIFTY, SENSEX, and BANKNIFTY."""
         with self._lock:
@@ -1983,15 +1913,6 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 idx_key, tick.ltp, tick.exchange_timestamp_ms
             ):
                 return
-
-            # Check for Front-Month Futures ticks
-            if "FUT" in token or "FUTIDX" in token:
-                if "NIFTY" in token and "BANK" not in token:
-                    self.futures_history["NIFTY"].append(tick.ltp)
-                elif "BANKNIFTY" in token or "Nifty Bank" in token:
-                    self.futures_history["BANKNIFTY"].append(tick.ltp)
-                elif "SENSEX" in token:
-                    self.futures_history["SENSEX"].append(tick.ltp)
 
             if idx_key is not None:
                 # Update upstream regime router ring buffer and state via discrete 1-minute SyntheticBarBucket
@@ -2876,8 +2797,13 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
         return all_valid
 
-    def _validate_mode5_or_evidence(self, index_name: str, decision_timestamp_ms: int) -> tuple[bool, str, dict[str, Any]]:
-        """Validate per-index OR provenance against the causal decision time."""
+    def _validate_mode5_or_evidence(
+        self,
+        index_name: str,
+        decision_timestamp_ms: int,
+        completed_bar_boundary_ms: Optional[int] = None,
+    ) -> tuple[bool, str, dict[str, Any]]:
+        """Validate OR evidence against an explicit completed-bar boundary."""
         try:
             decision_dt = datetime.fromtimestamp(
                 decision_timestamp_ms / 1000.0, tz=ZoneInfo("Asia/Kolkata")
@@ -2888,6 +2814,20 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             state = dict(self.or_evidence.get(index_name) or {})
             bounds = dict(self.or_bounds.get(index_name) or {})
         details = {"index": index_name, "evidence": state, "bounds": bounds}
+        if (
+            isinstance(completed_bar_boundary_ms, bool)
+            or not isinstance(completed_bar_boundary_ms, int)
+            or completed_bar_boundary_ms <= 0
+        ):
+            return False, "OR_BOUNDARY_TIMESTAMP_INVALID", details
+        try:
+            boundary_dt = datetime.fromtimestamp(
+                completed_bar_boundary_ms / 1000.0, tz=ZoneInfo("Asia/Kolkata")
+            )
+        except (OverflowError, OSError, ValueError):
+            return False, "OR_BOUNDARY_TIMESTAMP_INVALID", details
+        if boundary_dt.date() != decision_dt.date():
+            return False, "OR_BOUNDARY_SESSION_MISMATCH", details
         if state.get("session_date") != decision_dt.date().isoformat():
             return False, "OR_SESSION_MISMATCH", details
         try:
@@ -2898,8 +2838,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             return False, "OR_EVIDENCE_MISSING", details
         if not (math.isfinite(high) and math.isfinite(low) and low > 0 and high >= low):
             return False, "OR_BOUNDS_INVALID", details
-        skew_tolerance = self.CAUSAL_SKEW_TOLERANCE_MS if decision_dt.time() >= self.opening_shock_end_time else 0
-        if source_timestamp_ms <= 0 or source_timestamp_ms > (decision_timestamp_ms + skew_tolerance):
+        if source_timestamp_ms <= 0 or source_timestamp_ms > completed_bar_boundary_ms:
             return False, "OR_SOURCE_NONCAUSAL", details
         try:
             source_dt = datetime.fromtimestamp(
@@ -2936,14 +2875,17 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         return True, "OR_COMPLETE_VERIFIED", details
 
     def _validate_mode5_or_pair(
-        self, index_name: str, decision_timestamp_ms: int
+        self,
+        index_name: str,
+        decision_timestamp_ms: int,
+        completed_bar_boundary_ms: Optional[int] = None,
     ) -> tuple[bool, str, dict[str, Any]]:
         target_ok, target_reason, target_detail = self._validate_mode5_or_evidence(
-            index_name, decision_timestamp_ms
+            index_name, decision_timestamp_ms, completed_bar_boundary_ms
         )
         companion_index = "SENSEX" if index_name == "NIFTY" else "NIFTY"
         companion_ok, companion_reason, companion_detail = self._validate_mode5_or_evidence(
-            companion_index, decision_timestamp_ms
+            companion_index, decision_timestamp_ms, completed_bar_boundary_ms
         )
         details = {"target": target_detail, "companion": companion_detail}
         if not target_ok:
@@ -2994,8 +2936,6 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         with self._lock:
             self.spots[index_name] = spot_value
             self.spots_ts_ms[index_name] = ts_ms
-            if index_name in self.spot_history:
-                self.spot_history[index_name].append(spot_value)
             if self.session_open_prices.get(index_name, 0.0) <= 0.0 and spot_value > 0.0:
                 self.session_open_prices[index_name] = spot_value
 
@@ -3272,6 +3212,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             if index_name in self._cached_rbfn_candidate_meta:
                 self._clear_cached_rbfn_candidate_locked(index_name, "INVALID_COMPLETED_BAR_EPOCH")
             return None
+        completed_bar_boundary_ms = (epoch_5min + 1) * 300_000
         try:
             expected_bar_time = datetime.fromtimestamp(
                 (epoch_5min + 1) * 300, tz=ZoneInfo("Asia/Kolkata")
@@ -3327,7 +3268,9 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             )
             self._cache_rbfn_signal_locked(index_name, signal, epoch_5min)
             return signal
-        or_valid, or_reason, or_details = self._validate_mode5_or_pair(index_name, timestamp_ms)
+        or_valid, or_reason, or_details = self._validate_mode5_or_pair(
+            index_name, timestamp_ms, completed_bar_boundary_ms
+        )
         if not or_valid:
             signal = CachedRBFNAuctionSignal(
                 timestamp_ms=timestamp_ms,
@@ -3748,6 +3691,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         trade_phase="MIDDAY_EXPANSION_BREAKOUT",
                         bar_time=bar_time,
                         sustainable_anchor_price=calc_anchor,
+                        triggering_reference_price=grid.rp1_upper,
                         is_active=True,
                         is_vetoed=False,
                         veto_reason="",
@@ -4092,7 +4036,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
         # Opening shock freeze: strictly suppress all candidate setups unless Mode 5 Opening Drive is active
         # Mode 5 Opening Drive is permitted between 09:20:00 and 09:45:00 IST.
-        # Mode 2 (ORB) and other general setups remain strictly frozen until 09:45:00.
+        # General setups remain frozen until 09:45:00.
         effective_shock_end = self.opening_shock_end_time
         session_pre_open_cutoff = dt_time(9, 20)
 
@@ -4117,8 +4061,15 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         )
 
         if has_mode_5_signal and rbfn_sig is not None:
+            with self._lock:
+                candidate_meta = self._cached_rbfn_candidate_meta.get(index_name)
+                completed_bar_boundary_ms = (
+                    candidate_meta.boundary_timestamp_ms
+                    if candidate_meta is not None and candidate_meta.generation == mode5_generation
+                    else None
+                )
             or_valid, or_reason, or_details = self._validate_mode5_or_pair(
-                index_name, depth.exchange_timestamp_ms
+                index_name, depth.exchange_timestamp_ms, completed_bar_boundary_ms
             )
             if not or_valid:
                 self.record_veto("MODE5_OR", or_reason)
@@ -4171,15 +4122,14 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         # Estimated transaction drag (slippage + statutory base drag)
         total_drag = round(spread * 0.5 + 0.40, 2)
 
-        # Setup Detection (PR #968 / PR #980 / FEAT-STRUCTURAL-ALPHA-003 / FEAT-LIQUIDITY-SWEEP-EXPIRY-004)
+        # Setup Detection for RBFN and retained shared intraday modules
         is_ce = "CE" in sym
         is_pe = "PE" in sym
         atm_strike = round(spot / strike_interval) * strike_interval
 
         trigger_active = False
-        is_mode_2_breakout = False
         setup_reason = ""
-        strategy_name = "SENTINEL_ORB"
+        strategy_name = "SENTINEL"
         required_option_type = None
         is_exp = (self.expiry_info.active_expiry_index == index_name)
 
@@ -4195,35 +4145,6 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             setup_reason = f"[{rbfn_sig.trade_phase}] {rbfn_sig.setup_reason}"
             target_pts = rbfn_sig.target_pts
             sl_pts = rbfn_sig.sl_pts
-
-        # -------------------------------------------------------------
-        # Mode 1: Strategy A & Hypothesis 2 - Prior-Day Liquidity Sweep Reversal
-        # Evaluates 09:30 - 12:00. Strictly gated to GEAR_1_RANGE (Chop/Expiry Pinning).
-        # Fading breakouts in Gear 2 Trend is strictly suppressed fail-closed.
-        # -------------------------------------------------------------
-        elif (pd_bounds := self.prior_day_levels.get(index_name)) is not None and getattr(pd_bounds, "verified", False) and self.session_gears.get(index_name, self.session_gear) == "GEAR_1_RANGE":
-            pdh = pd_bounds.get("pdh", 0.0)
-            pdl = pd_bounds.get("pdl", 0.0)
-            is_exp = (self.expiry_info.active_expiry_index == index_name)
-            sweep_sig = self.sweep_engine.evaluate_bar(
-                index_name=index_name,
-                bar_open=spot,
-                bar_high=spot,
-                bar_low=spot,
-                bar_close=spot,
-                pdh=pdh,
-                pdl=pdl,
-                timestamp_ms=depth.exchange_timestamp_ms,
-                is_expiry_session=is_exp,
-                bar_time=now_time,
-            )
-            if sweep_sig is not None:
-                trigger_active = True
-                strategy_name = f"LIQUIDITY_SWEEP_{sweep_sig.sweep_type}"
-                required_option_type = sweep_sig.direction
-                setup_reason = f"[{sweep_sig.sweep_type}] {sweep_sig.setup_reason}"
-                target_pts = sweep_sig.target_pts
-                sl_pts = sweep_sig.sl_pts
 
         # -------------------------------------------------------------
         # Mode 1.5: FEAT-SENTINEL-INTRADAY-REVERSAL-001 - Intraday Reversal Engine
@@ -4245,33 +4166,6 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             setup_reason = f"[{rev_sig.setup_type.value}] {rev_sig.setup_reason}"
             target_pts = rev_sig.reward_pts
             sl_pts = rev_sig.risk_pts
-
-        # -------------------------------------------------------------
-        # Mode 3: FEAT-SENTINEL-DERIVATIVE-BASIS-001 - Derivative Basis Lead-Lag Reversion
-        # Evaluates futures-to-spot basis dislocation (|Z_basis| >= 2.0).
-        # Requires GEAR_1_RANGE (or rotational chop) to avoid fading strong macro trending drives.
-        # -------------------------------------------------------------
-        elif (
-            self.session_gears.get(index_name, self.session_gear) == "GEAR_1_RANGE"
-            and (b_engine := self.basis_engines.get(index_name)) is not None
-            and len(self.spot_history.get(index_name, ())) >= 20
-            and len(self.futures_history.get(index_name, ())) >= 20
-        ):
-            b_res = b_engine.compute_basis_dislocation(
-                futures_series=list(self.futures_history[index_name]),
-                spot_series=list(self.spot_history[index_name]),
-                instrument_name=index_name,
-            )
-            if b_res.is_statistically_significant and b_res.signal != LeadLagSignal.EQUILIBRIUM:
-                trigger_active = True
-                strategy_name = "DERIVATIVE_BASIS_REVERSION"
-                # If futures premium is extended (Z > 2.0), spot snaps up -> CE
-                # If futures discount is extended (Z < -2.0), spot snaps down -> PE
-                required_option_type = "CE" if b_res.signal == LeadLagSignal.LEAD_EXPANSION else "PE"
-                setup_reason = f"[BASIS_DISLOCATION] Z={b_res.basis_z:+.2f} ({b_res.basis_pts:+.1f}pts)"
-                # Set dynamic ATR-scaled mean-reversion target and protective stop
-                target_pts = max(15.0, 0.75 * effective_atr)
-                sl_pts = max(12.0, 0.50 * effective_atr)
 
         # -------------------------------------------------------------
         # Mode 4: FEAT-SENTINEL-MIDDAY-MOMENTUM-001 - Causal Midday Momentum Extension
@@ -4297,32 +4191,6 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             setup_reason = f"[MIDDAY_1230] {midday_sig.setup_reason}"
             target_pts = midday_sig.target_pts
             sl_pts = midday_sig.stop_pts
-
-        # -------------------------------------------------------------
-        # Mode 2: Existing Opening Range Breakout (ORB) Engine
-        # Evaluates clean trend expansion when no sweep or reversal trap is active
-        # Invariant 4.1: Consult RegimeRouter to block blind ORB during ROTATIONAL_CHOP,
-        # unpermitted trading, AMBIGUOUS_NO_TRADE, EXHAUSTION_REVERSAL, and high entropy.
-        # Strictly frozen during opening shock (< 09:45:00 IST).
-        # -------------------------------------------------------------
-        elif not in_opening_shock and or_high > -math.inf and spot > or_high:
-            router = self.regime_routers.get(index_name)
-            regime_permits = self._evaluate_orb_regime_permission(router)
-            if regime_permits:
-                trigger_active = True
-                is_mode_2_breakout = True
-                strategy_name = "OPENING_RANGE_BREAKOUT"
-                required_option_type = "CE"
-                setup_reason = f"Breakout > {or_high:.1f}"
-        elif not in_opening_shock and or_low < math.inf and spot < or_low:
-            router = self.regime_routers.get(index_name)
-            regime_permits = self._evaluate_orb_regime_permission(router)
-            if regime_permits:
-                trigger_active = True
-                is_mode_2_breakout = True
-                strategy_name = "OPENING_RANGE_BREAKDOWN"
-                required_option_type = "PE"
-                setup_reason = f"Breakdown < {or_low:.1f}"
 
         # Compute Multi-Factor Confidence Score
         conf_eval = None
@@ -4612,11 +4480,6 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 spot_price=spot,
             )
 
-            # Gate 4: Midday Liquidity Slump Guard (11:30 - 12:30 IST) for Mode 2 Breakouts
-            midday_slump_vetoed = False
-            if is_mode_2_breakout and self.is_midday_slump_active(now_time):
-                midday_slump_vetoed = True
-
             if is_vetoed:
                 status_flag = "VETO_SPREAD_EXPANDED"
                 advisory = f"🚨 [SPREAD VETO] BUY {depth.symbol} @ {setup_reason} -> SUPPRESSED (>4.0% spread)"
@@ -4626,29 +4489,6 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     direction=required_option_type,
                     setup_reason=setup_reason,
                     veto_reason="SPREAD_EXPANDED",
-                    spot_price=spot,
-                    option_ltp=ltp,
-                    bid=bid,
-                    ask=ask,
-                    spread_pts=spread,
-                    spread_ratio=spread_ratio,
-                    nominal_target_pts=target_pts,
-                    nominal_sl_pts=sl_pts,
-                    confidence_score=conf_eval.total_score if conf_eval else 0,
-                    confidence_grade=conf_eval.grade if conf_eval else "GRADE_C_SUPPRESSED",
-                    timestamp_ms=depth.exchange_timestamp_ms,
-                    wall_time_str=now_time.strftime("%H:%M:%S"),
-                )
-            elif midday_slump_vetoed:
-                status_flag = "VETO_MIDDAY_LIQUIDITY_SLUMP"
-                advisory = f"🚨 [MIDDAY_LIQUIDITY_SLUMP_VETO (11:30-12:30 IST)] BUY {depth.symbol} @ {setup_reason} -> SUPPRESSED"
-                self.record_veto("SLUMP", f"Midday Liquidity Slump (11:30-12:30 IST) for {strategy_name}")
-                self.journal.record_veto(
-                    index_name=index_name,
-                    symbol=depth.symbol,
-                    direction=required_option_type,
-                    setup_reason=setup_reason,
-                    veto_reason="MIDDAY_LIQUIDITY_SLUMP_VETO (11:30-12:30 IST)",
                     spot_price=spot,
                     option_ltp=ltp,
                     bid=bid,
@@ -4913,8 +4753,16 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                                         now_ns=time.monotonic_ns(),
                                     )
                                 if entry_or_valid:
+                                    candidate_meta = self._cached_rbfn_candidate_meta.get(index_name)
+                                    completed_bar_boundary_ms = (
+                                        candidate_meta.boundary_timestamp_ms
+                                        if candidate_meta is not None and candidate_meta.generation == mode5_generation
+                                        else None
+                                    )
                                     entry_or_valid, entry_or_reason, _ = self._validate_mode5_or_pair(
-                                        index_name, depth.exchange_timestamp_ms
+                                        index_name,
+                                        depth.exchange_timestamp_ms,
+                                        completed_bar_boundary_ms,
                                     )
                             if entry_or_valid:
                                 exec_reason = f"[{shadow_tier}] {setup_reason}"
