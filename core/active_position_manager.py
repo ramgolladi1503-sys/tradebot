@@ -770,8 +770,9 @@ class ActivePositionManager:
                     self._transition_to(STATE_TRAIL_LOCK)
 
         # 7. Time Horizon Exit (Dynamic Expiry Theta Acceleration or Base Hold Horizon)
-        # Suppressed if option is in positive excursion runner mode with trail locked (let trend winners run)
-        if tick_time_str and not (p.half_booked or p.trail_locked):
+        # Preserve the time-horizon exemption only for trail-locked runners.
+        # A non-runner's configured horizon still applies after its trail locks.
+        if tick_time_str and not p.half_booked and (not p.trail_locked or not p.is_runner_mode):
             try:
                 entry_dt = datetime.fromisoformat(p.entry_time)
                 cur_dt = datetime.fromisoformat(tick_time_str)

@@ -12,7 +12,7 @@ Reviewers 1-5: Continuous decay functions, moneyness-aware gating, monotonic saf
 from __future__ import annotations
 
 import pytest
-from datetime import time as dtime
+from datetime import datetime, time as dtime, timedelta
 from core.active_position_manager import (
     ActivePositionManager,
     compute_expiry_theta_holding_ceiling,
@@ -158,3 +158,93 @@ def test_reviewer_sideways_drift_theta_cutoff(tmp_path):
     assert state in {STATE_COOL_OFF, STATE_LIQUIDATED}
     assert apm.last_completed_trade is not None
     assert "TIME_EXIT_16M" in apm.last_completed_trade["exit_reason"]
+
+
+@pytest.mark.parametrize(
+    "is_runner_mode,trail_locked,half_booked,eligible",
+    [
+        (False, False, False, True),
+        (False, False, True, False),
+        (False, True, False, True),
+        (False, True, True, False),
+        (True, False, False, True),
+        (True, False, True, False),
+        (True, True, False, False),
+        (True, True, True, False),
+    ],
+)
+def test_time_horizon_eligibility_covers_runner_trail_and_half_book_states(
+    tmp_path, is_runner_mode, trail_locked, half_booked, eligible
+):
+    """Only a trail-locked runner or a half-booked position keeps the timer suppressed."""
+    apm = ActivePositionManager(wal_path=str(tmp_path / "test_apm_wal.json"))
+    entry_time = "2026-10-15T10:00:00"
+    assert apm.arm_and_enter(
+        position_id="TIME_HORIZON_STATE_MATRIX",
+        direction="CE",
+        contract="NIFTY 22500 CE 15 OCT 26",
+        entry_price=22500.0,
+        entry_time_str=entry_time,
+        opt_quote={"symbol": "NIFTY 22500 CE 15 OCT 26", "ltp": 50.0, "bid": 49.8, "ask": 50.2},
+        is_runner_mode=is_runner_mode,
+        session_gear="GEAR_1_RANGE",
+    )
+    apm.payload.trail_locked = trail_locked
+    apm.payload.half_booked = half_booked
+    # Avoid an unrelated spot-stop exit when simulating an already trail-locked state.
+    apm.payload.current_sl = 22000.0
+    horizon = apm.payload.max_hold_minutes
+
+    state, _ = apm.evaluate_tick(
+        current_spot=22500.0,
+        current_opt_ltp=50.0,
+        tick_time_str=(datetime.fromisoformat(entry_time) + timedelta(minutes=horizon + 1)).isoformat(),
+    )
+
+    if eligible:
+        assert state in {STATE_COOL_OFF, STATE_LIQUIDATED}
+        assert apm.last_completed_trade is not None
+        assert f"TIME_EXIT_{horizon + 1}M" in apm.last_completed_trade["exit_reason"]
+    else:
+        assert state not in {STATE_COOL_OFF, STATE_LIQUIDATED}
+        assert apm.last_completed_trade is None
+
+
+@pytest.mark.parametrize(
+    "elapsed_offset,should_exit",
+    [(-1, False), (0, True), (1, True)],
+)
+def test_trail_locked_non_runner_uses_existing_inclusive_time_horizon(
+    tmp_path, elapsed_offset, should_exit
+):
+    """The fixed non-runner path respects below/equal/above horizon boundaries."""
+    apm = ActivePositionManager(wal_path=str(tmp_path / "test_apm_wal.json"))
+    entry_time = "2026-10-15T10:00:00"
+    assert apm.arm_and_enter(
+        position_id="TRAIL_LOCKED_NON_RUNNER_TIME_HORIZON",
+        direction="CE",
+        contract="NIFTY 22500 CE 15 OCT 26",
+        entry_price=22500.0,
+        entry_time_str=entry_time,
+        opt_quote={"symbol": "NIFTY 22500 CE 15 OCT 26", "ltp": 50.0, "bid": 49.8, "ask": 50.2},
+        is_runner_mode=False,
+        session_gear="GEAR_1_RANGE",
+    )
+    apm.payload.trail_locked = True
+    apm.payload.current_sl = 22000.0
+    horizon = apm.payload.max_hold_minutes
+    tick_time = datetime.fromisoformat(entry_time) + timedelta(minutes=horizon + elapsed_offset)
+
+    state, _ = apm.evaluate_tick(
+        current_spot=22500.0,
+        current_opt_ltp=50.0,
+        tick_time_str=tick_time.isoformat(),
+    )
+
+    if should_exit:
+        assert state in {STATE_COOL_OFF, STATE_LIQUIDATED}
+        assert apm.last_completed_trade is not None
+        assert f"TIME_EXIT_{horizon + elapsed_offset}M" in apm.last_completed_trade["exit_reason"]
+    else:
+        assert state not in {STATE_COOL_OFF, STATE_LIQUIDATED}
+        assert apm.last_completed_trade is None
