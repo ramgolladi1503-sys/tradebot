@@ -3585,7 +3585,11 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
                 # Check for S7: Extreme Floor Bounce (Tested RP2_LOWER and holds above for 10 mins, or single-bar fast bounce)
                 rejection_buffer = 25.0 if index_name in {"SENSEX", "BANKNIFTY"} else 10.0
-                fast_bounce_rp2 = (bar_low <= grid.rp2_lower and bar_close >= (grid.rp2_lower + rejection_buffer))
+                fast_bounce_rp2 = (
+                    bar_low <= grid.rp2_lower
+                    and bar_close >= (grid.rp2_lower + rejection_buffer)
+                    and bar_close < grid.rp1_lower
+                )
                 # A touch qualifies for the 10-minute branch only when two
                 # consecutive completed five-minute bars follow it. The current
                 # bar is already appended, so validate all three epochs.
@@ -3594,7 +3598,11 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 is_10m_bounce_rp2 = tested_rp2_lower and (c_prev >= grid.rp2_lower and c_curr >= grid.rp2_lower and c_curr < grid.rp1_lower)
 
                 # Check for S5: Extreme Ceiling Fade (Tested RP2_UPPER and holds below for 10 mins, or single-bar fast rejection)
-                fast_rejection_rp2 = (bar_high >= grid.rp2_upper and bar_close <= (grid.rp2_upper - rejection_buffer))
+                fast_rejection_rp2 = (
+                    bar_high >= grid.rp2_upper
+                    and bar_close <= (grid.rp2_upper - rejection_buffer)
+                    and bar_close > grid.rp1_upper
+                )
                 tested_rp2_upper = has_consecutive_rp2_hold and history[-3]["high"] >= grid.rp2_upper
                 is_10m_fade_rp2 = tested_rp2_upper and (c_prev <= grid.rp2_upper and c_curr <= grid.rp2_upper and c_curr > grid.rp1_upper)
 

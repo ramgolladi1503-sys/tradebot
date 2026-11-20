@@ -178,6 +178,71 @@ def test_s7_floor_bounce_triggers_reversal_call(tmp_path):
 
 
 @pytest.mark.parametrize(
+    (
+        "touch_side", "open_price", "high_price", "low_price", "close_price",
+        "prior_close", "invalid_reason",
+    ),
+    [
+        # The close has already crossed RP1 Lower, the existing CE target.
+        ("lower", 24300.0, 24430.0, 24280.0, 24415.0, 24400.0, "RP2_LOWER_FAST_BOUNCE"),
+        # The close has already crossed RP1 Upper, the existing PE target.
+        ("upper", 24680.0, 24720.0, 24570.0, 24585.0, 24600.0, "RP2_UPPER_FAST_REJECTION"),
+        # Equality is not "target still ahead" for either strict bound.
+        ("lower", 24300.0, 24430.0, 24280.0, 24400.0, 24405.0, "RP2_LOWER_FAST_BOUNCE"),
+        ("upper", 24680.0, 24720.0, 24570.0, 24600.0, 24590.0, "RP2_UPPER_FAST_REJECTION"),
+    ],
+)
+def test_rp2_fast_path_suppressed_after_rp1_target_crossed(
+    tmp_path, touch_side, open_price, high_price, low_price, close_price,
+    prior_close, invalid_reason,
+):
+    """Fast RP2 candidate generation abstains after its RP1 target is crossed/equal."""
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / f"crossed_target_{touch_side}.json"), enable_stdout=False
+    )
+    advisor.decision_trace_path = tmp_path / f"crossed_target_{touch_side}_trace.jsonl"
+    _seed_complete_or_pair(advisor)
+    _seed_target_grid(advisor)
+    advisor.seed_prior_day_levels(
+        "NIFTY", pdh=24600.0, pdl=24400.0, pdc=24500.0, atr_20=160.0
+    )
+    advisor.session_open_prices["NIFTY"] = 24500.0
+
+    advisor.bars_5m_history["NIFTY"] = [
+        {
+            "open": prior_close,
+            "high": prior_close + 5.0,
+            "low": prior_close - 5.0,
+            "close": prior_close,
+            "volume": 1000,
+            "time": dt_time(12, 10 + 5 * i),
+            "timestamp_ms": int(datetime.combine(
+                date(2026, 11, 17), dt_time(12, 5 + 5 * i), tzinfo=ZoneInfo("Asia/Kolkata")
+            ).timestamp() * 1000),
+            "epoch_5min": 99 + i,
+        }
+        for i in range(2)
+    ]
+    epoch_5min = _completed_bar_epoch(dt_time(12, 20))
+    signal = advisor._on_5m_bar_close(
+        index_name="NIFTY",
+        bar_open=open_price,
+        bar_high=high_price,
+        bar_low=low_price,
+        bar_close=close_price,
+        bar_volume=1000.0,
+        bar_time=dt_time(12, 20),
+        timestamp_ms=epoch_5min * 300000,
+        epoch_5min=epoch_5min,
+    )
+
+    assert signal is not None
+    assert signal.action == "ABSTAIN"
+    assert signal.is_active is False
+    assert signal.setup_reason != invalid_reason
+
+
+@pytest.mark.parametrize(
     ("touch_side", "open_price", "high_price", "low_price", "close_price"),
     [
         ("lower", 24320.0, 24330.0, 24295.0, 24305.0),
@@ -386,3 +451,66 @@ def test_rp2_fast_rejection_remains_available(
 
     assert signal is not None
     assert signal.setup_reason == expected_reason
+    assert signal.is_active is True
+    assert signal.action == ("BUY_CALL" if touch_side == "lower" else "BUY_PUT")
+
+
+@pytest.mark.parametrize(
+    ("touch_side", "expected_reason", "expected_action"),
+    [
+        ("upper", "RP1_UPPER_REVERSAL_CONFIRMED", "BUY_PUT"),
+        ("lower", "RP1_LOWER_REVERSAL_CONFIRMED", "BUY_CALL"),
+    ],
+)
+def test_rp2_fast_guard_preserves_later_rp1_reversal(
+    tmp_path, touch_side, expected_reason, expected_action
+):
+    """Rejecting an already-crossed RP2 target must not block a valid RP1 route."""
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / f"rp2_to_rp1_{touch_side}.json"), enable_stdout=False
+    )
+    advisor.decision_trace_path = tmp_path / f"rp2_to_rp1_{touch_side}_trace.jsonl"
+    _seed_complete_or_pair(advisor)
+    _seed_target_grid(advisor)
+    advisor.seed_prior_day_levels(
+        "NIFTY", pdh=24600.0, pdl=24400.0, pdc=24500.0, atr_20=160.0
+    )
+    advisor.session_open_prices["NIFTY"] = 24500.0
+
+    epoch_5min = _completed_bar_epoch(dt_time(12, 20))
+    if touch_side == "upper":
+        prior_closes = [24590.0, 24585.0]
+        current = (24600.0, 24720.0, 24550.0, 24575.0)
+    else:
+        prior_closes = [24410.0, 24415.0]
+        current = (24380.0, 24430.0, 24280.0, 24410.0)
+    advisor.bars_5m_history["NIFTY"] = [
+        {
+            "open": close,
+            "high": close + 5.0,
+            "low": close - 5.0,
+            "close": close,
+            "volume": 1000,
+            "time": dt_time(12, 10 + 5 * i),
+            "timestamp_ms": (epoch_5min - 2 + i) * 300_000,
+            "epoch_5min": epoch_5min - 2 + i,
+        }
+        for i, close in enumerate(prior_closes)
+    ]
+
+    signal = advisor._on_5m_bar_close(
+        index_name="NIFTY",
+        bar_open=current[0],
+        bar_high=current[1],
+        bar_low=current[2],
+        bar_close=current[3],
+        bar_volume=1000.0,
+        bar_time=dt_time(12, 20),
+        timestamp_ms=epoch_5min * 300_000,
+        epoch_5min=epoch_5min,
+    )
+
+    assert signal is not None
+    assert signal.setup_reason == expected_reason
+    assert signal.action == expected_action
+    assert signal.is_active is True
