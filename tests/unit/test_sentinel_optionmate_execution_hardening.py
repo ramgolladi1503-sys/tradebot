@@ -535,6 +535,77 @@ def test_rp1_upper_expansion_producer_snapshots_frozen_rp1_boundary(tmp_path: Pa
     assert signal.triggering_reference_price == grid.rp1_upper
 
 
+def test_rp1_lower_expansion_producer_snapshots_frozen_rp1_boundary(tmp_path: Path):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / "rp1-lower-expansion.json"), enable_stdout=False
+    )
+    bar_time = dt_time(11, 35)
+    _seed_test_or_pair(advisor, "NIFTY", bar_time)
+    advisor.or_reconciliation_frozen = True
+    advisor.seed_prior_day_levels("NIFTY", pdh=25700.0, pdl=25000.0, pdc=25350.0, atr_20=160.0)
+    advisor.session_open_prices["NIFTY"] = 25370.0
+    grid = OptionMateGrid(
+        date="2026-11-17",
+        spot_open=25370.0,
+        trend_decider=25370.0,
+        rp1_upper=25575.0,
+        rp2_upper=25770.0,
+        rp1_lower=25160.0,
+        rp2_lower=25052.0,
+        call_strike=25600.0,
+        put_strike=25100.0,
+        recommended_bias="PUT",
+        target_strike=25100.0,
+    )
+    advisor.cached_rbfn_grids["NIFTY"] = grid
+    advisor.rbfn_grids_frozen["NIFTY"] = True
+    prior_epoch = _test_bar_epoch(dt_time(11, 30))
+    advisor._rp2_session_dates["NIFTY"] = date(2026, 11, 17)
+    advisor.bars_5m_history["NIFTY"] = [
+        {
+            "open": 25170.0,
+            "high": 25180.0,
+            "low": 25140.0,
+            "close": 25155.0,
+            "volume": 1000.0,
+            "time": dt_time(11, 25),
+            "timestamp_ms": (prior_epoch - 1) * 300_000,
+            "epoch_5min": prior_epoch - 1,
+        },
+        {
+            "open": 25155.0,
+            "high": 25165.0,
+            "low": 25130.0,
+            "close": 25150.0,
+            "volume": 1000.0,
+            "time": dt_time(11, 30),
+            "timestamp_ms": prior_epoch * 300_000,
+            "epoch_5min": prior_epoch,
+        },
+    ]
+    advisor._last_completed_5m_epoch["NIFTY"] = prior_epoch
+    advisor._last_5m_timestamp_ms["NIFTY"] = prior_epoch * 300_000
+
+    timestamp_ms = _test_bar_epoch(bar_time) * 300_000
+    signal = advisor._on_5m_bar_close(
+        index_name="NIFTY",
+        bar_open=25150.0,
+        bar_high=25160.0,
+        bar_low=25120.0,
+        bar_close=25140.0,
+        bar_volume=1000.0,
+        bar_time=bar_time,
+        timestamp_ms=timestamp_ms,
+        epoch_5min=timestamp_ms // 300_000,
+    )
+
+    assert signal is not None
+    assert signal.setup_reason == "RP1_LOWER_10M_EXPANSION_BREAKDOWN"
+    assert signal.trade_phase == "MIDDAY_EXPANSION_BREAKDOWN"
+    assert signal.action == "BUY_PUT"
+    assert signal.triggering_reference_price == grid.rp1_lower
+
+
 def _make_dummy_depth(
     token: str = "NSE_FO|45408",
     symbol: str = "NIFTY 25400 CE",
@@ -618,14 +689,23 @@ def test_mode5_rp_fade_uses_frozen_trigger_boundary(setup_reason, reference):
     assert reason is None
 
 
-def test_mode5_rp1_upper_breakout_uses_frozen_trigger_boundary():
+@pytest.mark.parametrize(
+    ("setup_reason", "reference", "spot", "expected_displacement"),
+    [
+        ("RP1_UPPER_10M_EXPANSION_BREAKOUT", 25575.0, 25618.8, 43.8),
+        ("RP1_LOWER_10M_EXPANSION_BREAKDOWN", 25160.0, 25116.2, 43.8),
+    ],
+)
+def test_mode5_rp1_expansions_use_their_frozen_trigger_boundary(
+    setup_reason: str, reference: float, spot: float, expected_displacement: float
+):
     displacement, reason = mode5_rp_exhaustion_displacement(
-        "RP1_UPPER_10M_EXPANSION_BREAKOUT",
-        25575.0,
-        spot=25618.8,
+        setup_reason,
+        reference,
+        spot=spot,
         fallback_displacement=248.8,
     )
-    assert displacement == pytest.approx(43.8)
+    assert displacement == pytest.approx(expected_displacement)
     assert reason is None
 
 
@@ -699,22 +779,34 @@ def test_mode5_known_rp_fade_missing_or_nonfinite_boundary_fails_closed(bad_refe
     assert reason == "MISSING_RP_BOUNDARY_REFERENCE"
 
 
-def test_mode5_unknown_rp_fade_fails_closed_and_unmapped_continuation_keeps_fallback():
+def test_mode5_unknown_rp_fade_fails_closed_and_unrelated_td_setup_keeps_fallback():
     unknown_displacement, unknown_reason = mode5_rp_exhaustion_displacement(
         "RP2_UPPER_NEW_FADE_FAMILY",
         25000.0,
         spot=24900.0,
         fallback_displacement=80.0,
     )
-    continuation_displacement, continuation_reason = mode5_rp_exhaustion_displacement(
-        "RP1_LOWER_10M_EXPANSION_BREAKDOWN",
+    unrelated_displacement, unrelated_reason = mode5_rp_exhaustion_displacement(
+        "TD_PULLBACK_REENTRY_BEAR_CONFIRMED_2BAR",
         None,
         spot=24900.0,
         fallback_displacement=80.0,
     )
 
     assert (unknown_displacement, unknown_reason) == (80.0, "UNKNOWN_RP_BOUNDARY_SETUP")
-    assert (continuation_displacement, continuation_reason) == (80.0, None)
+    assert (unrelated_displacement, unrelated_reason) == (80.0, None)
+
+
+@pytest.mark.parametrize("bad_reference", [None, 0.0, -1.0, math.nan, math.inf, -math.inf])
+def test_mode5_rp1_lower_expansion_missing_or_nonfinite_boundary_fails_closed(bad_reference):
+    displacement, reason = mode5_rp_exhaustion_displacement(
+        "RP1_LOWER_10M_EXPANSION_BREAKDOWN",
+        bad_reference,
+        spot=25120.0,
+        fallback_displacement=250.0,
+    )
+    assert displacement == 250.0
+    assert reason == "MISSING_RP_BOUNDARY_REFERENCE"
 
 
 def test_mode5_rp1_upper_breakout_missing_boundary_fails_closed():
@@ -728,13 +820,22 @@ def test_mode5_rp1_upper_breakout_missing_boundary_fails_closed():
     assert reason == "MISSING_RP_BOUNDARY_REFERENCE"
 
 
+@pytest.mark.parametrize(
+    ("setup_reason", "reference", "direction"),
+    [
+        ("RP1_UPPER_10M_EXPANSION_BREAKOUT", 25575.0, 1.0),
+        ("RP1_LOWER_10M_EXPANSION_BREAKDOWN", 25160.0, -1.0),
+    ],
+)
 @pytest.mark.parametrize("multiple,expected_allowed", [(2.5 - 1e-6, True), (2.5, True), (2.5 + 1e-6, False)])
-def test_mode5_rp_boundary_displacement_preserves_strict_atr_threshold(multiple, expected_allowed):
+def test_mode5_rp1_expansion_displacement_preserves_strict_atr_threshold(
+    setup_reason, reference, direction, multiple, expected_allowed
+):
     atr60 = 20.0
     displacement, error = mode5_rp_exhaustion_displacement(
-        "RP1_UPPER_REVERSAL_CONFIRMED",
-        24800.0,
-        spot=24800.0 + multiple * atr60,
+        setup_reason,
+        reference,
+        spot=reference + direction * multiple * atr60,
         fallback_displacement=700.0,
     )
     allowed, _, _ = advisor_module.VolatilityCompressionGate().evaluate_compression(
@@ -2544,7 +2645,9 @@ def _configure_production_mode5_entry(
     reservation_exception: Exception | None = None,
     callback_exception: Exception | None = None,
     strike_oi_allowed: bool = True,
+    direction: str = "CE",
     setup_reason: str = "RP1_UPPER_REVERSAL_CONFIRMED",
+    trade_phase: str | None = None,
     triggering_reference_price: float | None = 24600.0,
 ):
     """Set deterministic local dependencies around the real option-depth entry path."""
@@ -2599,13 +2702,16 @@ def _configure_production_mode5_entry(
     signal = CachedRBFNAuctionSignal(
         timestamp_ms=boundary_ms - 1,
         index_name="NIFTY",
-        action="BUY_CALL",
-        direction="CE",
+        action="BUY_CALL" if direction == "CE" else "BUY_PUT",
+        direction=direction,
         target_strike=24100.0,
         target_pts=30.0,
         sl_pts=20.0,
         setup_reason=setup_reason,
-        trade_phase="MIDDAY_REVERSAL",
+        trade_phase=trade_phase or {
+            "RP1_UPPER_10M_EXPANSION_BREAKOUT": "MIDDAY_EXPANSION_BREAKOUT",
+            "RP1_LOWER_10M_EXPANSION_BREAKDOWN": "MIDDAY_EXPANSION_BREAKDOWN",
+        }.get(setup_reason, "MIDDAY_REVERSAL"),
         bar_time=dt_time(boundary.hour, boundary.minute),
         triggering_reference_price=triggering_reference_price,
         is_active=True,
@@ -2616,9 +2722,10 @@ def _configure_production_mode5_entry(
     candidate = advisor._cached_rbfn_candidate_meta["NIFTY"]
     mono_now_ns = monotonic_base_ns + 10_000_000
     monotonic_clock[0] = mono_now_ns
+    option_suffix = "CE" if direction == "CE" else "PE"
     depth = _make_dummy_depth(
-        token="NSE_FO|NIFTY26NOV24100CE",
-        symbol="NIFTY 24100 CE",
+        token=f"NSE_FO|NIFTY26NOV24100{option_suffix}",
+        symbol=f"NIFTY 24100 {option_suffix}",
         ts_ms=boundary_ms,
         ingress_ns=candidate.issued_monotonic_ns + 1_000_000,
         sequence_id=1,
@@ -2655,7 +2762,7 @@ def test_production_mode5_exact_bucket_boundary_accepts_once_before_dispatch_cal
 def test_mode5_rp_reference_changes_only_volatility_gate_displacement(tmp_path: Path, monkeypatch):
     advisor = SentinelLiveStreamAdvisor(wal_path=str(tmp_path / "rp-gate-inputs.json"), enable_stdout=False)
     boundary = datetime.combine(date(2026, 11, 18), dt_time(10, 0), tzinfo=ZoneInfo("Asia/Kolkata"))
-    depth, _, _, _, _ = _configure_production_mode5_entry(
+    depth, signal, _, _, _ = _configure_production_mode5_entry(
         advisor, tmp_path, monkeypatch, boundary=boundary, monotonic_base_ns=51_000_000_000,
         reservation_result=SimpleNamespace(
             accepted=False, reason="test-terminal", action="VETOED_TEST", routed_mode="PAPER"
@@ -2683,15 +2790,19 @@ def test_mode5_rp_reference_changes_only_volatility_gate_displacement(tmp_path: 
 
 
 @pytest.mark.parametrize(
-    ("setup_reason", "reference", "spot_distance", "expected_veto", "expected_label"),
+    ("setup_reason", "reference", "spot", "direction", "expected_veto", "expected_label"),
     [
-        ("RP1_UPPER_REVERSAL_CONFIRMED", 24600.0, 162.5, False, None),
-        ("RP1_UPPER_REVERSAL_CONFIRMED", 24600.0, 162.0, False, None),
-        ("RP1_UPPER_REVERSAL_CONFIRMED", 24600.0, 163.0, True, "DISTANCE_TO_BOUNDARY"),
-        ("RP1_UPPER_10M_EXPANSION_BREAKOUT", 24600.0, 43.0, False, None),
-        ("RP1_UPPER_10M_EXPANSION_BREAKOUT", None, 163.0, True, "MISSING_RP_BOUNDARY_REFERENCE"),
-        ("RP1_UPPER_REVERSAL_CONFIRMED", None, 163.0, True, "MISSING_RP_BOUNDARY_REFERENCE"),
-        ("RP2_UPPER_NEW_FADE_FAMILY", 24240.0, 163.0, True, "UNKNOWN_RP_BOUNDARY_SETUP"),
+        ("RP1_UPPER_REVERSAL_CONFIRMED", 24600.0, 24762.5, "CE", False, None),
+        ("RP1_UPPER_REVERSAL_CONFIRMED", 24600.0, 24762.0, "CE", False, None),
+        ("RP1_UPPER_REVERSAL_CONFIRMED", 24600.0, 24763.0, "CE", True, "DISTANCE_TO_BOUNDARY"),
+        ("RP1_UPPER_10M_EXPANSION_BREAKOUT", 24600.0, 24643.0, "CE", False, None),
+        ("RP1_UPPER_10M_EXPANSION_BREAKOUT", None, 24763.0, "CE", True, "MISSING_RP_BOUNDARY_REFERENCE"),
+        ("RP1_UPPER_REVERSAL_CONFIRMED", None, 24763.0, "CE", True, "MISSING_RP_BOUNDARY_REFERENCE"),
+        ("RP1_LOWER_10M_EXPANSION_BREAKDOWN", 25160.0, 25120.0, "PE", False, None),
+        ("RP1_LOWER_10M_EXPANSION_BREAKDOWN", None, 25120.0, "PE", True, "MISSING_RP_BOUNDARY_REFERENCE"),
+        ("RP1_LOWER_10M_EXPANSION_BREAKDOWN", math.nan, 25120.0, "PE", True, "MISSING_RP_BOUNDARY_REFERENCE"),
+        ("RP1_LOWER_10M_EXPANSION_BREAKDOWN", math.inf, 25120.0, "PE", True, "MISSING_RP_BOUNDARY_REFERENCE"),
+        ("RP2_UPPER_NEW_FADE_FAMILY", 24240.0, 24403.0, "CE", True, "UNKNOWN_RP_BOUNDARY_SETUP"),
     ],
 )
 def test_mode5_distance_label_override_is_reason_only_and_narrow(
@@ -2699,16 +2810,17 @@ def test_mode5_distance_label_override_is_reason_only_and_narrow(
     monkeypatch,
     setup_reason: str,
     reference: float | None,
-    spot_distance: float,
+    spot: float,
+    direction: str,
     expected_veto: bool,
     expected_label: str | None,
 ):
     advisor = SentinelLiveStreamAdvisor(
-        wal_path=str(tmp_path / f"distance-label-{setup_reason}-{spot_distance}.json"),
+        wal_path=str(tmp_path / f"distance-label-{setup_reason}-{spot}.json"),
         enable_stdout=False,
     )
     boundary = datetime.combine(date(2026, 11, 18), dt_time(10, 0), tzinfo=ZoneInfo("Asia/Kolkata"))
-    depth, _, _, _, _ = _configure_production_mode5_entry(
+    depth, signal, _, _, _ = _configure_production_mode5_entry(
         advisor,
         tmp_path,
         monkeypatch,
@@ -2717,11 +2829,20 @@ def test_mode5_distance_label_override_is_reason_only_and_narrow(
         reservation_result=SimpleNamespace(
             accepted=False, reason="test-terminal", action="VETOED_TEST", routed_mode="PAPER"
         ),
+        direction=direction,
         setup_reason=setup_reason,
         triggering_reference_price=reference,
     )
+    expected_expansion_phase = {
+        "RP1_UPPER_10M_EXPANSION_BREAKOUT": "MIDDAY_EXPANSION_BREAKOUT",
+        "RP1_LOWER_10M_EXPANSION_BREAKDOWN": "MIDDAY_EXPANSION_BREAKDOWN",
+    }.get(setup_reason)
+    if expected_expansion_phase is not None:
+        assert signal.trade_phase == expected_expansion_phase
     advisor.vol_compression_gate = advisor_module.VolatilityCompressionGate()
-    advisor.spots["NIFTY"] = (reference if reference is not None else 24600.0) + spot_distance
+    advisor.spots["NIFTY"] = spot
+    if expected_veto and expected_label == "MISSING_RP_BOUNDARY_REFERENCE":
+        advisor.vol_compression_gate.evaluate_compression = Mock(return_value=(False, "EXHAUSTED_EXPANSION", None))
     monkeypatch.setattr(
         advisor_module.SentinelOptionStrikeResolver,
         "resolve_mode5_strike",

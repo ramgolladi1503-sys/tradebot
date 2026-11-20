@@ -11,7 +11,7 @@
 - Safety: `read_only=true`, `is_order_action=false`, `broker_api_called=false`, `allowed_for_live_execution=false`
 - Local audit attachment reviewed: `/Users/madhuram/Downloads/forensic_audit_10_attackers_ce_runner_and_volatility.md` (Nov 19 NIFTY session claims). The three most recent TradeBot conversations were checked; only `162de38c-8263-4254-8b50-0c5fa8538833` covers the Nov 19 live session.
 
-The local patch changes only the exhaustion gate's displacement input for the six enumerated RP1/RP2 reversal/fade reasons and snapshots the triggering boundary on the cached signal. The approved follow-up changes reason text only when a mapped, valid boundary setup is denied specifically by the existing `EXHAUSTED_EXPANSION` reason; the gate boolean, multiplier, ATR, and outer `VOLATILITY_EXHAUSTED` code remain unchanged. It does not change levels, thresholds, ATR source/window, confidence scoring, or other gates. This selected reference is a location heuristic; it does not prove that a particular missed or entered trade was caused by this gate or that outcomes improve.
+The initial candidate changed the exhaustion-gate displacement input for the six enumerated RP1/RP2 reversal/fade reasons and snapshots their triggering boundary on the cached signal. A later upper-continuation amendment also maps `RP1_UPPER_10M_EXPANSION_BREAKOUT` to frozen RP1 Upper. This implementation amendment closes the identified directional asymmetry by mapping `RP1_LOWER_10M_EXPANSION_BREAKDOWN` to frozen RP1 Lower as well. It changes only the gate-local displacement reference and the lower signal's immutable boundary snapshot; the gate boolean, multiplier, ATR, and outer `VOLATILITY_EXHAUSTED` code remain unchanged. It does not change levels, thresholds, ATR source/window, confidence scoring, setup conditions, targets/stops, or other gates. Boundary distance is a location heuristic; it does not measure a recent impulse, prove that a particular missed or entered trade was caused by this gate, or establish improved outcomes or a tradable edge.
 
 ## User-reported question
 
@@ -19,12 +19,12 @@ The reported concern is that an RBFN reversal near an upper or lower reversal le
 
 ### Selected candidate contract
 
-- For every explicitly enumerated reversal/fade setup, use absolute spot distance from that setup's exact triggering frozen RP1/RP2 boundary as the exhaustion gate-local displacement.
+- For every explicitly enumerated reversal/fade setup and the symmetric RP1 upper/lower continuation pair, use absolute spot distance from that setup's exact triggering frozen RP1/RP2 boundary as the exhaustion gate-local displacement.
 - Do not infer the boundary from direction alone where the setup name or generator condition identifies another level. Unknown or unmapped setup reasons must fail closed for this candidate path; no silent TD/strike fallback is allowed for a named boundary setup.
 - Preserve the existing confidence scorer's TD/fallback `displacement_pts` input; the exhaustion gate gets a separate local value.
 - Preserve all level values, the existing 2.5 multiplier, ATR input source/window, strict `>` comparison, other vetoes, and unrelated setup behavior. Keep the confidence scorer's existing TD/fallback displacement unchanged.
 - The measured value is `abs(current_spot - triggering_frozen_RP_level)`: a location-to-boundary heuristic. It is not a recent-window displacement, excursion, validated volatility-exhaustion statistic, or profitability measure.
-- The triggering boundary must be snapshotted into the frozen cached signal when generated. Do not read a mutable current grid in the later option-depth callback. Missing/non-finite snapshots and unmapped RP1/RP2 reversal/fade names fail closed; unrelated setup families retain their current TD/strike displacement.
+- The triggering boundary must be snapshotted into the frozen cached signal when generated. Do not read a mutable current grid in the later option-depth callback. Missing/non-finite snapshots for mapped boundary setups and unmapped RP1/RP2 reversal/fade names fail closed; unrelated setup families retain their current TD/strike displacement.
 
 ## Read-only code and test facts
 
@@ -45,7 +45,7 @@ The user selected the triggering frozen boundary. Based on the setup names and g
 | `RP2_UPPER_FAST_REJECTION` | frozen `URP2` |
 | `RP2_LOWER_FAST_BOUNCE` | frozen `LRP2` |
 
-This matches the six exact values in `MODE_5_EXHAUSTION_FADES` and their producers. `RP1_UPPER_10M_EXPANSION_BREAKOUT` and `RP1_LOWER_10M_EXPANSION_BREAKDOWN` are continuation families and remain on the current TD/strike displacement path. Use exact setup-name equality. Unknown RP1/RP2 reversal/fade family names and recognized families with a missing/non-finite boundary fail closed.
+This matches the six exact values in `MODE_5_EXHAUSTION_FADES` and their producers. The two RP1 continuation setups are also explicitly mapped to the corresponding frozen RP1 boundary: `RP1_UPPER_10M_EXPANSION_BREAKOUT` to `grid.rp1_upper`, and `RP1_LOWER_10M_EXPANSION_BREAKDOWN` to `grid.rp1_lower`. Use exact setup-name equality. Unknown RP1/RP2 reversal/fade family names and mapped setups with a missing/non-finite boundary fail closed. Other setup families, including aggressive drives and TD pullbacks, retain their current TD/strike displacement path.
 4. `tests/unit/test_structural_alpha_gates.py:96-112` tests a 15-point permitted case and a 50-point veto case with ATR60=15; it does not test the exact 2.5× boundary or a just-over boundary.
 5. `tests/unit/test_sentinel_adversarial_level_and_strike_audit.py:184-263` asserts that there are zero false SENSEX exhaustion vetoes for its constructed scenario. Its RBFN `setup_reason` is `TD_PULLBACK_REENTRY_BEAR_CONFIRMED_2BAR` (around `:220`), not an RP1/RP2 boundary-reversal setup. It appears to codify the TD reference for that different setup and does not establish that a boundary reversal is measured against its triggering RP level.
 6. The identified paths and tests establish implementation behavior and coverage gaps only. They do not prove the intended reference, mathematical superiority of either candidate hypothesis, or impact on today's reported trades.
@@ -119,8 +119,8 @@ No live, paper, broker, order, release, merge, or deployment action is authorize
 
 | Dimension | Required proof before a strategy change can be accepted |
 |---|---|
-| Setup-family mapping | Test all six exact `MODE_5_EXHAUSTION_FADES` reasons and their frozen boundary fields. RP1 continuation and TD-pullback families retain old displacement. Unknown RP1/RP2 reversal/fade names cannot pass the entry gate; no default-to-TD fallback for the candidate path. |
-| Upper/lower symmetry | Mirrored upper and lower fixtures produce directionally symmetric displacement, mapping, gate result, and trace fields; cross-side state or reference leakage is rejected. |
+| Setup-family mapping | Test all six exact `MODE_5_EXHAUSTION_FADES` reasons and their frozen boundary fields, plus both RP1 continuation setups (`RP1_UPPER_10M_EXPANSION_BREAKOUT` → frozen RP1 Upper; `RP1_LOWER_10M_EXPANSION_BREAKDOWN` → frozen RP1 Lower). TD-pullback and other unmapped families retain old displacement. Unknown RP1/RP2 reversal/fade names and mapped boundary setups with missing/non-finite snapshots cannot silently fall back to TD or authorize entry. |
+| Upper/lower symmetry | Mirrored upper/lower RP1 continuation fixtures produce symmetric frozen-reference displacement, gate result, and signal snapshots; missing/non-finite lower references fail closed; cross-side state or reference leakage is rejected. |
 | Exact strict boundary | For frozen threshold `2.5 * ATR60`, prove below and equal do not satisfy the strict `>` exhaustion veto, and just-above does. Preserve the existing operator unless separately authorized. Include positive/negative directional values because current code applies `abs`. |
 | Input preconditions | Establish finite-positive ATR range from the inspected option-depth/observer path; separately acknowledge that this does not establish freshness or statistical quality. Unknown reference mappings cannot silently fall back to TD and cannot authorize entry. Do not change ATR source/window or shared invalid-ATR behavior. |
 | Reference-only calculation | Use a separate exhaustion-gate input; assert the confidence scorer continues receiving the existing TD/fallback `displacement_pts`. Exercise unchanged other gates and assert that no strategy levels, thresholds, ATR values/source/window, or unrelated veto behavior changed. |
@@ -178,11 +178,12 @@ The user selected the triggering frozen RP1/RP2 boundary and directed implementa
 
 ### Implementation gate checklist
 
-- [x] Add an optional immutable triggering-boundary field to the cached RBFN signal and populate it at all six setup outputs.
-- [x] Use a gate-local distance from the snapshotted boundary only for the six exact fade/reversal reasons; preserve confidence scorer input and unrelated displacement paths.
+- [x] Add an optional immutable triggering-boundary field to the cached RBFN signal and populate it at all six fade/reversal setup outputs and both RP1 continuation setup outputs.
+- [x] Use a gate-local distance from the snapshotted boundary for the six exact fade/reversal reasons and both RP1 continuation setups; preserve confidence scorer input and unrelated displacement paths.
 - [x] Fail closed for missing/non-finite boundary values and unknown RP1/RP2 reversal/fade names; preserve other families.
-- [x] Test all six reasons, four RP2 producer variants, both RP1 producers, snapshot across grid replacement, missing/unknown references, scorer preservation, unrelated fallback, and below/equal/above the unchanged 2.5x ATR threshold.
+- [x] Test all six fade/reversal reasons, four RP2 producer variants, both RP1 continuation producers, snapshot across grid replacement, missing/unknown references, scorer preservation, unrelated fallback, and below/equal/above the unchanged 2.5x ATR threshold.
 - [x] Gate-input correction: focused test module passed 77 tests in developer and separate QA runs.
 - [x] Approved reason-only label clarification: only the mapped veto advisory label changes; 83 focused tests pass and Senior QA passed code/test scope.
+- [x] Symmetry amendment: map lower RP1 continuation breakdown to its frozen `grid.rp1_lower` reference, with producer, mirrored displacement, strict-threshold, and missing/non-finite fail-closed/caller-veto coverage. Preserve upper behavior and all other strategy/risk inputs; focused module passes 102 tests and `git diff --check` passes.
 - [ ] Resolve canonical linked work-item/evidence admission and exact-head CI. No state transition is fabricated.
 - [ ] Keep PIT/causal replay and Nov 19 attribution as open evidence gates; do not treat unit tests as proof of market edge.

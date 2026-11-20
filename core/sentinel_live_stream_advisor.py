@@ -237,8 +237,9 @@ MODE_5_EXHAUSTION_FADES: set[str] = {
     "RP1_LOWER_REVERSAL_CONFIRMED",
 }
 
-MODE_5_RP1_UPPER_EXPANSIONS: set[str] = {
+MODE_5_RP1_EXPANSIONS: set[str] = {
     "RP1_UPPER_10M_EXPANSION_BREAKOUT",
+    "RP1_LOWER_10M_EXPANSION_BREAKDOWN",
 }
 
 def mode5_rp_exhaustion_displacement(
@@ -252,7 +253,7 @@ def mode5_rp_exhaustion_displacement(
     Returns the existing displacement unchanged for unrelated setup families.
     Unknown RP1/RP2 reversal/fade names and missing/invalid snapshots fail closed.
     """
-    if setup_reason in MODE_5_RP1_UPPER_EXPANSIONS:
+    if setup_reason in MODE_5_RP1_EXPANSIONS:
         try:
             reference = float(triggering_reference_price)
             current_spot = float(spot)
@@ -3715,6 +3716,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         trade_phase="MIDDAY_EXPANSION_BREAKDOWN",
                         bar_time=bar_time,
                         sustainable_anchor_price=calc_anchor,
+                        triggering_reference_price=grid.rp1_lower,
                         is_active=True,
                         is_vetoed=False,
                         veto_reason="",
