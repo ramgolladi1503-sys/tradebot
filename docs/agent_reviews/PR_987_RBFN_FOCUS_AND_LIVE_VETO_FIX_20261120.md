@@ -59,7 +59,7 @@ Residual risk: the fixed RP1 boundary may allow a candidate to proceed past `VOL
 - Completed-boundary equality and `+1 ms` rejection are covered for target and companion evidence.
 - New WAL records leave bit 0 clear; a legacy record with bit 0 set replays without restoring an ORB permission.
 - Mode 1/2/3 runtime symbols and their dedicated exclusive implementations are absent from the changed advisor path.
-- Full CI for the updated PR head is still running; prior-head checks had failures. No merge-readiness claim is made here.
+- At tested head `452e1237fc696210f6c0ce6ee9947c08fe04ae21`, CI completed with blockers: unit-test collection errors, three Code Excellence blocks, trusted-base evidence/runtime findings, and a separate CodeQL alert. No merge-readiness claim is made here; consult PR #987 for checks on the latest head.
 
 ## Runtime Proof Required After Merge
 
