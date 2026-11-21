@@ -1183,6 +1183,9 @@ def test_mode5_quote_suppression_requires_active_candidate_and_records_both_reas
         assert row["action"] == "ABSTAIN"
         assert row["decision"] == "RETAIN_CANDIDATE"
         assert row["index_name"] == "NIFTY"
+        assert row["candidate_id"] == advisor._mode5_candidate_id(
+            "NIFTY", metadata.session_day, metadata.generation
+        )
         assert row["canonical_instrument"] == instrument
         assert row["candidate_generation"] == metadata.generation
         assert row["candidate_action"] == signal.action
@@ -1193,6 +1196,393 @@ def test_mode5_quote_suppression_requires_active_candidate_and_records_both_reas
         assert row["quote_exchange_timestamp_ms"] == depth.exchange_timestamp_ms
         assert row["ingress_monotonic_ns"] == depth.ingress_monotonic_ns
         assert row["validated_decision_timestamp_ms"] == boundary_ms + 10
+
+
+def test_mode5_invalid_bar_summary_preserves_validation_reason(tmp_path: Path):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / "evaluation-summary.json"), enable_stdout=False
+    )
+    advisor.decision_trace_path = tmp_path / "evaluation-summary.jsonl"
+    advisor._on_5m_bar_close(
+        index_name="NIFTY",
+        bar_open=25000.0,
+        bar_high=25010.0,
+        bar_low=24990.0,
+        bar_close=25005.0,
+        bar_volume=100.0,
+        bar_time=dt_time(10, 0),
+        timestamp_ms=int(datetime(2026, 11, 18, 10, 0, tzinfo=ZoneInfo("Asia/Kolkata")).timestamp() * 1000),
+        epoch_5min=-1,
+    )
+    records = _read_mode5_trace_records(advisor)
+    summaries = [r for r in records if r.get("event_type") == "MODE5_EVALUATION_SUMMARY"]
+    assert len(summaries) == 1
+    summary = summaries[0]
+    assert summary["evaluation_state"] == "REJECTED"
+    assert summary["candidate_state"] == "NOT_EMITTED"
+    assert summary["candidate_id"] is None
+    assert summary["reason_code"] == "INVALID_COMPLETED_BAR"
+    assert not advisor._lock._is_owned()
+
+
+def test_mode5_validated_no_signal_has_no_invented_reason(tmp_path: Path, monkeypatch):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / "valid-no-signal.json"), enable_stdout=False
+    )
+    advisor.decision_trace_path = tmp_path / "valid-no-signal.jsonl"
+    boundary = datetime(2026, 11, 18, 10, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    timestamp_ms = int(boundary.timestamp() * 1000) - 1
+    epoch = timestamp_ms // 300_000
+    monkeypatch.setattr(advisor, "_on_5m_bar_close_locked", lambda *args: None)
+    advisor._on_5m_bar_close(
+        index_name="NIFTY", bar_open=25000.0, bar_high=25010.0, bar_low=24990.0,
+        bar_close=25005.0, bar_volume=100.0, bar_time=boundary.time(),
+        timestamp_ms=timestamp_ms, epoch_5min=epoch,
+    )
+    summaries = [
+        r for r in _read_mode5_trace_records(advisor)
+        if r.get("event_type") == "MODE5_EVALUATION_SUMMARY"
+    ]
+    assert len(summaries) == 1
+    assert summaries[0]["evaluation_state"] == "NO_SIGNAL"
+    assert summaries[0]["candidate_state"] == "NOT_EMITTED"
+    assert summaries[0]["reason_code"] is None
+
+
+def test_mode5_evaluator_exception_is_traced_and_original_exception_survives_queue_failure(tmp_path: Path, monkeypatch):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / "evaluation-error.json"), enable_stdout=False
+    )
+    advisor.decision_trace_path = tmp_path / "evaluation-error.jsonl"
+    boundary = datetime(2026, 11, 18, 10, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    timestamp_ms = int(boundary.timestamp() * 1000) - 1
+    epoch = timestamp_ms // 300_000
+    original_error = RuntimeError("private details must not be serialized")
+    monkeypatch.setattr(
+        advisor, "_on_5m_bar_close_locked", Mock(side_effect=original_error)
+    )
+    with pytest.raises(RuntimeError) as caught:
+        advisor._on_5m_bar_close(
+            "NIFTY", 25000.0, 25010.0, 24990.0, 25005.0, 100.0,
+            boundary.time(), timestamp_ms, epoch,
+        )
+    assert caught.value is original_error
+    error_events = [
+        row for row in _read_mode5_trace_records(advisor)
+        if row.get("event_type") == "MODE5_EVALUATION_ERROR"
+    ]
+    assert len(error_events) == 1
+    assert error_events[0]["evaluation_id"].endswith(f":NIFTY:{epoch}")
+    assert error_events[0]["exception_class"] == "RuntimeError"
+    assert "private details" not in json.dumps(error_events[0])
+    assert error_events[0]["evaluation_stage"] == "BAR_EVALUATOR"
+    assert error_events[0]["partial_state_unknown"] is True
+
+    queue_error = OSError("trace queue failure")
+    monkeypatch.setattr(
+        advisor, "_enqueue_mode5_trace_record", Mock(side_effect=queue_error)
+    )
+    second_error = ValueError("original evaluator error")
+    monkeypatch.setattr(
+        advisor, "_on_5m_bar_close_locked", Mock(side_effect=second_error)
+    )
+    with pytest.raises(ValueError) as caught_queue_failure:
+        advisor._on_5m_bar_close(
+            "NIFTY", 25000.0, 25010.0, 24990.0, 25005.0, 100.0,
+            boundary.time(), timestamp_ms, epoch,
+        )
+    assert caught_queue_failure.value is second_error
+
+
+@pytest.mark.parametrize(
+    ("use_dispatcher", "apm_result", "expected_stage", "expected_outcome"),
+    [
+        (True, True, "RESERVATION_ACCEPTED", "APM_ENTRY_RECORDED"),
+        (True, False, "RESERVATION_ACCEPTED", "APM_ENTRY_REJECTED"),
+        (False, True, "LOCAL_APM_AUTHORIZED", "APM_ENTRY_RECORDED"),
+        (False, False, "LOCAL_APM_AUTHORIZED", "APM_ENTRY_REJECTED"),
+    ],
+)
+def test_mode5_candidate_stage_and_local_apm_outcome_are_joined(
+    tmp_path: Path, monkeypatch, use_dispatcher: bool, apm_result: bool,
+    expected_stage: str, expected_outcome: str,
+):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / f"apm-outcome-{use_dispatcher}-{apm_result}.json"),
+        enable_stdout=False,
+    )
+    boundary = datetime(2026, 11, 18, 10, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    reservation = SimpleNamespace(
+        accepted=True, reason="RESERVED_PAPER", action="RESERVED", routed_mode="PAPER"
+    )
+    depth, signal, generation, _, _ = _configure_production_mode5_entry(
+        advisor, tmp_path, monkeypatch, boundary=boundary,
+        monotonic_base_ns=90_000_000_000 + int(use_dispatcher) * 10_000_000_000 + int(apm_result) * 1_000_000_000,
+        reservation_result=reservation,
+    )
+    advisor.decision_trace_path = tmp_path / f"apm-outcome-{use_dispatcher}-{apm_result}.jsonl"
+    advisor.apms["NIFTY"].arm_and_enter.return_value = apm_result
+    if not use_dispatcher:
+        advisor.automated_dispatcher = None
+    monkeypatch.setattr(
+        advisor_module.SentinelOptionStrikeResolver, "resolve_mode5_strike",
+        staticmethod(lambda **kwargs: SimpleNamespace(target_strike=24100.0)),
+    )
+
+    advisor._evaluate_option_depth(depth)
+
+    candidate_id = advisor._mode5_candidate_id(
+        "NIFTY", advisor._cached_rbfn_candidate_meta["NIFTY"].session_day, generation
+    )
+    records = _read_mode5_trace_records(advisor)
+    stage_rows = [r for r in records if r.get("event_type") == "MODE5_CANDIDATE_STAGE"]
+    terminal_rows = [r for r in records if r.get("event_type") == "MODE5_CANDIDATE_TERMINAL"]
+    assert len(stage_rows) == 1
+    assert stage_rows[0]["candidate_stage"] == expected_stage
+    assert stage_rows[0]["candidate_id"] == candidate_id
+    assert len(terminal_rows) == 1
+    assert terminal_rows[0]["candidate_state"] == expected_outcome
+    assert terminal_rows[0]["candidate_id"] == candidate_id
+    assert terminal_rows[0]["record_origin"] == "LOCAL_APM"
+    assert terminal_rows[0]["broker_fill_confirmed"] is False
+
+
+def test_mode5_dispatch_unknown_is_not_terminalized_again_on_invalidation(tmp_path: Path):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / "dispatch-unknown-terminal.json"), enable_stdout=False
+    )
+    advisor.decision_trace_path = tmp_path / "dispatch-unknown-terminal.jsonl"
+    advisor._mode5_candidate_lifecycle_slots["NIFTY"] = {
+        "candidate_id": "run:2026-11-18:NIFTY:7",
+        "session_date": "2026-11-18",
+        "generation": 7,
+        "state": "AVAILABLE",
+        "action": "BUY_CALL",
+        "setup_reason": "RBFN_TEST",
+    }
+    with advisor._lock:
+        advisor._terminalize_mode5_candidate_locked(
+            "NIFTY", "RESERVATION_EXCEPTION_UNKNOWN", timestamp_ms=1000
+        )
+        assert advisor._mode5_candidate_lifecycle_slots["NIFTY"]["state"] == "DISPATCH_UNKNOWN"
+        advisor._terminalize_mode5_candidate_locked(
+            "NIFTY", "LEVELS_INVALIDATED", timestamp_ms=2000
+        )
+    advisor._flush_mode5_lifecycle_records_after_unlock()
+
+    terminal_rows = [
+        row for row in _read_mode5_trace_records(advisor)
+        if row.get("event_type") == "MODE5_CANDIDATE_TERMINAL"
+    ]
+    assert len(terminal_rows) == 1
+    assert terminal_rows[0]["candidate_id"] == "run:2026-11-18:NIFTY:7"
+    assert terminal_rows[0]["candidate_state"] == "DISPATCH_UNKNOWN"
+    assert terminal_rows[0]["terminal_reason"] == "RESERVATION_EXCEPTION_UNKNOWN"
+
+
+def test_mode5_apm_exception_flushes_unknown_without_fabricating_entry(tmp_path: Path, monkeypatch):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / "apm-exception-unknown.json"), enable_stdout=False
+    )
+    boundary = datetime(2026, 11, 18, 10, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    reservation = SimpleNamespace(
+        accepted=True, reason="RESERVED_PAPER", action="RESERVED", routed_mode="PAPER"
+    )
+    depth, _, _, _, _ = _configure_production_mode5_entry(
+        advisor, tmp_path, monkeypatch, boundary=boundary, monotonic_base_ns=150_000_000_000,
+        reservation_result=reservation,
+    )
+    advisor.decision_trace_path = tmp_path / "apm-exception-unknown.jsonl"
+    original_error = RuntimeError("APM state write failed")
+    advisor.apms["NIFTY"].arm_and_enter.side_effect = original_error
+    monkeypatch.setattr(
+        advisor_module.SentinelOptionStrikeResolver, "resolve_mode5_strike",
+        staticmethod(lambda **kwargs: SimpleNamespace(target_strike=24100.0)),
+    )
+
+    with pytest.raises(RuntimeError) as caught:
+        advisor._evaluate_option_depth(depth)
+
+    assert caught.value is original_error
+    assert advisor.automated_dispatcher.reserve_entry_intent.call_count == 1
+    assert advisor.automated_dispatcher.on_apm_entry.call_count == 0
+    advisor.journal.record_execution.assert_not_called()
+    records = _read_mode5_trace_records(advisor)
+    stage_rows = [row for row in records if row.get("event_type") == "MODE5_CANDIDATE_STAGE"]
+    terminal_rows = [row for row in records if row.get("event_type") == "MODE5_CANDIDATE_TERMINAL"]
+    assert len(stage_rows) == 1
+    assert stage_rows[0]["candidate_stage"] == "RESERVATION_ACCEPTED"
+    assert len(terminal_rows) == 1
+    assert terminal_rows[0]["candidate_state"] == "APM_ENTRY_UNKNOWN"
+    assert terminal_rows[0]["record_origin"] == "LOCAL_APM"
+    assert terminal_rows[0]["broker_fill_confirmed"] is False
+    assert not any(row.get("record_type") == "EXECUTION" for row in records)
+
+
+def test_mode5_candidate_id_is_stable_across_issue_quote_stage_and_terminal(tmp_path: Path, monkeypatch):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / "candidate-id-chain.json"), enable_stdout=False
+    )
+    boundary = datetime(2026, 11, 18, 10, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    accepted = SimpleNamespace(
+        accepted=True, reason="RESERVED_PAPER", action="RESERVED", routed_mode="PAPER"
+    )
+    depth, _, generation, _, _ = _configure_production_mode5_entry(
+        advisor, tmp_path, monkeypatch, boundary=boundary, monotonic_base_ns=170_000_000_000,
+        reservation_result=accepted,
+    )
+    advisor.decision_trace_path = tmp_path / "candidate-id-chain.jsonl"
+    metadata = advisor._cached_rbfn_candidate_meta["NIFTY"]
+    candidate_id = advisor._mode5_candidate_id("NIFTY", metadata.session_day, generation)
+    advisor._flush_mode5_lifecycle_records_after_unlock()
+    lagging_depth = _make_dummy_depth(
+        token=depth.token,
+        symbol=depth.symbol,
+        ts_ms=metadata.boundary_timestamp_ms - 1,
+        ingress_ns=metadata.issued_monotonic_ns + 1,
+    )
+    assert advisor._emit_mode5_quote_suppression(
+        "NIFTY", depth.token, advisor.cached_rbfn_signals["NIFTY"], metadata,
+        lagging_depth, "MODE5_QUOTE_BEFORE_BAR_BOUNDARY", metadata.boundary_timestamp_ms + 10,
+    )
+    monkeypatch.setattr(
+        advisor_module.SentinelOptionStrikeResolver, "resolve_mode5_strike",
+        staticmethod(lambda **kwargs: SimpleNamespace(target_strike=24100.0)),
+    )
+
+    advisor._evaluate_option_depth(depth)
+
+    records = _read_mode5_trace_records(advisor)
+    issued = [row for row in records if row.get("event_type") == "MODE5_CANDIDATE_ISSUED"]
+    quote = [row for row in records if row.get("event_type") == "MODE5_QUOTE_SUPPRESSED"]
+    stages = [row for row in records if row.get("event_type") == "MODE5_CANDIDATE_STAGE"]
+    terminal = [row for row in records if row.get("event_type") == "MODE5_CANDIDATE_TERMINAL"]
+    assert len(issued) == len(quote) == len(stages) == len(terminal) == 1
+    assert [row["candidate_id"] for row in (issued[0], quote[0], stages[0], terminal[0])] == [candidate_id] * 4
+    assert stages[0]["candidate_stage"] == "RESERVATION_ACCEPTED"
+    assert terminal[0]["candidate_state"] == "APM_ENTRY_RECORDED"
+
+
+def test_mode5_candidate_lifecycle_slots_stay_one_per_supported_index(tmp_path: Path, monkeypatch):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / "candidate-slot-bounds.json"), enable_stdout=False
+    )
+    monkeypatch.setattr(advisor, "_publish_mode5_lifecycle_record", Mock(return_value=True))
+    session_day = date(2026, 11, 18)
+    timestamp_ms = int(datetime.combine(
+        session_day, dt_time(10, 0), tzinfo=ZoneInfo("Asia/Kolkata")
+    ).timestamp() * 1000)
+    supported = ("NIFTY", "SENSEX", "BANKNIFTY")
+    for generation_index in range(100):
+        index_name = supported[generation_index % len(supported)]
+        signal = CachedRBFNAuctionSignal(
+            timestamp_ms=timestamp_ms,
+            index_name=index_name,
+            action="BUY_CALL",
+            direction="CE",
+            target_strike=25000.0,
+            target_pts=25.0,
+            sl_pts=15.0,
+            setup_reason="RBFN_SLOT_BOUND_TEST",
+            trade_phase="MIDDAY_REVERSAL",
+            bar_time=dt_time(10, 0),
+            is_active=True,
+        )
+        with advisor._lock:
+            advisor._cache_rbfn_signal_locked(index_name, signal, timestamp_ms // 300_000)
+        assert set(advisor._mode5_candidate_lifecycle_slots) == set(supported)
+        assert len(advisor._mode5_candidate_lifecycle_slots) == 3
+
+
+@pytest.mark.parametrize(
+    "invalid_kind",
+    [
+        "stale_source", "future_source", "zero_source_clock", "missing_source_clock",
+        "zero_ingress_clock", "missing_ingress_clock", "zero_sequence", "missing_sequence",
+        "out_of_order",
+    ],
+)
+def test_production_mode5_invalid_quote_cannot_reserve_or_dispatch(
+    tmp_path: Path, monkeypatch, invalid_kind: str
+):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / f"invalid-quote-{invalid_kind}.json"), enable_stdout=False
+    )
+    boundary = datetime(2026, 11, 18, 10, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    depth, signal, generation, wall_now_ms, mono_now_ns = _configure_production_mode5_entry(
+        advisor, tmp_path, monkeypatch, boundary=boundary,
+        monotonic_base_ns=180_000_000_000,
+    )
+    source_timestamp_ms = depth.exchange_timestamp_ms
+    ingress_monotonic_ns = depth.ingress_monotonic_ns
+    sequence_id = depth.sequence_id
+    if invalid_kind == "stale_source":
+        source_timestamp_ms = wall_now_ms - 10_000
+    elif invalid_kind == "future_source":
+        source_timestamp_ms = wall_now_ms + 6_000
+    elif invalid_kind == "zero_source_clock":
+        source_timestamp_ms = 0
+    elif invalid_kind == "missing_source_clock":
+        source_timestamp_ms = None
+    elif invalid_kind == "zero_ingress_clock":
+        ingress_monotonic_ns = 0
+    elif invalid_kind == "missing_ingress_clock":
+        ingress_monotonic_ns = None
+    elif invalid_kind == "zero_sequence":
+        sequence_id = 0
+    elif invalid_kind == "missing_sequence":
+        sequence_id = None
+    depth = _make_dummy_depth(
+        token=depth.token,
+        symbol=depth.symbol,
+        ts_ms=source_timestamp_ms,
+        ingress_ns=ingress_monotonic_ns,
+        sequence_id=sequence_id,
+    )
+    if invalid_kind == "out_of_order":
+        instrument_key = advisor._canonical_option_instrument_key("NIFTY", depth.token)
+        assert instrument_key is not None
+        advisor._option_depth_watermarks["NIFTY"][instrument_key] = (
+            boundary.date(), depth.exchange_timestamp_ms, depth.sequence_id + 1
+        )
+    monkeypatch.setattr(
+        advisor_module.SentinelOptionStrikeResolver, "resolve_mode5_strike",
+        staticmethod(lambda **kwargs: SimpleNamespace(target_strike=24100.0)),
+    )
+
+    advisor._evaluate_option_depth(depth)
+
+    advisor.automated_dispatcher.reserve_entry_intent.assert_not_called()
+    advisor.automated_dispatcher.on_apm_entry.assert_not_called()
+    assert advisor.cached_rbfn_signals["NIFTY"] is signal
+    assert advisor._cached_rbfn_candidate_meta["NIFTY"].generation == generation
+
+
+def test_expired_candidate_terminal_flushes_immediately_when_read(tmp_path: Path, monkeypatch):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / "expired-candidate-immediate.json"), enable_stdout=False
+    )
+    boundary = datetime(2026, 11, 18, 10, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    _, _, generation, _, mono_now_ns = _configure_production_mode5_entry(
+        advisor, tmp_path, monkeypatch, boundary=boundary,
+        monotonic_base_ns=190_000_000_000,
+    )
+    metadata = advisor._cached_rbfn_candidate_meta["NIFTY"]
+    advisor._flush_mode5_lifecycle_records_after_unlock()
+    monkeypatch.setattr(
+        advisor_module.time, "monotonic_ns",
+        lambda: mono_now_ns + 300_000_000_001,
+    )
+
+    assert advisor.get_valid_cached_rbfn_signal("NIFTY") is None
+
+    terminal_rows = [
+        row for row in _read_mode5_trace_records(advisor)
+        if row.get("event_type") == "MODE5_CANDIDATE_TERMINAL"
+    ]
+    assert len(terminal_rows) == 1
+    assert terminal_rows[0]["candidate_generation"] == generation
+    assert terminal_rows[0]["candidate_state"] == "EXPIRED"
 
 
 def test_mode5_quote_suppression_dedup_is_atomic_and_append_is_outside_state_lock(tmp_path: Path):
@@ -2740,7 +3130,7 @@ def test_production_mode5_exact_bucket_boundary_accepts_once_before_dispatch_cal
     day = date(2026, 11, 18)
     boundary = datetime.combine(day, dt_time(10, 0), tzinfo=ZoneInfo("Asia/Kolkata"))
     accepted = SimpleNamespace(accepted=True, reason="RESERVED_PAPER", action="RESERVED", routed_mode="PAPER")
-    depth, signal, _, _, _ = _configure_production_mode5_entry(
+    depth, signal, generation, _, _ = _configure_production_mode5_entry(
         advisor, tmp_path, monkeypatch, boundary=boundary, monotonic_base_ns=50_000_000_000,
         reservation_result=accepted,
     )
@@ -2756,7 +3146,7 @@ def test_production_mode5_exact_bucket_boundary_accepts_once_before_dispatch_cal
     advisor.automated_dispatcher.on_apm_entry.assert_called_once()
     advisor.apms["NIFTY"].arm_and_enter.assert_called_once()
     assert advisor.cached_rbfn_signals["NIFTY"] is None
-    assert advisor._cached_rbfn_candidate_meta["NIFTY"].status == "ENTRY_SUCCEEDED"
+    assert advisor._cached_rbfn_candidate_meta["NIFTY"].status == "APM_ENTRY_RECORDED"
 
 
 def test_mode5_rp_reference_changes_only_volatility_gate_displacement(tmp_path: Path, monkeypatch):
@@ -2820,7 +3210,7 @@ def test_mode5_distance_label_override_is_reason_only_and_narrow(
         enable_stdout=False,
     )
     boundary = datetime.combine(date(2026, 11, 18), dt_time(10, 0), tzinfo=ZoneInfo("Asia/Kolkata"))
-    depth, signal, _, _, _ = _configure_production_mode5_entry(
+    depth, signal, generation, _, _ = _configure_production_mode5_entry(
         advisor,
         tmp_path,
         monkeypatch,
@@ -2864,6 +3254,10 @@ def test_mode5_distance_label_override_is_reason_only_and_narrow(
             if call.kwargs.get("veto_reason") == "VOLATILITY_EXHAUSTED"
         ]
         assert veto_calls
+        expected_candidate_id = advisor._mode5_candidate_id(
+            "NIFTY", advisor._cached_rbfn_candidate_meta["NIFTY"].session_day, generation
+        )
+        assert all(call.get("candidate_id") == expected_candidate_id for call in veto_calls)
         assert alert.status_flag == "VETO_VOLATILITY_EXHAUSTED"
 
 
@@ -2954,9 +3348,11 @@ def test_production_mode5_queue_full_does_not_veto_entry_or_repeat_candidate(
         assert advisor.automated_dispatcher.reserve_entry_intent.call_count == 1
         assert advisor.automated_dispatcher.on_apm_entry.call_count == 1
         assert advisor.cached_rbfn_signals["NIFTY"] is None
-        assert advisor._cached_rbfn_candidate_meta["NIFTY"].status == "ENTRY_SUCCEEDED"
+        assert advisor._cached_rbfn_candidate_meta["NIFTY"].status == "APM_ENTRY_RECORDED"
         health = advisor.get_mode5_trace_health()
-        assert health["queue_full_drops"] == 1
+        assert health["queue_full_drops"] >= 1
+        assert health["candidate_lifecycle_incomplete"] is True
+        assert health["candidate_lifecycle_drops"] >= 1
 
         # A duplicate quote cannot re-arm or dispatch the consumed candidate.
         advisor._evaluate_option_depth(depth)
@@ -2971,7 +3367,7 @@ def assert_candidate_consumed_before_callback(advisor, signal):
     assert not advisor._lock._is_owned()
     assert advisor.cached_rbfn_signals["NIFTY"] is None
     assert advisor._cached_rbfn_candidate_meta["NIFTY"].status in {
-        "RESERVATION_ACCEPTED", "ENTRY_SUCCEEDED"
+        "RESERVATION_ACCEPTED", "ENTRY_SUCCEEDED", "APM_ENTRY_RECORDED"
     }
 
 

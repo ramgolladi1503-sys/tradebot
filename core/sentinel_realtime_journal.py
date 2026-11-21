@@ -64,6 +64,7 @@ class VetoRecord:
     confidence_score: int = 0
     confidence_grade: str = ""
     sizing_tier: str = ""
+    candidate_id: Optional[str] = None
 
 
 @dataclass(slots=True, frozen=True)
@@ -90,6 +91,9 @@ class TradeExecutionRecord:
     lot_size: int = 0
     total_quantity: int = 0
     sizing_tier: str = ""
+    candidate_id: Optional[str] = None
+    record_origin: str = "LOCAL_APM"
+    broker_fill_confirmed: bool = False
 
 
 @dataclass(slots=True, frozen=True)
@@ -139,13 +143,15 @@ class ShadowBarrierOutcomeRecord:
     entry_spot: float = 0.0
     target_barrier_spot: float = 0.0
     sl_barrier_spot: float = 0.0
-    outcome: str = "PENDING"  # "HIT_SL_FIRST", "HIT_TP_FIRST", "EXPIRED_EOD", "PENDING"
-    classification: str = "PENDING"  # "TRUE_POSITIVE_SAVED_CAPITAL", "FALSE_POSITIVE_MISSED_ALPHA", "NEUTRAL_CHOP"
-    simulated_pnl_pts: float = 0.0
-    simulated_capital_saved_or_lost_inr: float = 0.0
-    max_favorable_excursion_pts: float = 0.0
-    max_adverse_excursion_pts: float = 0.0
+    outcome: str = "UNAVAILABLE"
+    classification: str = "UNAVAILABLE"
+    simulated_pnl_pts: Optional[float] = None
+    simulated_capital_saved_or_lost_inr: Optional[float] = None
+    max_favorable_excursion_pts: Optional[float] = None
+    max_adverse_excursion_pts: Optional[float] = None
     tick_count_evaluated: int = 0
+    metrics_available: bool = False
+    unavailability_reason: str = "UNIT_AMBIGUOUS_LEGACY_VETO_RECORD"
 
 
 @dataclass(slots=True)
@@ -158,6 +164,8 @@ class DailyForensicSummary:
     total_exits: int = 0
     resolved_shadow_barriers: int = 0
     pending_shadow_barriers: int = 0
+    unavailable_shadow_outcomes: int = 0
+    shadow_metrics_status: str = "UNAVAILABLE"
     true_positive_capital_saved_count: int = 0
     false_positive_missed_alpha_count: int = 0
     neutral_chop_count: int = 0
@@ -190,31 +198,17 @@ class ShadowBarrierPathEvaluator:
     def __init__(self, default_lot_size_nifty: int = 65, default_lot_size_other: int = 30):
         self._pending_barriers: Dict[str, ShadowBarrierOutcomeRecord] = {}
         self._completed_barriers: List[ShadowBarrierOutcomeRecord] = []
+        self._unavailable_veto_count = 0
         self._lock = threading.Lock()
         self.default_lot_size_nifty = default_lot_size_nifty
         self.default_lot_size_other = default_lot_size_other
 
     def register_veto(self, veto: VetoRecord) -> Optional[ShadowBarrierOutcomeRecord]:
-        """Registers a vetoed candidate for forward path tracking."""
-        if veto.option_ltp <= 0 and veto.spot_price <= 0:
-            return None
+        """Retain the veto reference without inventing cross-unit shadow barriers.
 
-        # Build barrier targets in option premium space
-        entry_opt = veto.option_ltp
-        # If option LTP is valid, barriers are set in option points
-        # Target = entry + target_pts * delta (approx 0.5 for ATM if not given)
-        # Or if nominal_target_pts given:
-        opt_target_pts = veto.nominal_target_pts if veto.nominal_target_pts > 0 else 15.0
-        opt_sl_pts = veto.nominal_sl_pts if veto.nominal_sl_pts > 0 else 12.0
-
-        target_opt = entry_opt + opt_target_pts
-        sl_opt = max(0.5, entry_opt - opt_sl_pts)
-
-        # Also store spot barriers
-        is_ce = (veto.direction == "CE")
-        target_spot = veto.spot_price + opt_target_pts if is_ce else veto.spot_price - opt_target_pts
-        sl_spot = veto.spot_price - opt_sl_pts if is_ce else veto.spot_price + opt_sl_pts
-
+        Legacy VetoRecord has no unit contract for nominal target/stop points, so
+        those values cannot safely define both option-premium and spot barriers.
+        """
         rec_id = f"SHADOW_{veto.record_id or int(time.time() * 1000)}"
         record = ShadowBarrierOutcomeRecord(
             record_id=rec_id,
@@ -225,24 +219,26 @@ class ShadowBarrierPathEvaluator:
             symbol=veto.symbol,
             direction=veto.direction,
             veto_reason=veto.veto_reason,
-            entry_opt_ltp=entry_opt,
-            target_barrier_opt=round(target_opt, 2),
-            sl_barrier_opt=round(sl_opt, 2),
-            entry_spot=veto.spot_price,
-            target_barrier_spot=round(target_spot, 2),
-            sl_barrier_spot=round(sl_spot, 2),
-            outcome="PENDING",
-            classification="PENDING",
-            simulated_pnl_pts=0.0,
-            simulated_capital_saved_or_lost_inr=0.0,
-            max_favorable_excursion_pts=0.0,
-            max_adverse_excursion_pts=0.0,
+            entry_opt_ltp=veto.option_ltp if veto.option_ltp > 0 else 0.0,
+            entry_spot=veto.spot_price if veto.spot_price > 0 else 0.0,
+            outcome="UNAVAILABLE",
+            classification="UNAVAILABLE",
+            simulated_pnl_pts=None,
+            simulated_capital_saved_or_lost_inr=None,
+            max_favorable_excursion_pts=None,
+            max_adverse_excursion_pts=None,
             tick_count_evaluated=0,
+            metrics_available=False,
+            unavailability_reason="UNIT_AMBIGUOUS_LEGACY_VETO_RECORD",
         )
 
         with self._lock:
-            self._pending_barriers[rec_id] = record
+            self._unavailable_veto_count += 1
         return record
+
+    def get_unavailable_veto_count(self) -> int:
+        with self._lock:
+            return self._unavailable_veto_count
 
     def on_tick(
         self,
@@ -262,6 +258,8 @@ class ShadowBarrierPathEvaluator:
             for key in pending_keys:
                 rec = self._pending_barriers.get(key)
                 if rec is None or rec.symbol != symbol:
+                    continue
+                if not rec.metrics_available:
                     continue
 
                 # Strict zero lookahead invariant
@@ -328,6 +326,17 @@ class ShadowBarrierPathEvaluator:
             pending_keys = list(self._pending_barriers.keys())
             for key in pending_keys:
                 rec = self._pending_barriers.pop(key)
+                if not rec.metrics_available:
+                    rec.outcome = "UNAVAILABLE"
+                    rec.classification = "UNAVAILABLE"
+                    rec.simulated_pnl_pts = None
+                    rec.simulated_capital_saved_or_lost_inr = None
+                    rec.max_favorable_excursion_pts = None
+                    rec.max_adverse_excursion_pts = None
+                    rec.unavailability_reason = "UNIT_AMBIGUOUS_LEGACY_VETO_RECORD"
+                    self._unavailable_veto_count += 1
+                    resolved.append(rec)
+                    continue
                 rec.outcome = "EXPIRED_EOD"
                 rec.resolution_time_str = current_time_str
                 last_price = prices.get(rec.symbol, rec.entry_opt_ltp)
@@ -440,6 +449,13 @@ class SentinelRealtimeJournal:
         self.logs_dir.mkdir(parents=True, exist_ok=True)
         self.queue: queue.Queue = queue.Queue(maxsize=queue_maxsize)
         self.dropped_records_count: int = 0
+        self.veto_history_capacity = (
+            queue_maxsize if isinstance(queue_maxsize, int) and not isinstance(queue_maxsize, bool)
+            and queue_maxsize > 0 else 10000
+        )
+        self.veto_history_retention_drops = 0
+        self._total_vetoes_recorded = 0
+        self._vetoes_by_reason: Dict[str, int] = {}
         self.evaluator = ShadowBarrierPathEvaluator()
 
         # In-memory history cache for dashboard & summary
@@ -495,6 +511,7 @@ class SentinelRealtimeJournal:
         sizing_tier: str = "",
         timestamp_ms: Optional[int] = None,
         wall_time_str: Optional[str] = None,
+        candidate_id: Optional[str] = None,
     ) -> VetoRecord:
         """Non-blocking call to record a vetoed trade setup."""
         now_dt = datetime.now()
@@ -522,10 +539,16 @@ class SentinelRealtimeJournal:
             confidence_score=confidence_score,
             confidence_grade=confidence_grade,
             sizing_tier=sizing_tier,
+            candidate_id=candidate_id,
         )
 
         with self._mem_lock:
+            if len(self.veto_history) >= self.veto_history_capacity:
+                del self.veto_history[0]
+                self.veto_history_retention_drops += 1
             self.veto_history.append(record)
+            self._total_vetoes_recorded += 1
+            self._vetoes_by_reason[veto_reason] = self._vetoes_by_reason.get(veto_reason, 0) + 1
 
         # Register with Shadow Barrier Evaluator
         shadow_rec = self.evaluator.register_veto(record)
@@ -557,6 +580,7 @@ class SentinelRealtimeJournal:
         sizing_tier: str = "FULL_SIZE",
         timestamp_ms: Optional[int] = None,
         wall_time_str: Optional[str] = None,
+        candidate_id: Optional[str] = None,
     ) -> TradeExecutionRecord:
         """Non-blocking call to record an executed trade entry."""
         now_dt = datetime.now()
@@ -586,6 +610,9 @@ class SentinelRealtimeJournal:
             lot_size=lot_size,
             total_quantity=total_quantity,
             sizing_tier=sizing_tier,
+            candidate_id=candidate_id,
+            record_origin="LOCAL_APM",
+            broker_fill_confirmed=False,
         )
 
         with self._mem_lock:
@@ -693,9 +720,9 @@ class SentinelRealtimeJournal:
 
         completed_barriers, pending_barriers = self.evaluator.get_all_records()
 
-        vetoes_by_reason: Dict[str, int] = {}
-        for v in self.veto_history:
-            vetoes_by_reason[v.veto_reason] = vetoes_by_reason.get(v.veto_reason, 0) + 1
+        with self._mem_lock:
+            total_vetoes_recorded = self._total_vetoes_recorded
+            vetoes_by_reason = dict(self._vetoes_by_reason)
 
         exits_by_reason: Dict[str, int] = {}
         exec_pnl = 0.0
@@ -709,17 +736,22 @@ class SentinelRealtimeJournal:
         tp_count = 0
         fp_count = 0
         neutral_count = 0
+        unavailable_shadow_count = self.evaluator.get_unavailable_veto_count()
+        available_shadow_count = 0
         capital_saved_inr = 0.0
         missed_alpha_inr = 0.0
 
         for b in completed_barriers:
+            if not b.metrics_available or b.classification == "UNAVAILABLE":
+                continue
+            available_shadow_count += 1
             if b.classification == "TRUE_POSITIVE_SAVED_CAPITAL":
                 tp_count += 1
-                capital_saved_inr += b.simulated_capital_saved_or_lost_inr
+                capital_saved_inr += b.simulated_capital_saved_or_lost_inr or 0.0
             elif b.classification == "FALSE_POSITIVE_MISSED_ALPHA":
                 fp_count += 1
-                missed_alpha_inr += b.simulated_capital_saved_or_lost_inr
-            else:
+                missed_alpha_inr += b.simulated_capital_saved_or_lost_inr or 0.0
+            elif b.classification == "NEUTRAL_CHOP":
                 neutral_count += 1
 
         net_defense_benefit = round(capital_saved_inr - missed_alpha_inr, 2)
@@ -727,12 +759,18 @@ class SentinelRealtimeJournal:
 
         summary = DailyForensicSummary(
             session_date=s_date,
-            total_vetoes=len(self.veto_history),
+            total_vetoes=total_vetoes_recorded,
             vetoes_by_reason=vetoes_by_reason,
             total_executions=len(self.execution_history),
             total_exits=len(self.exit_history),
-            resolved_shadow_barriers=len(completed_barriers),
+            resolved_shadow_barriers=available_shadow_count,
             pending_shadow_barriers=len(pending_barriers),
+            unavailable_shadow_outcomes=unavailable_shadow_count,
+            shadow_metrics_status=(
+                "AVAILABLE" if available_shadow_count > 0
+                else "UNAVAILABLE_UNIT_AMBIGUITY" if unavailable_shadow_count > 0
+                else "UNAVAILABLE_NO_USABLE_METRICS"
+            ),
             true_positive_capital_saved_count=tp_count,
             false_positive_missed_alpha_count=fp_count,
             neutral_chop_count=neutral_count,

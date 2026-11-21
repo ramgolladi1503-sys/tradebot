@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import copy
 import atexit
+from contextlib import contextmanager
 import fcntl
 import hashlib
 import json
@@ -566,6 +567,11 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             "SENSEX": None,
             "BANKNIFTY": None,
         }
+        self._mode5_last_eval_rejection: dict[str, Optional[str]] = {
+            "NIFTY": None,
+            "SENSEX": None,
+            "BANKNIFTY": None,
+        }
         self._cached_rbfn_generation: dict[str, int] = {
             "NIFTY": 0,
             "SENSEX": 0,
@@ -723,6 +729,14 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         self._mode5_quote_trace_dropped: set[tuple[str, str, Optional[int], str]] = set()
         self._mode5_quote_trace_sequence = 0
         self.trace_run_id = str(uuid.uuid4())
+        # One in-memory lifecycle slot per supported index; persisted trace rows
+        # are immutable snapshots and do not participate in decision authority.
+        self._mode5_candidate_lifecycle_slots: dict[str, Optional[dict[str, Any]]] = {
+            "NIFTY": None,
+            "SENSEX": None,
+            "BANKNIFTY": None,
+        }
+        self._mode5_post_lock_trace_local = threading.local()
         self._mode5_quote_trace_active_generation: dict[str, Optional[int]] = {
             "NIFTY": None,
             "SENSEX": None,
@@ -748,6 +762,8 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             "last_processed_sequence": None,
             "last_error": None,
             "degraded": False,
+            "candidate_lifecycle_drops": 0,
+            "candidate_lifecycle_incomplete": False,
         }
         self._mode5_trace_accepting = True
         self._mode5_trace_stop = threading.Event()
@@ -797,6 +813,150 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         except (OverflowError, OSError, TypeError, ValueError):
             session = "UNKNOWN_SESSION"
         return session, index_name, candidate_generation, reason
+
+    def _mode5_candidate_id(self, index_name: str, session_day: date, generation: int) -> str:
+        return f"{self.trace_run_id}:{session_day.isoformat()}:{index_name}:{generation}"
+
+    def _mode5_trace_lifecycle_dropped(self, error: Optional[str] = None) -> None:
+        self._mode5_trace_health_increment(candidate_lifecycle_drops=1)
+        updates: dict[str, Any] = {
+            "degraded": True,
+            "candidate_lifecycle_incomplete": True,
+        }
+        if error:
+            updates["last_error"] = error
+        self._mode5_trace_health_changed(**updates)
+
+    def _defer_mode5_trace_until_state_unlock(self, record: dict[str, Any]) -> bool:
+        """Freeze a lifecycle record under state lock; persist only after lock release."""
+        if not self._lock._is_owned():
+            raise RuntimeError("deferred Mode5 lifecycle snapshot requires advisor lock")
+        try:
+            frozen_record = json.dumps(
+                record, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+            )
+        except (TypeError, ValueError, OverflowError):
+            self._mode5_trace_lifecycle_dropped("lifecycle_snapshot_invalid")
+            return False
+        pending = getattr(self._mode5_post_lock_trace_local, "records", None)
+        if pending is None:
+            pending = []
+            self._mode5_post_lock_trace_local.records = pending
+        if len(pending) >= self.mode5_trace_queue_capacity:
+            self._mode5_trace_lifecycle_dropped("lifecycle_post_lock_buffer_full")
+            return False
+        pending.append(frozen_record)
+        return True
+
+    def _publish_mode5_lifecycle_record(self, record: dict[str, Any]) -> bool:
+        """Queue a lifecycle snapshot without allowing trace failure to affect decisions."""
+        try:
+            if self._lock._is_owned():
+                return self._defer_mode5_trace_until_state_unlock(record)
+            accepted = self._enqueue_mode5_trace_record(
+                record, dedup_key=None, suppression_record=False
+            )
+        except Exception:
+            self._mode5_trace_lifecycle_dropped("lifecycle_enqueue_failed")
+            return False
+        if not accepted:
+            self._mode5_trace_lifecycle_dropped("lifecycle_enqueue_unavailable")
+        return accepted
+
+    def _flush_mode5_lifecycle_records_after_unlock(self) -> None:
+        """Publish this thread's frozen lifecycle records only outside advisor locks."""
+        if self._lock._is_owned():
+            return
+        pending = getattr(self._mode5_post_lock_trace_local, "records", None)
+        if not pending:
+            return
+        records = pending
+        self._mode5_post_lock_trace_local.records = []
+        for frozen_record in records:
+            try:
+                record = json.loads(frozen_record)
+            except (TypeError, ValueError):
+                self._mode5_trace_lifecycle_dropped("lifecycle_snapshot_decode_failed")
+                continue
+            self._publish_mode5_lifecycle_record(record)
+
+    @contextmanager
+    def _mode5_state_lock_with_trace_flush(self):
+        """Flush staged Mode5 lifecycle snapshots after releasing advisor state."""
+        try:
+            with self._lock:
+                yield
+        finally:
+            self._flush_mode5_lifecycle_records_after_unlock()
+
+    @staticmethod
+    def _mode5_terminal_state(reason: str) -> str:
+        if reason in {"APM_ENTRY_RECORDED", "APM_ENTRY_REJECTED", "APM_ENTRY_UNKNOWN"}:
+            return reason
+        if reason == "EXPIRED":
+            return "EXPIRED"
+        if reason == "SUPERSEDED_BY_ABSTENTION":
+            return "SUPERSEDED"
+        if reason == "ENTRY_SUCCEEDED":
+            return reason
+        if reason == "RESERVATION_ACCEPTED":
+            return "RESERVATION_ACCEPTED"
+        if reason == "LOCAL_APM_AUTHORIZED":
+            return "LOCAL_APM_AUTHORIZED"
+        if reason == "RESERVATION_EXCEPTION_UNKNOWN":
+            return "DISPATCH_UNKNOWN"
+        if reason == "TERMINAL_INVALID_BROKER_KEY" or reason.startswith("RESERVATION_"):
+            return "DISPATCH_REJECTED"
+        return "INVALIDATED"
+
+    def _terminalize_mode5_candidate_locked(
+        self, index_name: str, terminal_reason: str, timestamp_ms: Optional[int] = None
+    ) -> None:
+        slot = self._mode5_candidate_lifecycle_slots.get(index_name)
+        if not slot or slot.get("state") in {
+            "APM_ENTRY_RECORDED", "APM_ENTRY_REJECTED", "APM_ENTRY_UNKNOWN",
+            "ENTRY_SUCCEEDED", "EXPIRED", "SUPERSEDED", "INVALIDATED",
+            "DISPATCH_REJECTED", "DISPATCH_UNKNOWN",
+        }:
+            return
+        terminal_state = self._mode5_terminal_state(terminal_reason)
+        slot["state"] = terminal_state
+        record = {
+            "event_type": "MODE5_CANDIDATE_TERMINAL",
+            "index_name": index_name,
+            "session_date": slot["session_date"],
+            "candidate_generation": slot["generation"],
+            "candidate_id": slot["candidate_id"],
+            "candidate_action": slot["action"],
+            "candidate_setup": slot["setup_reason"],
+            "candidate_state": terminal_state,
+            "terminal_reason": terminal_reason,
+            "record_origin": "LOCAL_APM" if terminal_state.startswith("APM_ENTRY_") else "MODE5_LIFECYCLE",
+            "broker_fill_confirmed": False,
+            "timestamp_ms": timestamp_ms or int(time.time() * 1000),
+        }
+        self._publish_mode5_lifecycle_record(record)
+
+    def _record_mode5_candidate_stage_locked(
+        self, index_name: str, stage: str, timestamp_ms: Optional[int] = None
+    ) -> None:
+        slot = self._mode5_candidate_lifecycle_slots.get(index_name)
+        if not slot:
+            return
+        slot["state"] = stage
+        self._publish_mode5_lifecycle_record({
+            "event_type": "MODE5_CANDIDATE_STAGE",
+            "index_name": index_name,
+            "session_date": slot["session_date"],
+            "candidate_generation": slot["generation"],
+            "candidate_id": slot["candidate_id"],
+            "candidate_action": slot["action"],
+            "candidate_setup": slot["setup_reason"],
+            "candidate_stage": stage,
+            "record_origin": "LOCAL_APM",
+            "broker_fill_confirmed": False,
+            "timestamp_ms": timestamp_ms if timestamp_ms is not None else int(time.time() * 1000),
+        })
 
     def _mode5_trace_health_changed(self, **updates: Any) -> None:
         with self._mode5_trace_health_lock:
@@ -1079,6 +1239,11 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 "details": copy.deepcopy(details or {}),
                 "timestamp_ms": ts_ms,
                 "candidate_generation": generation,
+                "candidate_id": (
+                    self._mode5_candidate_id(index_name, metadata.session_day, generation)
+                    if metadata is not None and generation is not None and metadata.generation == generation
+                    else None
+                ),
             }
             key = self._mode5_trace_key(index_name, generation, reason, ts_ms)
             self._enqueue_mode5_trace_record(record, dedup_key=key)
@@ -1124,6 +1289,11 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             "details": details_snapshot,
             "timestamp_ms": ts_ms,
             "candidate_generation": generation,
+            "candidate_id": (
+                self._mode5_candidate_id(index_name, metadata.session_day, generation)
+                if metadata is not None and generation is not None and metadata.generation == generation
+                else None
+            ),
         }
         key = self._mode5_trace_key(index_name, generation, reason, ts_ms)
         self._enqueue_mode5_trace_record(record, dedup_key=key)
@@ -1277,6 +1447,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 self.cached_rbfn_grids[idx] = None
                 self.rbfn_grids_frozen[idx] = False
                 self._clear_cached_rbfn_candidate_locked(idx, "LEVELS_INVALIDATED")
+        self._flush_mode5_lifecycle_records_after_unlock()
 
     def _has_valid_ground_truth_grid(self, index_name: str, session_day: date) -> bool:
         grid = self.cached_rbfn_grids.get(index_name)
@@ -1557,6 +1728,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         """Invalidate a candidate generation and its process-local age metadata."""
         if index_name not in self._cached_rbfn_generation:
             return
+        self._terminalize_mode5_candidate_locked(index_name, status)
         self._cached_rbfn_generation[index_name] += 1
         self.cached_rbfn_signals[index_name] = None
         self._cached_rbfn_candidate_meta[index_name] = None
@@ -1566,6 +1738,11 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         self, index_name: str, signal: CachedRBFNAuctionSignal, epoch_5min: int
     ) -> None:
         """Atomically replace the signal and its decision-availability metadata."""
+        self._terminalize_mode5_candidate_locked(
+            index_name,
+            "SUPERSEDED_BY_ABSTENTION",
+            timestamp_ms=signal.timestamp_ms,
+        )
         self._cached_rbfn_generation[index_name] += 1
         generation = self._cached_rbfn_generation[index_name]
         try:
@@ -1592,6 +1769,31 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             status="AVAILABLE" if actionable else "SUPERSEDED_BY_ABSTENTION",
         )
         self._replace_mode5_trace_generation_locked(index_name, generation if actionable else None)
+        if actionable:
+            candidate_id = self._mode5_candidate_id(index_name, session_day, generation)
+            slot = {
+                "candidate_id": candidate_id,
+                "session_date": session_day.isoformat(),
+                "generation": generation,
+                "state": "AVAILABLE",
+                "action": signal.action,
+                "direction": signal.direction,
+                "setup_reason": signal.setup_reason,
+            }
+            self._mode5_candidate_lifecycle_slots[index_name] = slot
+            self._publish_mode5_lifecycle_record({
+                "event_type": "MODE5_CANDIDATE_ISSUED",
+                "index_name": index_name,
+                "session_date": session_day.isoformat(),
+                "candidate_generation": generation,
+                "candidate_id": candidate_id,
+                "candidate_action": signal.action,
+                "direction": signal.direction,
+                "setup_reason": signal.setup_reason,
+                "candidate_state": "AVAILABLE",
+                "bar_time": signal.bar_time.strftime("%H:%M:%S"),
+                "timestamp_ms": signal.timestamp_ms,
+            })
 
     def _emit_mode5_quote_suppression(
         self,
@@ -1623,6 +1825,9 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             "index_name": index_name,
             "canonical_instrument": instrument_key,
             "candidate_generation": metadata.generation,
+            "candidate_id": self._mode5_candidate_id(
+                index_name, metadata.session_day, metadata.generation
+            ),
             "candidate_action": signal.action,
             "candidate_setup": signal.setup_reason,
             "candidate_bar_time": bar_time,
@@ -1810,6 +2015,10 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         metadata = self._cached_rbfn_candidate_meta.get(index_name)
         if metadata is None or metadata.generation != generation:
             return False
+        if status in {"RESERVATION_ACCEPTED", "LOCAL_APM_AUTHORIZED"}:
+            self._record_mode5_candidate_stage_locked(index_name, status)
+        else:
+            self._terminalize_mode5_candidate_locked(index_name, status)
         self.cached_rbfn_signals[index_name] = None
         self._cached_rbfn_candidate_meta[index_name] = CachedRBFNCandidateMetadata(
             generation=metadata.generation,
@@ -1834,7 +2043,8 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         """
         with self._lock:
             signal, _ = self._candidate_snapshot_locked(index_name, ttl_seconds=ttl_seconds)
-            return signal
+        self._flush_mode5_lifecycle_records_after_unlock()
+        return signal
 
     def clamp_atr(self, index_name: str, raw_atr: float) -> float:
         """Clamps ATR to index-specific floor (NIFTY: 25.0, BANKNIFTY: 100.0, SENSEX: 150.0)."""
@@ -2025,6 +2235,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                             bucket_5m.volume += float(tick.volume)
                             bucket_5m.tick_count += 1
                             bucket_5m.last_timestamp_ms = ts_ms
+        self._flush_mode5_lifecycle_records_after_unlock()
 
     def reconcile_5m_bars(self, wall_clock_time: Optional[datetime] = None) -> list[int]:
         """Clock-driven reconciler for 5-minute bars to handle low-tick/stale stream periods.
@@ -2080,6 +2291,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                                 reconciled_epochs.append(completed_epoch)
 
             result = reconciled_epochs
+        self._flush_mode5_lifecycle_records_after_unlock()
         return result
 
     def on_depth(self, depth: UpstoxLevel5DepthRecord) -> None:
@@ -3095,7 +3307,9 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
     def _reset_rp2_state_for_session(self, index_name: str, session_day: date) -> bool:
         with self._lock:
-            return self._reset_rp2_state_for_session_locked(index_name, session_day)
+            result = self._reset_rp2_state_for_session_locked(index_name, session_day)
+        self._flush_mode5_lifecycle_records_after_unlock()
+        return result
 
     def _reset_rp2_state_for_session_locked(self, index_name: str, session_day: date) -> bool:
         """Reset session-scoped RP2 piercing/retest state on an India-local day change."""
@@ -3157,22 +3371,100 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         return epochs[0] + 1 == epochs[1] and epochs[1] + 1 == epochs[2]
 
     def _on_5m_bar_close(
-        self,
-        index_name: str,
-        bar_open: float,
-        bar_high: float,
-        bar_low: float,
-        bar_close: float,
-        bar_volume: float,
-        bar_time: dt_time,
-        timestamp_ms: int,
+        self, index_name: str, bar_open: float, bar_high: float, bar_low: float,
+        bar_close: float, bar_volume: float, bar_time: dt_time, timestamp_ms: int,
         epoch_5min: int,
     ) -> Optional[CachedRBFNAuctionSignal]:
-        with self._lock:
-            result = self._on_5m_bar_close_locked(
-                index_name, bar_open, bar_high, bar_low, bar_close, bar_volume,
-                bar_time, timestamp_ms, epoch_5min,
-            )
+        try:
+            with self._lock:
+                self._mode5_last_eval_rejection[index_name] = None
+                try:
+                    result = self._on_5m_bar_close_locked(
+                        index_name, bar_open, bar_high, bar_low, bar_close, bar_volume,
+                        bar_time, timestamp_ms, epoch_5min,
+                    )
+                except Exception as exc:
+                    try:
+                        session_date = datetime.fromtimestamp(
+                            timestamp_ms / 1000.0, tz=ZoneInfo("Asia/Kolkata")
+                        ).date().isoformat()
+                    except (OverflowError, OSError, TypeError, ValueError):
+                        session_date = "UNKNOWN_SESSION"
+                    epoch_key = (
+                        epoch_5min if isinstance(epoch_5min, int) and not isinstance(epoch_5min, bool)
+                        and epoch_5min >= 0 else "UNKNOWN_EPOCH"
+                    )
+                    exception_class = "".join(
+                        c for c in type(exc).__name__ if c.isalnum() or c == "_"
+                    )[:80] or "Exception"
+                    self._publish_mode5_lifecycle_record({
+                        "event_type": "MODE5_EVALUATION_ERROR",
+                        "evaluation_id": f"{self.trace_run_id}:{session_date}:{index_name}:{epoch_key}",
+                        "trace_run_id": self.trace_run_id,
+                        "session_date": session_date,
+                        "index_name": index_name,
+                        "epoch_5min": epoch_key,
+                        "evaluation_stage": "BAR_EVALUATOR",
+                        "exception_class": exception_class,
+                        "partial_state_unknown": True,
+                        "timestamp_ms": timestamp_ms if isinstance(timestamp_ms, int) and not isinstance(timestamp_ms, bool) else None,
+                    })
+                    raise
+
+                rejection_reason = self._mode5_last_eval_rejection.get(index_name)
+                try:
+                    session_date = datetime.fromtimestamp(
+                        timestamp_ms / 1000.0, tz=ZoneInfo("Asia/Kolkata")
+                    ).date().isoformat()
+                except (OverflowError, OSError, TypeError, ValueError):
+                    session_date = "UNKNOWN_SESSION"
+                epoch_key = (
+                    epoch_5min if isinstance(epoch_5min, int) and not isinstance(epoch_5min, bool)
+                    and epoch_5min >= 0 else "UNKNOWN_EPOCH"
+                )
+                metadata = self._cached_rbfn_candidate_meta.get(index_name)
+                active_candidate = bool(
+                    result is not None and result.is_active and not result.is_vetoed
+                    and result.action in {"BUY_CALL", "BUY_PUT"}
+                    and metadata is not None and metadata.status == "AVAILABLE"
+                )
+                if rejection_reason:
+                    evaluation_state, candidate_state, reason_code = "REJECTED", "NOT_EMITTED", rejection_reason
+                elif active_candidate:
+                    evaluation_state, candidate_state, reason_code = "CANDIDATE_EMITTED", "AVAILABLE", result.setup_reason
+                elif result is None:
+                    evaluation_state, candidate_state, reason_code = "NO_SIGNAL", "NOT_EMITTED", None
+                else:
+                    evaluation_state, candidate_state = "ABSTAINED", "NOT_EMITTED"
+                    reason_code = result.veto_reason or result.setup_reason
+                candidate_id = (
+                    self._mode5_candidate_id(index_name, metadata.session_day, metadata.generation)
+                    if active_candidate and metadata is not None else None
+                )
+                self._publish_mode5_lifecycle_record({
+                    "event_type": "MODE5_EVALUATION_SUMMARY",
+                    "evaluation_id": f"{self.trace_run_id}:{session_date}:{index_name}:{epoch_key}",
+                    "trace_run_id": self.trace_run_id,
+                    "session_date": session_date,
+                    "index_name": index_name,
+                    "epoch_5min": epoch_key,
+                    "bar_time": bar_time.strftime("%H:%M:%S") if hasattr(bar_time, "strftime") else str(bar_time),
+                    "timestamp_ms": timestamp_ms if isinstance(timestamp_ms, int) and not isinstance(timestamp_ms, bool) else None,
+                    "bar_ohlcv": {"open": bar_open, "high": bar_high, "low": bar_low, "close": bar_close, "volume": bar_volume},
+                    "evaluation_state": evaluation_state,
+                    "candidate_state": candidate_state,
+                    "candidate_id": candidate_id,
+                    "candidate_generation": metadata.generation if active_candidate and metadata is not None else None,
+                    "action": result.action if result is not None else "NO_SIGNAL",
+                    "direction": result.direction if result is not None else "",
+                    "setup_reason": result.setup_reason if result is not None else None,
+                    "reason_code": reason_code,
+                    "reason_source": "VALIDATION" if rejection_reason else ("SIGNAL" if result is not None else None),
+                })
+        except Exception:
+            self._flush_mode5_lifecycle_records_after_unlock()
+            raise
+        self._flush_mode5_lifecycle_records_after_unlock()
         return result
 
     def _on_5m_bar_close_locked(
@@ -3202,14 +3494,17 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         """
         if (not isinstance(timestamp_ms, int) or isinstance(timestamp_ms, bool) or timestamp_ms <= 0
                 or not isinstance(epoch_5min, int) or isinstance(epoch_5min, bool) or epoch_5min < 0):
+            self._mode5_last_eval_rejection[index_name] = "INVALID_COMPLETED_BAR"
             if index_name in self._cached_rbfn_candidate_meta:
                 self._clear_cached_rbfn_candidate_locked(index_name, "INVALID_COMPLETED_BAR")
             return None
         if self._source_timestamp_exceeds_future_skew(timestamp_ms):
+            self._mode5_last_eval_rejection[index_name] = "INVALID_COMPLETED_BAR_CLOCK"
             if index_name in self._cached_rbfn_candidate_meta:
                 self._clear_cached_rbfn_candidate_locked(index_name, "INVALID_COMPLETED_BAR_CLOCK")
             return None
         if epoch_5min != timestamp_ms // 300000:
+            self._mode5_last_eval_rejection[index_name] = "INVALID_COMPLETED_BAR_EPOCH"
             if index_name in self._cached_rbfn_candidate_meta:
                 self._clear_cached_rbfn_candidate_locked(index_name, "INVALID_COMPLETED_BAR_EPOCH")
             return None
@@ -3219,27 +3514,32 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 (epoch_5min + 1) * 300, tz=ZoneInfo("Asia/Kolkata")
             ).time()
         except (OverflowError, OSError, ValueError):
+            self._mode5_last_eval_rejection[index_name] = "INVALID_COMPLETED_BAR_TIME"
             if index_name in self._cached_rbfn_candidate_meta:
                 self._clear_cached_rbfn_candidate_locked(index_name, "INVALID_COMPLETED_BAR_TIME")
             return None
         if not isinstance(bar_time, dt_time) or bar_time != expected_bar_time:
+            self._mode5_last_eval_rejection[index_name] = "INVALID_COMPLETED_BAR_TIME"
             if index_name in self._cached_rbfn_candidate_meta:
                 self._clear_cached_rbfn_candidate_locked(index_name, "INVALID_COMPLETED_BAR_TIME")
             return None
         previous_ts = self._last_5m_timestamp_ms.get(index_name, 0)
         previous_epoch = self._last_completed_5m_epoch.get(index_name, -1)
         if timestamp_ms <= previous_ts or epoch_5min <= previous_epoch:
+            self._mode5_last_eval_rejection[index_name] = "OUT_OF_ORDER_COMPLETED_BAR"
             if index_name in self._cached_rbfn_candidate_meta:
                 self._clear_cached_rbfn_candidate_locked(index_name, "OUT_OF_ORDER_COMPLETED_BAR")
             return None
         try:
             session_day = datetime.fromtimestamp(timestamp_ms / 1000.0, tz=ZoneInfo("Asia/Kolkata")).date()
         except (OverflowError, OSError, ValueError):
+            self._mode5_last_eval_rejection[index_name] = "INVALID_COMPLETED_BAR_SESSION"
             if index_name in self._cached_rbfn_candidate_meta:
                 self._clear_cached_rbfn_candidate_locked(index_name, "INVALID_COMPLETED_BAR_SESSION")
             return None
         prior_day = self._rp2_session_dates.get(index_name)
         if prior_day is not None and session_day < prior_day:
+            self._mode5_last_eval_rejection[index_name] = "PRIOR_SESSION_COMPLETED_BAR"
             if index_name in self._cached_rbfn_candidate_meta:
                 self._clear_cached_rbfn_candidate_locked(index_name, "PRIOR_SESSION_COMPLETED_BAR")
             return None
@@ -4084,11 +4384,17 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             source_order=source_order,
             validated_decision_timestamp_ms=validated_decision_timestamp_ms,
         )
+        self._flush_mode5_lifecycle_records_after_unlock()
         has_mode_5_signal = (
             rbfn_sig is not None
             and rbfn_sig.is_active
             and not rbfn_sig.is_vetoed
             and rbfn_sig.action in {"BUY_CALL", "BUY_PUT"}
+        )
+        mode5_candidate_id = (
+            self._mode5_candidate_id(index_name, quote_day, mode5_generation)
+            if has_mode_5_signal and mode5_generation is not None
+            else None
         )
 
         if has_mode_5_signal and rbfn_sig is not None:
@@ -4532,6 +4838,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     confidence_grade=conf_eval.grade if conf_eval else "GRADE_C_SUPPRESSED",
                     timestamp_ms=depth.exchange_timestamp_ms,
                     wall_time_str=now_time.strftime("%H:%M:%S"),
+                    candidate_id=mode5_candidate_id,
                 )
             elif ltp > self.max_premium_cap:
                 status_flag = "VETO_PREMIUM_OVER_CAP"
@@ -4554,6 +4861,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     confidence_grade=conf_eval.grade if conf_eval else "GRADE_C_SUPPRESSED",
                     timestamp_ms=depth.exchange_timestamp_ms,
                     wall_time_str=now_time.strftime("%H:%M:%S"),
+                    candidate_id=mode5_candidate_id,
                 )
             elif wall_vetoed:
                 status_flag = "VETO_ADVERSE_WALL"
@@ -4576,6 +4884,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     confidence_grade=conf_eval.grade if conf_eval else "GRADE_C_SUPPRESSED",
                     timestamp_ms=depth.exchange_timestamp_ms,
                     wall_time_str=now_time.strftime("%H:%M:%S"),
+                    candidate_id=mode5_candidate_id,
                 )
             elif not macro_ok:
                 status_flag = "VETO_MACRO_DIVERGENCE"
@@ -4598,6 +4907,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     confidence_grade=conf_eval.grade if conf_eval else "GRADE_C_SUPPRESSED",
                     timestamp_ms=depth.exchange_timestamp_ms,
                     wall_time_str=now_time.strftime("%H:%M:%S"),
+                    candidate_id=mode5_candidate_id,
                 )
             elif not vol_ok:
                 status_flag = "VETO_VOLATILITY_EXHAUSTED"
@@ -4620,6 +4930,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     confidence_grade=conf_eval.grade if conf_eval else "GRADE_C_SUPPRESSED",
                     timestamp_ms=depth.exchange_timestamp_ms,
                     wall_time_str=now_time.strftime("%H:%M:%S"),
+                    candidate_id=mode5_candidate_id,
                 )
             elif not hurdle_ok:
                 status_flag = "VETO_NIFTY_FRICTIONAL_HURDLE"
@@ -4642,6 +4953,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     confidence_grade=conf_eval.grade if conf_eval else "GRADE_C_SUPPRESSED",
                     timestamp_ms=depth.exchange_timestamp_ms,
                     wall_time_str=now_time.strftime("%H:%M:%S"),
+                    candidate_id=mode5_candidate_id,
                 )
             elif not conf_eval.is_actionable:
                 status_flag = "VETO_LOW_CONFIDENCE"
@@ -4664,6 +4976,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     confidence_grade=conf_eval.grade if conf_eval else "GRADE_C_SUPPRESSED",
                     timestamp_ms=depth.exchange_timestamp_ms,
                     wall_time_str=now_time.strftime("%H:%M:%S"),
+                    candidate_id=mode5_candidate_id,
                 )
             else:
                 # Option Native Stop Loss: 20% of option premium or 15.0 pts minimum
@@ -4716,6 +5029,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         sizing_tier=sizing_tier,
                         timestamp_ms=depth.exchange_timestamp_ms,
                         wall_time_str=now_time.strftime("%H:%M:%S"),
+                    candidate_id=mode5_candidate_id,
                     )
                 else:
                     status_flag = "SIGNAL_TRIGGERED"
@@ -4734,7 +5048,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     )
 
                     entry_dispatch_request = None
-                    with self._lock:
+                    with self._mode5_state_lock_with_trace_flush():
                         idx_apm = self.apms.get(index_name, self.apm)
                         active_gear = self.session_gears.get(index_name, self.session_gear)
                         strat_priority = self.strategy_priority_weights.get(strategy_name, 0.50)
@@ -4906,28 +5220,45 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                                         self._consume_cached_rbfn_candidate_locked(
                                             index_name, mode5_generation, "LOCAL_APM_AUTHORIZED"
                                         )
-                                    entered = idx_apm.arm_and_enter(
-                                        position_id=pos_id,
-                                        direction=required_option_type,
-                                        contract=depth.symbol,
-                                        entry_price=spot,
-                                        entry_time_str=now_dt.isoformat(),
-                                        sl_pts=sl_pts,
-                                        tp_pts=target_pts,
-                                        friction_drag_pts=total_drag,
-                                        opt_quote=opt_q,
-                                        is_runner_mode=(active_gear == "GEAR_2_TREND"),
-                                        session_gear=active_gear,
-                                        opt_stop_loss_pct=0.20,
-                                        atr_1m=effective_atr,
-                                        lots=computed_lots,
-                                        sizing_tier=sizing_tier,
-                                        lot_size=ex_lot_size,
-                                        total_quantity=total_qty,
-                                        is_expiry_day=is_exp,
-                                        is_deep_itm=(itm_res.moneyness in {"ITM_1", "DEEP_ITM"}),
-                                        strategy_name=strategy_name,
-                                    )
+                                    try:
+                                        entered = idx_apm.arm_and_enter(
+                                            position_id=pos_id,
+                                            direction=required_option_type,
+                                            contract=depth.symbol,
+                                            entry_price=spot,
+                                            entry_time_str=now_dt.isoformat(),
+                                            sl_pts=sl_pts,
+                                            tp_pts=target_pts,
+                                            friction_drag_pts=total_drag,
+                                            opt_quote=opt_q,
+                                            is_runner_mode=(active_gear == "GEAR_2_TREND"),
+                                            session_gear=active_gear,
+                                            opt_stop_loss_pct=0.20,
+                                            atr_1m=effective_atr,
+                                            lots=computed_lots,
+                                            sizing_tier=sizing_tier,
+                                            lot_size=ex_lot_size,
+                                            total_quantity=total_qty,
+                                            is_expiry_day=is_exp,
+                                            is_deep_itm=(itm_res.moneyness in {"ITM_1", "DEEP_ITM"}),
+                                            strategy_name=strategy_name,
+                                        )
+                                    except Exception:
+                                        if strategy_name == "OPTIONMATE_RBFN_AUCTION" and mode5_generation is not None:
+                                            self._consume_cached_rbfn_candidate_locked(
+                                                index_name, mode5_generation, "APM_ENTRY_UNKNOWN"
+                                            )
+                                        raise
+                                    if strategy_name == "OPTIONMATE_RBFN_AUCTION" and mode5_generation is not None:
+                                        if isinstance(entered, bool):
+                                            if not entered:
+                                                self._consume_cached_rbfn_candidate_locked(
+                                                    index_name, mode5_generation, "APM_ENTRY_REJECTED"
+                                                )
+                                        else:
+                                            self._consume_cached_rbfn_candidate_locked(
+                                                index_name, mode5_generation, "APM_ENTRY_UNKNOWN"
+                                            )
                             else:
                                 entered = False
                                 status_flag = "VETO_MODE5_OR"
@@ -4948,7 +5279,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                                 idx_apm._persist_wal_atomic(force_sync=True)
                                 if rbfn_sig is not None and mode5_generation is not None:
                                     self._consume_cached_rbfn_candidate_locked(
-                                        index_name, mode5_generation, "ENTRY_SUCCEEDED"
+                                        index_name, mode5_generation, "APM_ENTRY_RECORDED"
                                     )
                                 self.journal.record_execution(
                                     position_id=pos_id,
@@ -4971,6 +5302,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                                     sizing_tier=sizing_tier,
                                     timestamp_ms=depth.exchange_timestamp_ms,
                                     wall_time_str=now_time.strftime("%H:%M:%S"),
+                                    candidate_id=mode5_candidate_id if strategy_name == "OPTIONMATE_RBFN_AUCTION" else None,
                                 )
                             if entered and self.enable_stdout:
                                 print(
@@ -5056,6 +5388,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             wall_time_str=now_time.strftime("%H:%M:%S"),
             current_spot=spot,
         )
+        self._flush_mode5_lifecycle_records_after_unlock()
 
         # Do not throttle genuine BUY signals
         if not ("🎯 [BUY" in advisory) and is_throttled:

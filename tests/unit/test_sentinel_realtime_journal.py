@@ -98,8 +98,26 @@ def test_non_blocking_queueing_and_overflow(tmp_path):
     assert journal.dropped_records_count > 0
 
 
-def test_shadow_barrier_path_evaluator_zero_lookahead():
-    """Verify shadow barrier path evaluator enforces strict zero-lookahead (ts > entry_ts)."""
+def test_execution_record_is_local_apm_not_broker_fill_and_joins_candidate(tmp_path):
+    journal = SentinelRealtimeJournal(logs_dir=tmp_path, enable_writer_thread=False)
+    record = journal.record_execution(
+        position_id="LOCAL-1",
+        index_name="NIFTY",
+        symbol="NIFTY 25000 CE",
+        direction="CE",
+        setup_reason="RBFN_TEST",
+        spot_price=25000.0,
+        option_ltp=100.0,
+        fill_price=99.5,
+        candidate_id="run:2026-11-18:NIFTY:1",
+    )
+    assert record.candidate_id == "run:2026-11-18:NIFTY:1"
+    assert record.record_origin == "LOCAL_APM"
+    assert record.broker_fill_confirmed is False
+
+
+def test_shadow_barrier_unit_ambiguous_legacy_record_is_unavailable():
+    """Legacy point units cannot safely generate option or spot shadow metrics."""
     evaluator = ShadowBarrierPathEvaluator(default_lot_size_nifty=65)
 
     veto = VetoRecord(
@@ -115,9 +133,15 @@ def test_shadow_barrier_path_evaluator_zero_lookahead():
         nominal_sl_pts=12.0,      # SL = 88.0
     )
 
-    evaluator.register_veto(veto)
+    outcome = evaluator.register_veto(veto)
 
-    # 1. Stale or contemporaneous tick (ts <= 10000) must be rejected/ignored
+    assert outcome is not None
+    assert outcome.metrics_available is False
+    assert outcome.classification == "UNAVAILABLE"
+    assert outcome.simulated_pnl_pts is None
+    assert outcome.simulated_capital_saved_or_lost_inr is None
+
+    # Neither same-time nor future quotes may turn an untyped legacy veto into PnL.
     resolved = evaluator.on_tick(
         symbol="NIFTY26OCT22500CE",
         current_opt_ltp=80.0,  # Would breach SL if evaluated
@@ -125,7 +149,6 @@ def test_shadow_barrier_path_evaluator_zero_lookahead():
     )
     assert len(resolved) == 0
 
-    # 2. Forward tick (ts = 10500 > 10000) inside range [88.0, 115.0]
     resolved = evaluator.on_tick(
         symbol="NIFTY26OCT22500CE",
         current_opt_ltp=105.0,
@@ -133,23 +156,19 @@ def test_shadow_barrier_path_evaluator_zero_lookahead():
     )
     assert len(resolved) == 0
 
-    # 3. Forward tick (ts = 11000) breaching SL (85.0 <= 88.0)
     resolved = evaluator.on_tick(
         symbol="NIFTY26OCT22500CE",
         current_opt_ltp=85.0,
         timestamp_ms=11000,
         wall_time_str="09:45:05",
     )
-    assert len(resolved) == 1
-    res = resolved[0]
-    assert res.outcome == "HIT_SL_FIRST"
-    assert res.classification == "TRUE_POSITIVE_SAVED_CAPITAL"
-    assert res.simulated_pnl_pts == -12.0  # (88 - 100)
-    assert res.simulated_capital_saved_or_lost_inr == 12.0 * 65  # 780.0 saved
+    assert len(resolved) == 0
+    assert evaluator.get_all_records() == ([], [])
+    assert evaluator.get_unavailable_veto_count() == 1
 
 
-def test_shadow_barrier_missed_alpha_evaluation():
-    """Verify shadow barrier evaluates missed alpha when Target is hit first."""
+def test_shadow_barrier_unavailable_record_cannot_claim_missed_alpha():
+    """Future option movement does not resolve a unit-ambiguous veto as missed alpha."""
     evaluator = ShadowBarrierPathEvaluator(default_lot_size_nifty=65)
 
     veto = VetoRecord(
@@ -173,16 +192,13 @@ def test_shadow_barrier_missed_alpha_evaluation():
         timestamp_ms=20500,
         wall_time_str="10:00:05",
     )
-    assert len(resolved) == 1
-    res = resolved[0]
-    assert res.outcome == "HIT_TP_FIRST"
-    assert res.classification == "FALSE_POSITIVE_MISSED_ALPHA"
-    assert res.simulated_pnl_pts == 20.0  # (120 - 100)
-    assert res.simulated_capital_saved_or_lost_inr == 20.0 * 65  # 1300.0 missed alpha
+    assert resolved == []
+    assert evaluator.get_all_records() == ([], [])
+    assert evaluator.get_unavailable_veto_count() == 1
 
 
-def test_shadow_barrier_intrabar_conservative_collision():
-    """Verify that if both SL and TP are touched simultaneously, SL is conservatively prioritized."""
+def test_shadow_barrier_unavailable_record_has_no_synthetic_barriers():
+    """Unit-ambiguous rows have no pending barriers for a fabricated collision."""
     evaluator = ShadowBarrierPathEvaluator(default_lot_size_nifty=65)
 
     veto = VetoRecord(
@@ -199,22 +215,12 @@ def test_shadow_barrier_intrabar_conservative_collision():
     )
     evaluator.register_veto(veto)
 
-    rec = evaluator._pending_barriers[list(evaluator._pending_barriers.keys())[0]]
-    # Manually simulate collision where tick checks both or invalid wide quote
-    with patch.object(rec, "sl_barrier_opt", 120.0), patch.object(rec, "target_barrier_opt", 100.0):
-        resolved = evaluator.on_tick(
-            symbol="NIFTY26OCT22500CE",
-            current_opt_ltp=110.0,
-            timestamp_ms=30500,
-            wall_time_str="10:15:05",
-        )
-        assert len(resolved) == 1
-        assert resolved[0].outcome == "HIT_SL_FIRST"
-        assert resolved[0].classification == "TRUE_POSITIVE_SAVED_CAPITAL"
+    assert evaluator.get_all_records() == ([], [])
+    assert evaluator.on_tick("NIFTY26OCT22500CE", 110.0, 30500) == []
 
 
-def test_shadow_barrier_eod_finalization():
-    """Verify EOD expiration resolves lingering pending barriers."""
+def test_shadow_barrier_eod_does_not_relabel_unavailable_record():
+    """EOD processing cannot convert unavailable legacy metrics into an outcome."""
     evaluator = ShadowBarrierPathEvaluator(default_lot_size_nifty=65)
 
     veto = VetoRecord(
@@ -236,10 +242,9 @@ def test_shadow_barrier_eod_finalization():
         current_time_str="15:30:00",
         current_prices={"NIFTY26OCT22500CE": 95.0},
     )
-    assert len(finalized) == 1
-    assert finalized[0].outcome == "EXPIRED_EOD"
-    assert finalized[0].classification == "TRUE_POSITIVE_SAVED_CAPITAL"  # PnL was negative
-    assert finalized[0].simulated_pnl_pts == -5.0
+    assert finalized == []
+    assert evaluator.get_all_records() == ([], [])
+    assert evaluator.get_unavailable_veto_count() == 1
 
 
 def test_daily_forensic_summary_generation(tmp_path):
@@ -315,11 +320,50 @@ def test_daily_forensic_summary_generation(tmp_path):
     assert summary.total_exits == 1
     assert summary.win_rate_executed_pct == 100.0
     assert summary.executed_total_pnl_inr == 18.0 * 65  # ₹1,170.00
-    assert summary.true_positive_capital_saved_count == 1
-    assert summary.false_positive_missed_alpha_count == 1
-    assert summary.capital_saved_inr == 650.0
-    assert summary.missed_alpha_inr == 1300.0
-    assert summary.net_veto_defense_benefit_inr == 650.0 - 1300.0  # -₹650.00
+    assert summary.unavailable_shadow_outcomes == 2
+    assert summary.shadow_metrics_status == "UNAVAILABLE_UNIT_AMBIGUITY"
+    assert summary.true_positive_capital_saved_count == 0
+    assert summary.false_positive_missed_alpha_count == 0
+    assert summary.capital_saved_inr == 0.0
+    assert summary.missed_alpha_inr == 0.0
+    assert summary.net_veto_defense_benefit_inr == 0.0
+
+
+def test_veto_history_retention_is_bounded_with_cumulative_summary(tmp_path):
+    journal = SentinelRealtimeJournal(
+        logs_dir=tmp_path, queue_maxsize=2, enable_writer_thread=False
+    )
+    for n in range(5):
+        journal.record_veto(
+            index_name="NIFTY",
+            symbol=f"OPT_{n}",
+            direction="CE",
+            setup_reason="RBFN",
+            veto_reason="VOLATILITY_EXHAUSTED",
+            spot_price=25000.0,
+            option_ltp=100.0,
+        )
+    assert len(journal.veto_history) == 2
+    assert journal.veto_history_retention_drops == 3
+    summary = journal.generate_daily_summary()
+    assert summary.total_vetoes == 5
+    assert summary.vetoes_by_reason == {"VOLATILITY_EXHAUSTED": 5}
+    assert summary.shadow_metrics_status == "UNAVAILABLE_UNIT_AMBIGUITY"
+
+
+def test_legacy_veto_json_remains_readable_with_additive_candidate_id():
+    legacy = {
+        "record_type": "VETO",
+        "record_id": "VETO_OLD",
+        "timestamp_ms": 123,
+        "index_name": "NIFTY",
+        "symbol": "OPT_OLD",
+        "direction": "CE",
+        "veto_reason": "OLD_REASON",
+    }
+    record = VetoRecord(**legacy)
+    assert record.candidate_id is None
+    assert record.record_id == "VETO_OLD"
 
 
 def test_async_daemon_writer_flushes_jsonl(tmp_path):
