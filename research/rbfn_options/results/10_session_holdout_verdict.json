@@ -1,0 +1,158 @@
+{
+  "calibration": [
+    {
+      "Date": "2026-11-08",
+      "Published_TD": 25085.0,
+      "TD_OHLC4": 25086.49,
+      "Error_OHLC4": 1.49,
+      "TD_HL2": 25085.3,
+      "Error_HL2": 0.3,
+      "Source": "Muhurat Trading Livestream"
+    },
+    {
+      "Date": "2026-11-12",
+      "Published_TD": 25240.0,
+      "TD_OHLC4": 25239.79,
+      "Error_OHLC4": 0.21,
+      "TD_HL2": 25222.25,
+      "Error_HL2": 17.75,
+      "Source": "Post-Market Forensic Log"
+    },
+    {
+      "Date": "2026-11-13",
+      "Published_TD": 25218.0,
+      "TD_OHLC4": 25217.54,
+      "Error_OHLC4": 0.46,
+      "TD_HL2": 25218.62,
+      "Error_HL2": 0.62,
+      "Source": "YouTube Livestream Screenshot (10:43 AM IST)"
+    }
+  ],
+  "holdout": [
+    {
+      "Date": "2024-06-03",
+      "TD_Unrounded": 23226.88,
+      "RP1_Up": 23343.01,
+      "RP1_Dn": 23110.74,
+      "RP2_Up": 23441.72,
+      "RP2_Dn": 23012.03,
+      "Monotonic": true,
+      "Comp_Ratio": 0.85,
+      "Tested_RP1": true,
+      "Held_RP2": true
+    },
+    {
+      "Date": "2024-06-04",
+      "TD_Unrounded": 22983.79,
+      "RP1_Up": 23142.93,
+      "RP1_Dn": 22824.64,
+      "RP2_Up": 23278.21,
+      "RP2_Dn": 22689.37,
+      "Monotonic": true,
+      "Comp_Ratio": 0.85,
+      "Tested_RP1": true,
+      "Held_RP2": false
+    },
+    {
+      "Date": "2024-06-05",
+      "TD_Unrounded": 22045.75,
+      "RP1_Up": 22155.98,
+      "RP1_Dn": 21935.52,
+      "RP2_Up": 22249.67,
+      "RP2_Dn": 21841.83,
+      "Monotonic": true,
+      "Comp_Ratio": 0.85,
+      "Tested_RP1": true,
+      "Held_RP2": false
+    },
+    {
+      "Date": "2024-06-06",
+      "TD_Unrounded": 22747.15,
+      "RP1_Up": 22860.89,
+      "RP1_Dn": 22633.41,
+      "RP2_Up": 22957.56,
+      "RP2_Dn": 22536.74,
+      "Monotonic": true,
+      "Comp_Ratio": 0.85,
+      "Tested_RP1": true,
+      "Held_RP2": true
+    },
+    {
+      "Date": "2024-06-07",
+      "TD_Unrounded": 22820.05,
+      "RP1_Up": 22934.15,
+      "RP1_Dn": 22705.95,
+      "RP2_Up": 23031.14,
+      "RP2_Dn": 22608.96,
+      "Monotonic": true,
+      "Comp_Ratio": 0.85,
+      "Tested_RP1": true,
+      "Held_RP2": false
+    },
+    {
+      "Date": "2024-06-10",
+      "TD_Unrounded": 23360.0,
+      "RP1_Up": 23476.8,
+      "RP1_Dn": 23243.2,
+      "RP2_Up": 23576.08,
+      "RP2_Dn": 23143.92,
+      "Monotonic": true,
+      "Comp_Ratio": 0.85,
+      "Tested_RP1": true,
+      "Held_RP2": true
+    },
+    {
+      "Date": "2024-06-11",
+      "TD_Unrounded": 23262.29,
+      "RP1_Up": 23378.6,
+      "RP1_Dn": 23145.98,
+      "RP2_Up": 23477.46,
+      "RP2_Dn": 23047.11,
+      "Monotonic": true,
+      "Comp_Ratio": 0.85,
+      "Tested_RP1": true,
+      "Held_RP2": true
+    },
+    {
+      "Date": "2024-06-12",
+      "TD_Unrounded": 23327.95,
+      "RP1_Up": 23444.59,
+      "RP1_Dn": 23211.31,
+      "RP2_Up": 23543.73,
+      "RP2_Dn": 23112.17,
+      "Monotonic": true,
+      "Comp_Ratio": 0.85,
+      "Tested_RP1": false,
+      "Held_RP2": true
+    },
+    {
+      "Date": "2024-06-13",
+      "TD_Unrounded": 23451.45,
+      "RP1_Up": 23568.71,
+      "RP1_Dn": 23334.19,
+      "RP2_Up": 23668.38,
+      "RP2_Dn": 23234.52,
+      "Monotonic": true,
+      "Comp_Ratio": 0.85,
+      "Tested_RP1": false,
+      "Held_RP2": true
+    },
+    {
+      "Date": "2024-06-14",
+      "TD_Unrounded": 23440.12,
+      "RP1_Up": 23557.33,
+      "RP1_Dn": 23322.92,
+      "RP2_Up": 23656.95,
+      "RP2_Dn": 23223.3,
+      "Monotonic": true,
+      "Comp_Ratio": 0.85,
+      "Tested_RP1": false,
+      "Held_RP2": true
+    }
+  ],
+  "mean_calibration_error_ohlc4": 0.7200000000000001,
+  "max_calibration_error_ohlc4": 1.49,
+  "holdout_monotonic_integrity": true,
+  "holdout_rp1_touch_rate": 0.7,
+  "holdout_rp2_boundary_respect_rate": 0.7
+}

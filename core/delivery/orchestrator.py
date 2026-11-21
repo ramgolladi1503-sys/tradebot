@@ -61,8 +61,30 @@ class DeliveryOrchestrator:
         return bool(self.item.state_history and
                     self.item.state_history[-1].contract_hash != work_item_contract_hash(self.item))
 
+    @property
+    def research_contract_drift(self) -> bool:
+        current = work_item_contract_hash(self.item)
+        return any(event.get("contract_hash") != current for event in (self.item.research_evidence or ()))
+
+    def _require_research_write_allowed(self) -> None:
+        if self.research_contract_drift:
+            raise GovernanceError("research event contract drift freezes controlled writes")
+        events = self.item.research_evidence or ()
+        if not events:
+            return
+        last = events[-1]
+        if last["event_type"] == "REQUEST_PREPARED":
+            raise GovernanceError("pending research request permits only its matching result append")
+        if last["event_type"] == "CLOCK_SKEW":
+            raise GovernanceError("terminal clock freeze prohibits controlled writes")
+        if (last["event_type"] == "REQUEST_RESULT" and
+                (last["access_category"] in {"DATA_API", "PAYLOAD"} or last.get("redirect") is True
+                 or last["result_status"] == "UNKNOWN" or last["access_category"] == "UNKNOWN")):
+            raise GovernanceError("terminal research freeze prohibits controlled writes")
+
     def add_evidence(self, evidence: Evidence) -> WorkItem:
         try:
+            self._require_research_write_allowed()
             if evidence.work_item_id != self.item.work_item_id:
                 raise GovernanceError("evidence belongs to a different work item")
             if not isinstance(evidence.evidence_type, EvidenceType) or not isinstance(evidence.status, EvidenceStatus):
@@ -92,6 +114,7 @@ class DeliveryOrchestrator:
 
     def add_defect(self, defect: Defect, *, actor_role: DeliveryRole, actor: str,
                    timestamp: str, reason: str) -> WorkItem:
+        self._require_research_write_allowed()
         try:
             actor_role = DeliveryRole(actor_role)
         except (ValueError, TypeError) as exc:
@@ -139,6 +162,7 @@ class DeliveryOrchestrator:
     def advance_defect(self, defect_id: str, target, *, actor_role: DeliveryRole,
                        actor: str, timestamp: str, reason: str, evidence_ref: str = "",
                        regression_result: str = "") -> WorkItem:
+        self._require_research_write_allowed()
         from .defects import advance_defect
         from .models import DefectStatus
         try:
@@ -206,6 +230,18 @@ class DeliveryOrchestrator:
         return DefectHistoryEntry(**payload, entry_hash=sha256_json(payload))
 
     def allowed_next_states(self) -> tuple[str, ...]:
+        if self.research_contract_drift:
+            return ()
+        events = self.item.research_evidence or ()
+        if events:
+            last = events[-1]
+            if (last["event_type"] in {"REQUEST_PREPARED", "CLOCK_SKEW"}
+                    or (last["event_type"] == "REQUEST_RESULT" and
+                        (last["access_category"] in {"DATA_API", "PAYLOAD"}
+                         or last.get("redirect") is True
+                         or last["result_status"] == "UNKNOWN"
+                         or last["access_category"] == "UNKNOWN"))):
+                return ()
         allowed = set(ALLOWED_TRANSITIONS.get(self.item.current_state, set()))
         if self.contract_drift:
             allowed &= {S.BLOCKED_REQUIREMENT}
@@ -219,6 +255,8 @@ class DeliveryOrchestrator:
         missing, invalid = self._lifecycle_gaps()
         if self.contract_drift:
             invalid.append("contract_drift_requires_requirement_block")
+        if self.research_contract_drift:
+            invalid.append("research_contract_drift_freezes_capture")
         blockers = sorted({g for g in missing} | {g for g in invalid})
         return {"ready": not blockers and not unresolved_required(self.item.defects),
                 "blocking_gates": blockers,
@@ -281,6 +319,7 @@ class DeliveryOrchestrator:
     def transition(self, target: DeliveryState | str, *, acting_role: DeliveryRole | str,
                    actor: str, timestamp: str, reason: str,
                    evidence_ids: Iterable[str] = ()) -> WorkItem:
+        self._require_research_write_allowed()
         try:
             source, target_state = self.item.current_state, DeliveryState(target)
             role = DeliveryRole(acting_role)

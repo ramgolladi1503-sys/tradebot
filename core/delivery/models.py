@@ -154,6 +154,11 @@ class WorkItem:
     evidence: tuple[Evidence, ...] = ()
     defects: tuple[Defect, ...] = ()
     required_ci_checks: tuple[str, ...] = ()
+    # Optional research evidence fields are deliberately excluded from the
+    # existing work-item contract hash. None preserves legacy serialization.
+    research_evidence: tuple[dict[str, Any], ...] | None = None
+    research_evidence_schema_version: int | None = None
+    research_journal_initialized: bool | None = None
     extensions: dict[str, Any] = field(default_factory=dict)
 
 

@@ -1,0 +1,10 @@
+{
+  "state": "STANDBY",
+  "last_completed_trade": null,
+  "cool_off_until": null,
+  "cool_off_ref_spot": null,
+  "cool_off_direction": null,
+  "session_date": "2026-11-18",
+  "reset_reason": "BOD_PREFLIGHT_CLEAN_SLATE",
+  "persisted_at": "2026-11-18T09:21:45.749619"
+}
