@@ -27,8 +27,9 @@ Proves:
 """
 
 import math
-from datetime import datetime, time as dt_time
+from datetime import date, datetime, time as dt_time
 from unittest.mock import MagicMock, patch
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -286,6 +287,54 @@ def test_phase_a_opening_drive_aggressive_0920_bearish(tmp_path):
     assert sig.trade_phase == "OPENING_DRIVE"
     assert sig.is_active is True
     assert sig.is_vetoed is False
+
+
+@pytest.mark.parametrize(
+    ("side", "bar_open", "bar_high", "bar_low", "bar_close"),
+    [
+        ("upper", 24010.0, 24260.0, 24005.0, 24240.0),  # exactly at RP2 upper
+        ("upper", 24010.0, 24270.0, 24005.0, 24260.0),  # beyond RP2 upper
+        ("lower", 23990.0, 23995.0, 23740.0, 23760.0),  # exactly at RP2 lower
+        ("lower", 23990.0, 23995.0, 23730.0, 23740.0),  # beyond RP2 lower
+    ],
+)
+def test_phase_a_opening_drive_abstains_when_rp2_target_reached(
+    tmp_path, side, bar_open, bar_high, bar_low, bar_close,
+):
+    """Opening RP1 drives abstain when their structural RP2 target is no longer ahead."""
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / f"test_wal_0920_{side}_rp2.json"), enable_stdout=False
+    )
+    advisor.seed_prior_day_levels(
+        "NIFTY", pdh=24100.0, pdl=23900.0, pdc=24000.0, atr_20=160.0
+    )
+    advisor.session_open_prices["NIFTY"] = 24000.0
+
+    bar_start = datetime.combine(
+        date(2026, 11, 17), dt_time(9, 15), tzinfo=ZoneInfo("Asia/Kolkata")
+    )
+    timestamp_ms = int(bar_start.timestamp() * 1000)
+    # Keep this test focused on the opening target guard. OR pair validation is
+    # covered separately and requires a provider-independent session fixture.
+    with patch.object(advisor, "_validate_mode5_or_pair", return_value=(True, "", {})):
+        sig = advisor._on_5m_bar_close(
+            index_name="NIFTY",
+            bar_open=bar_open,
+            bar_high=bar_high,
+            bar_low=bar_low,
+            bar_close=bar_close,
+            bar_volume=60000.0,
+            bar_time=dt_time(9, 20),
+            timestamp_ms=timestamp_ms,
+            epoch_5min=timestamp_ms // 300000,
+        )
+
+    assert sig is not None
+    assert sig.action == "ABSTAIN"
+    assert sig.is_active is False
+    assert sig.is_vetoed is True
+    assert sig.setup_reason == "OPENING_RP2_TARGET_ALREADY_REACHED"
+    assert sig.veto_reason == "OPENING_RP2_TARGET_ALREADY_REACHED"
 
 
 def test_phase_a_opening_drive_aggressive_0920_veto_weak_expansion(tmp_path):

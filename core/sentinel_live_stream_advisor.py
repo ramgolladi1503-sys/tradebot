@@ -3465,6 +3465,27 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                             is_vetoed=True,
                             veto_reason="GATE_2_UNCONFIRMED_BREAKOUT",
                         )
+                    elif (
+                        (is_bullish and bar_close >= grid.rp2_upper)
+                        or (is_bearish and bar_close <= grid.rp2_lower)
+                    ):
+                        # The opening drive targets RP2. Do not turn an already
+                        # reached target into a farther chase target via abs().
+                        signal = CachedRBFNAuctionSignal(
+                            timestamp_ms=timestamp_ms,
+                            index_name=index_name,
+                            action="ABSTAIN",
+                            direction="",
+                            target_strike=0.0,
+                            target_pts=0.0,
+                            sl_pts=0.0,
+                            setup_reason="OPENING_RP2_TARGET_ALREADY_REACHED",
+                            trade_phase=phase_label,
+                            bar_time=bar_time,
+                            is_active=False,
+                            is_vetoed=True,
+                            veto_reason="OPENING_RP2_TARGET_ALREADY_REACHED",
+                        )
                     else:
                         action = "BUY_CALL" if is_bullish else "BUY_PUT"
                         direction = "CE" if is_bullish else "PE"

@@ -135,6 +135,65 @@ def test_s4_expansion_breakdown_triggers_otm_put(tmp_path):
     assert sig.target_strike == 24300.0  # Snapped round OTM strike at RP2_LOWER
 
 
+@pytest.mark.parametrize(
+    ("pierced_side", "bar_open", "bar_high", "bar_low", "bar_close", "expected_reason"),
+    [
+        # An earlier upper pierce is followed by a valid lower RP1 breakdown.
+        ("upper", 24395.0, 24400.0, 24370.0, 24380.0, "RP1_LOWER_10M_EXPANSION_BREAKDOWN"),
+        # An earlier lower pierce is followed by a valid upper RP1 breakout.
+        ("lower", 24610.0, 24630.0, 24605.0, 24620.0, "RP1_UPPER_10M_EXPANSION_BREAKOUT"),
+    ],
+)
+def test_rp2_piercing_invalidation_does_not_starve_opposite_side_setup(
+    tmp_path, pierced_side, bar_open, bar_high, bar_low, bar_close, expected_reason,
+):
+    """A valid opposite-zone close itself satisfies the intervening RP2 retest predicate."""
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / f"piercing_{pierced_side}_to_opposite.json"),
+        enable_stdout=False,
+    )
+    advisor.decision_trace_path = tmp_path / f"piercing_{pierced_side}_to_opposite.jsonl"
+    _seed_complete_or_pair(advisor)
+    _seed_target_grid(advisor)
+    advisor.seed_prior_day_levels(
+        "NIFTY", pdh=24600.0, pdl=24400.0, pdc=24500.0, atr_20=160.0
+    )
+    advisor.session_open_prices["NIFTY"] = 24500.0
+
+    previous_close = 24395.0 if pierced_side == "upper" else 24610.0
+    previous_epoch = _completed_bar_epoch(dt_time(12, 15))
+    advisor.bars_5m_history["NIFTY"] = [{
+        "open": previous_close,
+        "high": previous_close + 5.0,
+        "low": previous_close - 5.0,
+        "close": previous_close,
+        "volume": 1000.0,
+        "time": dt_time(12, 15),
+        "timestamp_ms": previous_epoch * 300000,
+        "epoch_5min": previous_epoch,
+    }]
+    advisor.rp2_upper_pierced_before_1030["NIFTY"] = pierced_side == "upper"
+    advisor.rp2_lower_pierced_before_1030["NIFTY"] = pierced_side == "lower"
+
+    current_epoch = _completed_bar_epoch(dt_time(12, 20))
+    signal = advisor._on_5m_bar_close(
+        index_name="NIFTY",
+        bar_open=bar_open,
+        bar_high=bar_high,
+        bar_low=bar_low,
+        bar_close=bar_close,
+        bar_volume=1000.0,
+        bar_time=dt_time(12, 20),
+        timestamp_ms=current_epoch * 300000,
+        epoch_5min=current_epoch,
+    )
+
+    assert signal is not None
+    assert signal.is_active is True
+    assert signal.is_vetoed is False
+    assert signal.setup_reason == expected_reason
+
+
 def test_s7_floor_bounce_triggers_reversal_call(tmp_path):
     wal = tmp_path / "test_wal_s7.json"
     advisor = SentinelLiveStreamAdvisor(wal_path=str(wal), enable_stdout=False)
