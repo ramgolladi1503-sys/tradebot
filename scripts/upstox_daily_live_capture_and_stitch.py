@@ -1574,6 +1574,37 @@ def finalize_capture_session(
         report["advisor_drain_error_type"] = type(exc).__name__
         _safe_pipeline_log("error", "Advisor trace drain failed (%s)", type(exc).__name__)
 
+    try:
+        release_wal_owners = getattr(advisor, "shutdown_apm_wal_ownership", None) if advisor is not None else None
+        if advisor is None:
+            report["advisor_wal_ownership_release_status"] = "NOT_CREATED"
+        elif not callable(release_wal_owners):
+            raise AttributeError("advisor_wal_ownership_shutdown_unavailable")
+        else:
+            owner_result = _run_bounded_shutdown_call(
+                "apm-wal-owner-release",
+                release_wal_owners,
+                advisor_timeout_sec,
+            )
+            if owner_result["status"] == "TIMED_OUT":
+                report["advisor_wal_ownership_release_status"] = "TIMED_OUT"
+            elif owner_result["status"] in {"RAISED", "START_FAILED"}:
+                report["advisor_wal_ownership_release_status"] = "ERROR"
+                report["advisor_wal_ownership_release_error_type"] = owner_result["error_type"]
+            else:
+                owner_value = owner_result["value"]
+                report["advisor_wal_ownership_release_status"] = (
+                    owner_value.get("status", "UNKNOWN")
+                    if isinstance(owner_value, dict)
+                    else "UNKNOWN"
+                )
+                if isinstance(owner_value, dict) and owner_value.get("failures"):
+                    report["advisor_wal_ownership_release_failures"] = owner_value["failures"]
+    except Exception as exc:
+        report["advisor_wal_ownership_release_status"] = "ERROR"
+        report["advisor_wal_ownership_release_error_type"] = type(exc).__name__
+        _safe_pipeline_log("error", "APM WAL owner release failed (%s)", type(exc).__name__)
+
     if isinstance(drain_result, dict):
         trace_health = _safe_trace_health_snapshot_from_mapping(
             drain_result, report["trace_run_id"]

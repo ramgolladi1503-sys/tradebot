@@ -13,13 +13,29 @@ import json
 import logging
 import os
 import math
+import errno
+import hashlib
+import stat
+import tempfile
 import time
+import threading
+import unicodedata
+import weakref
+try:
+    import fcntl
+except ImportError:  # Unsupported hosts fail closed when constructing the manager.
+    fcntl = None
 from datetime import datetime, time as dtime
 from pathlib import Path
 from dataclasses import dataclass, asdict
 from typing import Optional, Tuple, Dict, Any
 
 logger = logging.getLogger(__name__)
+_OS_OPEN_SUPPORTS_DIR_FD = os.open in getattr(os, "supports_dir_fd", set())
+
+
+class WALOwnershipError(RuntimeError):
+    """Raised when this process cannot exclusively own an APM WAL."""
 
 def compute_expiry_theta_holding_ceiling(
     base_max_hold_minutes: int,
@@ -73,6 +89,7 @@ STATE_PULLBACK_WAIT = "PULLBACK_WAIT"
 STATE_EXIT_PENDING = "EXIT_PENDING"
 STATE_COOL_OFF = "COOL_OFF"
 STATE_LIQUIDATED = "LIQUIDATED"
+STATE_RECOVERY_BLOCKED = "RECOVERY_BLOCKED"
 
 VALID_TRANSITIONS = {
     STATE_STANDBY: {STATE_ARMED},
@@ -83,6 +100,7 @@ VALID_TRANSITIONS = {
     STATE_EXIT_PENDING: {STATE_COOL_OFF, STATE_LIQUIDATED},
     STATE_COOL_OFF: {STATE_STANDBY, STATE_ARMED},
     STATE_LIQUIDATED: {STATE_COOL_OFF, STATE_STANDBY, STATE_ARMED, STATE_PULLBACK_WAIT},
+    STATE_RECOVERY_BLOCKED: set(),
 }
 
 
@@ -146,12 +164,63 @@ class PositionPayload:
     structural_swing_anchor_sl: Optional[float] = None  # 15m structural swing low (CE) or high (PE)
     # Strategy Attribution Tracking
     strategy_name: Optional[str] = None
+    remaining_lots: Optional[int] = None
+    remaining_quantity: Optional[int] = None
+    runner_target_reached: bool = False
+    actual_quantity_status: str = "UNKNOWN_NO_FILL_SOURCE"
+    option_pnl_status: str = "MARK_PROJECTION"
+
+    def __post_init__(self) -> None:
+        if self.half_booked:
+            self.runner_target_reached = True
+            self.half_booked = False
+            self.opt_half_booked_ltp = None
+            self.opt_half_booked_time = None
+            self.tranche_1_pnl_pts = None
+            self.remaining_lots = None
+            self.remaining_quantity = None
+            self.actual_quantity_status = "UNKNOWN_NO_FILL_SOURCE"
 
 
 class ActivePositionManager:
     def __init__(self, wal_path: str = "runtime/sentinel_apm_wal.json"):
-        self.wal_path = Path(wal_path)
-        self.wal_path.parent.mkdir(parents=True, exist_ok=True)
+        requested_wal_path = Path(wal_path).expanduser()
+        if self._contains_reserved_lock_component(requested_wal_path):
+            raise WALOwnershipError("APM WAL path is inside the reserved lock namespace")
+        try:
+            requested_wal_path.parent.mkdir(parents=True, exist_ok=True)
+            # Resolve relative, parent-symlink, and existing leaf-symlink aliases.
+            self.wal_path = requested_wal_path.resolve(strict=False)
+        except OSError as exc:
+            raise WALOwnershipError(f"APM WAL path cannot be canonicalized ({exc.errno})") from exc
+        if self._contains_reserved_lock_component(self.wal_path):
+            raise WALOwnershipError("APM WAL path resolves inside the reserved lock namespace")
+        parent_path = self.wal_path.parent.resolve(strict=True)
+        if self._contains_reserved_lock_component(parent_path):
+            raise WALOwnershipError("APM WAL parent resolves inside the reserved lock namespace")
+        self.wal_path = parent_path / self.wal_path.name
+        parent_stat = parent_path.stat()
+        normalized_leaf = unicodedata.normalize("NFC", self.wal_path.name).casefold()
+        identity = f"{parent_stat.st_dev}:{parent_stat.st_ino}:{normalized_leaf}".encode("utf-8")
+        lock_name = hashlib.sha256(identity).hexdigest() + ".lock"
+        self._wal_lock_dir_path = parent_path / ".apm_wal_locks"
+        self._wal_lock_path = self._wal_lock_dir_path / lock_name
+        self._wal_legacy_sidecar_path = self.wal_path.with_name(self.wal_path.name + ".lock")
+        self._wal_parent_identity = (parent_stat.st_dev, parent_stat.st_ino)
+        self._wal_lock_dir_fd: Optional[int] = None
+        self._wal_ownership_fd: Optional[int] = None
+        self._wal_owner_pid = os.getpid()
+        self._wal_closed = False
+        self._wal_lock = threading.RLock()
+        self._validate_wal_leaf()
+        self._acquire_wal_ownership()
+        try:
+            self._initialize_owned_state()
+        except BaseException:
+            self.close()
+            raise
+
+    def _initialize_owned_state(self) -> None:
         self.state = STATE_STANDBY
         self.payload: Optional[PositionPayload] = None
         self.last_completed_trade: Optional[Dict[str, Any]] = None
@@ -161,9 +230,278 @@ class ActivePositionManager:
         self.cool_off_ref_spot: Optional[float] = None
         self.cool_off_direction: Optional[str] = None
         self._last_wal_persist_ts: float = 0.0
+        self.recovery_status: str = "NOT_RECOVERED"
         self._recover_state_or_fail_closed()
 
+    @staticmethod
+    def _contains_reserved_lock_component(path: Path) -> bool:
+        return any(
+            unicodedata.normalize("NFC", part).casefold() == ".apm_wal_locks"
+            for part in path.parts
+        )
+
+    def _validate_wal_leaf(self) -> None:
+        """Reject links and non-regular files before recovery or replacement."""
+        try:
+            leaf_stat = os.lstat(self.wal_path)
+        except FileNotFoundError:
+            return
+        except OSError as exc:
+            raise WALOwnershipError(f"APM WAL leaf cannot be inspected ({exc.errno})") from exc
+        if stat.S_ISLNK(leaf_stat.st_mode) or not stat.S_ISREG(leaf_stat.st_mode):
+            raise WALOwnershipError("APM WAL path must be a regular non-symlink file")
+        if leaf_stat.st_nlink > 1:
+            raise WALOwnershipError("APM WAL is hard-linked; ownership is ambiguous")
+
+    def _prepare_wal_lock_directory(self) -> int:
+        if not hasattr(os, "O_NOFOLLOW"):
+            raise WALOwnershipError("APM WAL ownership unavailable: safe O_NOFOLLOW open is unsupported")
+        try:
+            os.mkdir(self._wal_lock_dir_path, 0o700)
+        except FileExistsError:
+            pass
+        except OSError as exc:
+            raise WALOwnershipError(f"APM WAL lock namespace creation failed ({exc.errno})") from exc
+        try:
+            path_stat = os.lstat(self._wal_lock_dir_path)
+        except OSError as exc:
+            raise WALOwnershipError(f"APM WAL lock namespace cannot be inspected ({exc.errno})") from exc
+        if not stat.S_ISDIR(path_stat.st_mode):
+            raise WALOwnershipError("APM WAL lock namespace must be a real directory, not a symlink")
+        if path_stat.st_uid != os.geteuid() or stat.S_IMODE(path_stat.st_mode) & 0o077:
+            raise WALOwnershipError("APM WAL lock namespace ownership or permissions are unsafe")
+        flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+        try:
+            directory_fd = os.open(str(self._wal_lock_dir_path), flags)
+        except OSError as exc:
+            raise WALOwnershipError(f"APM WAL lock namespace open failed ({exc.errno})") from exc
+        opened_stat = os.fstat(directory_fd)
+        if (
+            not stat.S_ISDIR(opened_stat.st_mode)
+            or (opened_stat.st_dev, opened_stat.st_ino) != (path_stat.st_dev, path_stat.st_ino)
+        ):
+            os.close(directory_fd)
+            raise WALOwnershipError("APM WAL lock namespace changed during open")
+        try:
+            self._assert_wal_lock_namespace_identity(directory_fd)
+        except BaseException:
+            os.close(directory_fd)
+            raise
+        return directory_fd
+
+    def _assert_wal_lock_namespace_identity(self, directory_fd: int) -> None:
+        """Revalidate the canonical parent and reserved directory before open/retry."""
+        try:
+            parent_stat = self.wal_path.parent.stat()
+            dir_fd_stat = os.fstat(directory_fd)
+            dir_path_stat = os.lstat(self._wal_lock_dir_path)
+        except OSError as exc:
+            raise WALOwnershipError(
+                f"APM WAL lock namespace identity check failed at {self._wal_lock_dir_path} ({exc.errno})"
+            ) from exc
+        if (
+            (parent_stat.st_dev, parent_stat.st_ino) != self._wal_parent_identity
+            or not stat.S_ISDIR(dir_fd_stat.st_mode)
+            or stat.S_ISLNK(dir_path_stat.st_mode)
+            or (dir_fd_stat.st_dev, dir_fd_stat.st_ino) != (dir_path_stat.st_dev, dir_path_stat.st_ino)
+        ):
+            raise WALOwnershipError(
+                f"APM WAL lock namespace identity changed at {self._wal_lock_dir_path}"
+            )
+
+    def _acquire_wal_ownership(self) -> None:
+        if fcntl is None or not hasattr(fcntl, "flock"):
+            raise WALOwnershipError("APM WAL ownership unavailable: OS flock is unsupported")
+        if not hasattr(os, "O_NOFOLLOW"):
+            raise WALOwnershipError("APM WAL ownership unavailable: safe O_NOFOLLOW open is unsupported")
+        if not _OS_OPEN_SUPPORTS_DIR_FD:
+            raise WALOwnershipError("APM WAL ownership unavailable: dir_fd lock open is unsupported")
+        directory_fd = self._prepare_wal_lock_directory()
+        flags = os.O_CREAT | os.O_RDWR | getattr(os, "O_CLOEXEC", 0) | os.O_NOFOLLOW
+        fd = None
+        try:
+            for attempt in range(2):
+                try:
+                    fd = os.open(self._wal_lock_path.name, flags, 0o600, dir_fd=directory_fd)
+                    break
+                except OSError as exc:
+                    if exc.errno == errno.ENOENT and attempt == 0:
+                        try:
+                            self._assert_wal_lock_namespace_identity(directory_fd)
+                        except WALOwnershipError as identity_error:
+                            raise WALOwnershipError(
+                                f"APM WAL owner lock open failed ({exc.errno}) at {self._wal_lock_path}; "
+                                f"namespace revalidation failed: {identity_error}"
+                            ) from identity_error
+                        continue
+                    raise WALOwnershipError(
+                        f"APM WAL owner lock open failed at {self._wal_lock_path} ({exc.errno})"
+                    ) from exc
+            if fd is None:
+                raise WALOwnershipError(f"APM WAL owner lock open failed at {self._wal_lock_path} ({errno.ENOENT})")
+        except BaseException:
+            os.close(directory_fd)
+            raise
+        try:
+            lock_stat = os.fstat(fd)
+            path_stat = os.stat(self._wal_lock_path.name, dir_fd=directory_fd, follow_symlinks=False)
+            if (
+                not stat.S_ISREG(lock_stat.st_mode)
+                or lock_stat.st_nlink != 1
+                or (lock_stat.st_dev, lock_stat.st_ino) != (path_stat.st_dev, path_stat.st_ino)
+            ):
+                raise WALOwnershipError("APM WAL ownership unavailable: owner lock file identity is unsafe")
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError as exc:
+                if exc.errno in (errno.EACCES, errno.EAGAIN):
+                    raise WALOwnershipError(f"APM WAL already owned by another manager: {self.wal_path}") from exc
+                raise WALOwnershipError(
+                    f"APM WAL ownership unavailable for {self.wal_path}: flock failed ({exc.errno})"
+                ) from exc
+            self._wal_ownership_fd = fd
+            self._wal_lock_dir_fd = directory_fd
+            self._assert_wal_lock_identity()
+            self._ensure_legacy_sidecar_alias()
+            if hasattr(os, "register_at_fork"):
+                owner_ref = weakref.ref(self)
+
+                def invalidate_inherited_owner() -> None:
+                    manager = owner_ref()
+                    if manager is not None:
+                        manager._invalidate_inherited_wal_owner()
+
+                os.register_at_fork(after_in_child=invalidate_inherited_owner)
+        except BaseException:
+            if self._wal_ownership_fd is not None:
+                self._wal_ownership_fd = None
+            try:
+                os.close(fd)
+            finally:
+                self._wal_lock_dir_fd = None
+                os.close(directory_fd)
+            raise
+
+    def _ensure_legacy_sidecar_alias(self) -> None:
+        """Keep old diagnostic paths resolving into the reserved lock namespace."""
+        expected = os.path.relpath(self._wal_lock_path, self._wal_legacy_sidecar_path.parent)
+        try:
+            existing = os.lstat(self._wal_legacy_sidecar_path)
+        except FileNotFoundError:
+            try:
+                os.symlink(expected, self._wal_legacy_sidecar_path)
+            except FileExistsError:
+                existing = os.lstat(self._wal_legacy_sidecar_path)
+            except OSError as exc:
+                raise WALOwnershipError(f"APM WAL compatibility alias creation failed ({exc.errno})") from exc
+            else:
+                return
+        if not stat.S_ISLNK(existing.st_mode):
+            raise WALOwnershipError("APM WAL legacy sidecar path is occupied by a non-alias file")
+        try:
+            resolved_alias = self._wal_legacy_sidecar_path.resolve(strict=True)
+        except OSError as exc:
+            raise WALOwnershipError("APM WAL legacy sidecar alias is broken") from exc
+        if resolved_alias != self._wal_lock_path:
+            raise WALOwnershipError("APM WAL legacy sidecar alias targets a different owner lock")
+
+    def _assert_wal_lock_identity(self) -> None:
+        self._assert_wal_owner()
+        directory_fd = self._wal_lock_dir_fd
+        if directory_fd is None:
+            raise WALOwnershipError("APM WAL lock namespace descriptor is unavailable")
+        try:
+            self._assert_wal_lock_namespace_identity(directory_fd)
+            lock_fd_stat = os.fstat(self._wal_ownership_fd)
+            lock_path_stat = os.stat(self._wal_lock_path.name, dir_fd=directory_fd, follow_symlinks=False)
+        except OSError as exc:
+            raise WALOwnershipError(f"APM WAL owner lock identity cannot be verified ({exc.errno})") from exc
+        if (
+            not stat.S_ISREG(lock_fd_stat.st_mode)
+            or lock_fd_stat.st_nlink != 1
+            or (lock_fd_stat.st_dev, lock_fd_stat.st_ino) != (lock_path_stat.st_dev, lock_path_stat.st_ino)
+        ):
+            raise WALOwnershipError("APM WAL owner lock fd/path identity changed")
+        self._validate_wal_leaf()
+
+    def _invalidate_inherited_wal_owner(self) -> None:
+        """A forked child must not reuse the parent's manager or lock descriptor."""
+        fd = self._wal_ownership_fd
+        directory_fd = self._wal_lock_dir_fd
+        self._wal_ownership_fd = None
+        self._wal_lock_dir_fd = None
+        self._wal_owner_pid = -1
+        self._wal_closed = True
+        if fd is not None:
+            # Do not issue LOCK_UN: the parent shares this open-file description.
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        if directory_fd is not None:
+            try:
+                os.close(directory_fd)
+            except OSError:
+                pass
+
+    def _assert_wal_owner(self) -> None:
+        if self._wal_closed or self._wal_owner_pid != os.getpid() or self._wal_ownership_fd is None:
+            raise WALOwnershipError("APM WAL manager is closed or not owned by this process")
+
+    def close(self) -> None:
+        """Release this manager's flock; persistent ownership files are never unlinked."""
+        with self._wal_lock:
+            fd = self._wal_ownership_fd
+            directory_fd = self._wal_lock_dir_fd
+            if fd is None:
+                self._wal_closed = True
+                self._wal_lock_dir_fd = None
+                if directory_fd is not None:
+                    os.close(directory_fd)
+                return
+            self._wal_ownership_fd = None
+            self._wal_lock_dir_fd = None
+            self._wal_closed = True
+            try:
+                if self._wal_owner_pid == os.getpid() and fcntl is not None:
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+            finally:
+                os.close(fd)
+                if directory_fd is not None:
+                    os.close(directory_fd)
+
+    def __enter__(self):
+        self._assert_wal_owner()
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        self.close()
+
     def _persist_wal_atomic(self, force_sync: bool = True):
+        """Serialize owned-process writers and fail closed on any durability error.
+
+        The manager must hold its stable sidecar flock before recovery/admission.
+        `force_sync=False` remains a best-effort one-second debounce window; it
+        is not a durability guarantee.
+        """
+        with self._wal_lock:
+            # Serialize the ownership check with close(). A writer may have
+            # passed an earlier check while waiting for this lock; after close
+            # releases the sidecar flock, that stale writer must not persist.
+            self._assert_wal_owner()
+            try:
+                self._assert_wal_lock_identity()
+                return self._persist_wal_atomic_impl(force_sync=force_sync)
+            except WALOwnershipError:
+                self.state = STATE_RECOVERY_BLOCKED
+                self.recovery_status = "RECOVERY_BLOCKED"
+                raise
+            except Exception:
+                self.state = STATE_RECOVERY_BLOCKED
+                self.recovery_status = "DURABILITY_UNKNOWN"
+                raise
+
+    def _persist_wal_atomic_impl(self, force_sync: bool = True):
         """Invariant 1.2: Atomic Write-Ahead Log persistence via temp file rename.
         
         When force_sync=False, updates are debounced to at most once per 1.0s to protect
@@ -173,7 +511,6 @@ class ActivePositionManager:
         if not force_sync and (now_ts - self._last_wal_persist_ts) < 1.0:
             return
 
-        tmp_path = self.wal_path.with_suffix(".tmp")
         data = {
             "state": self.state,
             "payload": asdict(self.payload) if self.payload else None,
@@ -185,27 +522,68 @@ class ActivePositionManager:
             "cool_off_direction": self.cool_off_direction,
             "persisted_at": datetime.now().isoformat()
         }
-        with open(tmp_path, "w") as f:
-            json.dump(data, f, indent=2)
-            f.flush()
+        payload_bytes = json.dumps(data, indent=2).encode("utf-8")
+        fd, tmp_name = tempfile.mkstemp(prefix=f".{self.wal_path.name}.", suffix=".tmp", dir=str(self.wal_path.parent))
+        try:
+            with os.fdopen(fd, "wb") as f:
+                f.write(payload_bytes)
+                f.flush()
+                if force_sync:
+                    os.fsync(f.fileno())
+            # Revalidate the held owner and WAL leaf immediately before the
+            # atomic replacement, including late hard-link or path tampering.
+            self._assert_wal_lock_identity()
+            os.replace(tmp_name, str(self.wal_path))
             if force_sync:
-                os.fsync(f.fileno())
-        os.replace(tmp_path, self.wal_path)
+                try:
+                    dir_fd = os.open(str(self.wal_path.parent), os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+                    try:
+                        os.fsync(dir_fd)
+                    finally:
+                        os.close(dir_fd)
+                except OSError:
+                    raise
+        except Exception:
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass
+            raise
         self._last_wal_persist_ts = now_ts
 
     def _recover_state_or_fail_closed(self):
         """Invariant 1.3: On boot, load WAL. If crashed mid-trade, mark fail-closed EXIT_PENDING."""
-        if not self.wal_path.exists():
-            return
-
         try:
-            with open(self.wal_path, "r") as f:
-                data = json.load(f)
+            if not hasattr(os, "O_NOFOLLOW"):
+                raise WALOwnershipError("APM WAL recovery unavailable: safe O_NOFOLLOW open is unsupported")
+            try:
+                wal_fd = os.open(str(self.wal_path), os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0))
+            except FileNotFoundError:
+                return
+            try:
+                wal_stat = os.fstat(wal_fd)
+                path_stat = os.lstat(self.wal_path)
+                if (
+                    not stat.S_ISREG(wal_stat.st_mode)
+                    or wal_stat.st_nlink > 1
+                    or stat.S_ISLNK(path_stat.st_mode)
+                    or (wal_stat.st_dev, wal_stat.st_ino) != (path_stat.st_dev, path_stat.st_ino)
+                ):
+                    raise WALOwnershipError("APM WAL path changed or is not a uniquely linked regular file")
+                with os.fdopen(wal_fd, "r") as f:
+                    wal_fd = -1
+                    data = json.load(f)
+            finally:
+                if wal_fd >= 0:
+                    os.close(wal_fd)
             saved_state = data.get("state", STATE_STANDBY)
             saved_payload = data.get("payload")
             self.last_completed_trade = data.get("last_completed_trade")
             self.trade_history = data.get("trade_history", [])
             self.daily_trade_count = int(data.get("daily_trade_count") or 0)
+
+            if saved_state in {STATE_COOL_OFF, STATE_LIQUIDATED} and saved_payload is None:
+                self._validate_and_sync_completed_terminal_wal(data)
 
             # Recover cool-off state
             saved_cool_until = data.get("cool_off_until")
@@ -235,23 +613,100 @@ class ActivePositionManager:
                     saved_state = STATE_STANDBY
 
             if saved_payload:
-                self.payload = PositionPayload(**saved_payload)
+                payload_data = dict(saved_payload)
+                legacy_target_reached = bool(payload_data.get("half_booked"))
+                payload_data["runner_target_reached"] = bool(
+                    payload_data.get("runner_target_reached", legacy_target_reached)
+                )
+                # Historical target-touch bookkeeping was never confirmed fill
+                # evidence. Preserve the runner milestone, discard false booking.
+                payload_data["half_booked"] = False
+                payload_data["opt_half_booked_ltp"] = None
+                payload_data["opt_half_booked_time"] = None
+                payload_data["tranche_1_pnl_pts"] = None
+                payload_data["remaining_lots"] = None
+                payload_data["remaining_quantity"] = None
+                payload_data["actual_quantity_status"] = "UNKNOWN_NO_FILL_SOURCE"
+                payload_data["option_pnl_status"] = "MARK_PROJECTION"
+                self.payload = PositionPayload(**payload_data)
 
-            if saved_state in {STATE_IN_FLIGHT, STATE_TRAIL_LOCK, STATE_EXIT_PENDING}:
-                # Crash recovery fail-closed: force immediate liquidation
-                print(f"⚠️ [APM CRASH RECOVERY] Detected unclosed in-flight state '{saved_state}'. Fail-closed trigger!")
-                self.state = STATE_EXIT_PENDING
-                if self.payload:
-                    self.payload.exit_reason = "CRASH_RECOVERY_FAIL_CLOSED"
-                self._persist_wal_atomic(force_sync=True)
+            if saved_state not in VALID_TRANSITIONS or saved_state in {
+                STATE_ARMED, STATE_IN_FLIGHT, STATE_TRAIL_LOCK,
+                STATE_EXIT_PENDING, STATE_RECOVERY_BLOCKED,
+            } or (
+                saved_state in {STATE_STANDBY, STATE_COOL_OFF, STATE_LIQUIDATED}
+                and saved_payload is not None
+            ):
+                # A spot/option mark is not an execution report. Preserve the
+                # uncertain position and block admission until reconciled.
+                logger.error("APM recovery is uncertain for saved state %s; entry admission blocked", saved_state)
+                self.state = STATE_RECOVERY_BLOCKED
+                self.recovery_status = "RECOVERY_BLOCKED"
             else:
                 self.state = saved_state
+                if self.state != STATE_STANDBY:
+                    self.recovery_status = "DURABLE"
         except Exception as e:
-            print(f"🚨 [APM WAL CORRUPTED] Error recovering WAL: {e}. Forcing STANDBY.")
-            self.state = STATE_STANDBY
-            self.payload = None
+            logger.error("APM WAL recovery failed (%s); entry admission blocked", type(e).__name__)
+            self.state = STATE_RECOVERY_BLOCKED
+            self.recovery_status = "DURABILITY_UNKNOWN" if isinstance(e, OSError) else "RECOVERY_BLOCKED"
+
+    def _validate_and_sync_completed_terminal_wal(self, data: dict[str, Any]) -> None:
+        """Validate a cleared terminal snapshot and re-establish local durability."""
+        summary = data.get("last_completed_trade")
+        history = data.get("trade_history")
+        if not isinstance(summary, dict) or not isinstance(history, list):
+            raise ValueError("terminal APM WAL lacks completed trade history")
+        summary_key = self._completed_leg_key(summary)
+        matches = [
+            row for row in history
+            if isinstance(row, dict) and self._completed_leg_key(row) == summary_key
+        ]
+        if len(matches) != 1 or matches[0] != summary:
+            raise ValueError("terminal APM WAL completed trade/history mismatch")
+
+        file_fd = os.open(str(self.wal_path), os.O_RDONLY)
+        try:
+            os.fsync(file_fd)
+        finally:
+            os.close(file_fd)
+        dir_fd = os.open(str(self.wal_path.parent), os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+        self.recovery_status = "DURABLE"
+
+    @staticmethod
+    def _completed_leg_key(row: Dict[str, Any]) -> Tuple[str, int]:
+        """Return stable setup-leg identity, defaulting legacy rows to initial leg 0."""
+        position_id = row.get("position_id")
+        reentry_count = row.get("reentry_count", 0)
+        if (
+            not isinstance(position_id, str) or not position_id
+            or isinstance(reentry_count, bool) or not isinstance(reentry_count, int)
+            or reentry_count < 0
+        ):
+            raise ValueError("completed APM leg has invalid composite identity")
+        return position_id, reentry_count
+
+    def _record_completed_leg(self, summary: Dict[str, Any]) -> None:
+        """Append a leg once; never overwrite or silently accept a key collision."""
+        summary_key = self._completed_leg_key(summary)
+        matches = [
+            row for row in self.trade_history
+            if isinstance(row, dict) and self._completed_leg_key(row) == summary_key
+        ]
+        if len(matches) > 1:
+            raise ValueError("duplicate completed leg identity")
+        if matches:
+            if matches[0] != summary:
+                raise ValueError("conflicting completed leg content")
+            return
+        self.trade_history.append(dict(summary))
 
     def _transition_to(self, new_state: str, guard: bool = True) -> bool:
+        self._assert_wal_owner()
         if not guard:
             return False
         allowed = VALID_TRANSITIONS.get(self.state, set())
@@ -272,6 +727,7 @@ class ActivePositionManager:
         - atomically persists state in WAL
         Returns True if cool-off was expired and transitioned to STANDBY, False otherwise.
         """
+        self._assert_wal_owner()
         if self.state != STATE_COOL_OFF or self.cool_off_until is None:
             return False
 
@@ -379,6 +835,7 @@ class ActivePositionManager:
         
         Enforces Floor-or-Reject: If lots < 1, entry is rejected (never round up).
         """
+        self._assert_wal_owner()
         if lots < 1:
             logger.warning(f"ENTRY_REJECTED: lots={lots} < 1 (Floor-or-Reject invariant). Suppressing entry.")
             return False
@@ -538,6 +995,7 @@ class ActivePositionManager:
         - For CE (Long), the anchor can ONLY ratchet upward (protecting higher lows).
         - For PE (Short), the anchor can ONLY ratchet downward (protecting lower highs).
         """
+        self._assert_wal_owner()
         if self.state not in {STATE_IN_FLIGHT, STATE_TRAIL_LOCK} or not self.payload:
             return False
 
@@ -577,6 +1035,7 @@ class ActivePositionManager:
         - Dynamic Volatility Ratchet: Requires 1.2 ATR progress before breakeven lock.
         - Decoupled Runner Mode: Protects runners from microscopic 4-point spot jitter.
         """
+        self._assert_wal_owner()
         if self.state not in {STATE_IN_FLIGHT, STATE_TRAIL_LOCK}:
             return self.state, None
 
@@ -602,12 +1061,7 @@ class ActivePositionManager:
                 raw_diff = round(p.opt_exit_ltp - p.opt_entry_ltp, 2)
                 p.runner_exit_ltp = p.opt_exit_ltp
                 p.runner_pnl_pts = raw_diff
-                if p.half_booked and p.tranche_1_pnl_pts is not None:
-                    # Multi-Tranche Blended Accounting: 50% booked at T1 + 50% runner
-                    p.blended_opt_pnl_pts = round(0.5 * p.tranche_1_pnl_pts + 0.5 * p.runner_pnl_pts, 2)
-                    p.opt_pnl_pts = p.blended_opt_pnl_pts
-                else:
-                    p.opt_pnl_pts = raw_diff
+                p.opt_pnl_pts = raw_diff
             self._transition_to(STATE_EXIT_PENDING)
 
         # Invariant: EOD Mandatory Square-Off (15:15:00 IST)
@@ -645,7 +1099,7 @@ class ActivePositionManager:
 
         # 2. Spot Stop Loss / Trailing Stop Hit (Only if NOT in deep runner mode)
         hit_spot_sl = (current_spot <= p.current_sl) if is_ce else (current_spot >= p.current_sl)
-        if hit_spot_sl and not p.half_booked:
+        if hit_spot_sl and not p.runner_target_reached:
             if p.session_gear == "GEAR_1_RANGE" or p.trail_locked:
                 _record_tick_exit("TRAILING_STOP_HIT" if p.trail_locked else "STOP_LOSS_HIT", p.current_sl)
                 return self.liquidate()
@@ -653,7 +1107,7 @@ class ActivePositionManager:
         # 3. Peak Giveback Clamp (Tiers 1 & 2)
         # Prevents trades that gained +12% to +30%+ from round-tripping into red stops
         # (Only active before Target 1 half-booking; once half-booked, Chandelier takes over trailing)
-        if current_opt_ltp is not None and p.opt_entry_ltp is not None and p.opt_peak_hwm is not None and not p.half_booked:
+        if current_opt_ltp is not None and p.opt_entry_ltp is not None and p.opt_peak_hwm is not None and not p.runner_target_reached:
             opt_entry = p.opt_entry_ltp
             peak_gain_pct = (p.opt_peak_hwm - opt_entry) / max(opt_entry, 1.0)
             
@@ -693,8 +1147,15 @@ class ActivePositionManager:
                     p.opt_exit_ltp = current_opt_ltp
                     p.opt_pnl_pts = round(p.opt_exit_ltp - opt_entry, 2)
                     p.pullback_reference_price = current_spot
-                    self.last_completed_trade = asdict(p)
-                    self.trade_history.append(self.last_completed_trade)
+                    summary = asdict(p)
+                    try:
+                        self._record_completed_leg(summary)
+                    except ValueError:
+                        self.state = STATE_RECOVERY_BLOCKED
+                        self.recovery_status = "RECOVERY_BLOCKED"
+                        self._persist_wal_atomic()
+                        raise
+                    self.last_completed_trade = summary
                     self._transition_to(STATE_PULLBACK_WAIT)
                     self._persist_wal_atomic()
                     return self.state, asdict(p)
@@ -709,13 +1170,9 @@ class ActivePositionManager:
             if not p.is_runner_mode:
                 _record_tick_exit("TARGET_HIT", p.target_price)
                 return self.liquidate()
-            elif not p.half_booked:
-                p.half_booked = True
+            elif not p.runner_target_reached:
+                p.runner_target_reached = True
                 p.current_sl = p.entry_price  # Breakeven lock on spot
-                p.opt_half_booked_ltp = current_opt_ltp or p.opt_current_ltp or p.opt_entry_ltp
-                p.opt_half_booked_time = tick_time_str or datetime.now().isoformat()
-                if p.opt_entry_ltp is not None and p.opt_half_booked_ltp is not None:
-                    p.tranche_1_pnl_pts = round(p.opt_half_booked_ltp - p.opt_entry_ltp, 2)
                 
                 # Invariant 1.1 & 1.2: Bounded Giveback Clamp & Monotonic Breakeven Floor
                 opt_entry = p.opt_entry_ltp or 50.0
@@ -734,7 +1191,7 @@ class ActivePositionManager:
                 return self.state, asdict(p)
 
         # 5. Chandelier Option Volatility Trailing Exit or Structural Swing Trailing Exit
-        if p.is_runner_mode and p.half_booked:
+        if p.is_runner_mode and p.runner_target_reached:
             # Check Structural Swing Stop if enabled (15-minute Market Structure Higher Low / Lower High)
             if p.structural_runner_enabled and p.structural_swing_anchor_sl is not None:
                 hit_struct = (current_spot <= p.structural_swing_anchor_sl) if is_ce else (current_spot >= p.structural_swing_anchor_sl)
@@ -772,7 +1229,7 @@ class ActivePositionManager:
         # 7. Time Horizon Exit (Dynamic Expiry Theta Acceleration or Base Hold Horizon)
         # Preserve the time-horizon exemption only for trail-locked runners.
         # A non-runner's configured horizon still applies after its trail locks.
-        if tick_time_str and not p.half_booked and (not p.trail_locked or not p.is_runner_mode):
+        if tick_time_str and not p.runner_target_reached and (not p.trail_locked or not p.is_runner_mode):
             try:
                 entry_dt = datetime.fromisoformat(p.entry_time)
                 cur_dt = datetime.fromisoformat(tick_time_str)
@@ -813,6 +1270,7 @@ class ActivePositionManager:
         - Empirical Option Strike PnL calculation from real WebSocket ticks
         - 50% Fixed Target Book + 50% Runner Trailed via Option High-Watermark (HWM)
         """
+        self._assert_wal_owner()
         if self.state not in {STATE_IN_FLIGHT, STATE_TRAIL_LOCK}:
             return self.state, None
 
@@ -846,11 +1304,7 @@ class ActivePositionManager:
                 raw_diff = round(p.opt_exit_ltp - p.opt_entry_ltp, 2)
                 p.runner_exit_ltp = p.opt_exit_ltp
                 p.runner_pnl_pts = raw_diff
-                if p.half_booked and p.tranche_1_pnl_pts is not None:
-                    p.blended_opt_pnl_pts = round(0.5 * p.tranche_1_pnl_pts + 0.5 * p.runner_pnl_pts, 2)
-                    p.opt_pnl_pts = p.blended_opt_pnl_pts
-                else:
-                    p.opt_pnl_pts = raw_diff
+                p.opt_pnl_pts = raw_diff
             self._transition_to(STATE_EXIT_PENDING)
 
         # Invariant: EOD Mandatory Square-Off (15:15:00 IST)
@@ -864,13 +1318,9 @@ class ActivePositionManager:
                 pass
 
         # 2. Runner Mode Logic: Book 50% at Target, Trail Remaining 50% via Option HWM
-        if p.is_runner_mode and hit_tp and not p.half_booked:
-            p.half_booked = True
+        if p.is_runner_mode and hit_tp and not p.runner_target_reached:
+            p.runner_target_reached = True
             p.trail_locked = True
-            p.opt_half_booked_ltp = current_opt_ltp or p.opt_current_ltp or p.opt_entry_ltp
-            p.opt_half_booked_time = bar_time_str
-            if p.opt_entry_ltp is not None and p.opt_half_booked_ltp is not None:
-                p.tranche_1_pnl_pts = round(p.opt_half_booked_ltp - p.opt_entry_ltp, 2)
 
             # Lock Spot SL to entry + 4.0 pts
             p.current_sl = (p.entry_price + 4.0) if is_ce else (p.entry_price - 4.0)
@@ -899,7 +1349,7 @@ class ActivePositionManager:
             return self.state, asdict(p)
 
         # If in Runner Trailing Mode, check if Option Price hit the HWM trailing stop
-        if p.is_runner_mode and p.half_booked and p.runner_trailing_sl is not None:
+        if p.is_runner_mode and p.runner_target_reached and p.runner_trailing_sl is not None:
             is_sensex = "SENSEX" in p.strike_contract or p.entry_price > 50000.0
             opt_entry = p.opt_entry_ltp or 50.0
             peak_hwm = p.opt_peak_hwm or opt_entry
@@ -910,7 +1360,6 @@ class ActivePositionManager:
             clamped_cushion = min(1.5 * max(atr_1m, 8.0), max(12.0, 0.35 * peak_excursion))
             proposed_sl = round(peak_hwm - clamped_cushion, 2)
             new_opt_sl = max(monotonic_floor, proposed_sl)
-            new_opt_sl = (p.opt_peak_hwm - opt_cushion) if p.opt_peak_hwm else p.runner_trailing_sl
             if new_opt_sl > p.runner_trailing_sl:
                 p.runner_trailing_sl = new_opt_sl
 
@@ -995,12 +1444,20 @@ class ActivePositionManager:
         - GEAR_2_TREND: 60 seconds (allows rapid resumption of trending moves)
         - GEAR_1_RANGE / ROTATIONAL_CHOP: 300 seconds (dampens whipsaw churn)
         """
+        self._assert_wal_owner()
         if self.state != STATE_EXIT_PENDING:
             return self.state, asdict(self.payload) if self.payload else {}
         summary = asdict(self.payload) if self.payload else {}
-        self.last_completed_trade = summary
         if summary:
-            self.trade_history.append(summary)
+            try:
+                self._record_completed_leg(summary)
+            except ValueError:
+                self.state = STATE_RECOVERY_BLOCKED
+                self.recovery_status = "RECOVERY_BLOCKED"
+                # Preserve the uncertain payload and persist the blocked state.
+                self._persist_wal_atomic()
+                raise
+        self.last_completed_trade = summary
 
         # Dynamic regime-scaled cooldown
         if cooldown_seconds is None:
@@ -1016,18 +1473,28 @@ class ActivePositionManager:
             if self.payload:
                 self.cool_off_ref_spot = self.payload.exit_price or self.payload.entry_price
                 self.cool_off_direction = self.payload.direction
-            self._transition_to(STATE_COOL_OFF)
             next_state = STATE_COOL_OFF
         else:
             self.cool_off_until = None
             self.cool_off_ref_spot = None
             self.cool_off_direction = None
-            self._transition_to(STATE_LIQUIDATED)
             next_state = STATE_LIQUIDATED
 
-        # Clear payload for next trade
+        if next_state not in VALID_TRANSITIONS.get(self.state, set()):
+            raise ValueError(f"Illegal liquidation transition from {self.state} to {next_state}")
+
+        # Commit terminal state and cleared payload as one coherent WAL image.
+        # Keeping the old payload in memory until durability succeeds lets the
+        # failure path retain the uncertain position while admission is blocked.
+        previous_payload = self.payload
+        self.state = next_state
         self.payload = None
-        self._persist_wal_atomic(force_sync=True)
+        try:
+            self._persist_wal_atomic(force_sync=True)
+        except Exception:
+            self.payload = previous_payload
+            self.state = STATE_RECOVERY_BLOCKED
+            raise
         return next_state, summary
 
     def evaluate_pullback_reentry(
@@ -1047,6 +1514,7 @@ class ActivePositionManager:
         4. Bar T confirmed structural bounce (e.g. rejection off EMA-9 or VWAP)
         5. Execution occurs at Bar T+1 Open (zero future bar leakage)
         """
+        self._assert_wal_owner()
         if self.state != STATE_PULLBACK_WAIT or self.payload is None:
             return self.state, None
 
@@ -1086,6 +1554,12 @@ class ActivePositionManager:
         p.entry_time = current_time_str or datetime.now().isoformat()
         p.trail_locked = False
         p.half_booked = False
+        p.runner_target_reached = False
+        p.opt_half_booked_ltp = None
+        p.opt_half_booked_time = None
+        p.tranche_1_pnl_pts = None
+        p.remaining_lots = None
+        p.remaining_quantity = None
         p.target_1_hit = False
         p.target_2_hit = False
         p.exit_price = None

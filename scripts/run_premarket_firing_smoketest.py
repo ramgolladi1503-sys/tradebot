@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import logging
 import os
 import sys
 import tempfile
@@ -44,6 +45,8 @@ from core.upstox_stream_broadcaster import (
     UpstoxLevel5DepthRecord,
     UpstoxTickRecord,
 )
+
+logger = logging.getLogger(__name__)
 
 INDEX_LOT_CAPS = {
     "NIFTY": 3,
@@ -87,9 +90,9 @@ def run_smoketest(
     temp_wal = temp_dir / f"smoketest_apm_wal_{pid}.json"
     temp_journal_dir = temp_dir / f"smoketest_journal_{pid}"
     temp_journal_dir.mkdir(parents=True, exist_ok=True)
-
     # 1. Capture initial production WAL hashes
     hashes_before = get_runtime_wal_hashes() if assert_live_wal_clean else {}
+    advisor = None
 
     try:
         # 2. Instantiate strictly isolated journal and adapter
@@ -222,19 +225,33 @@ def run_smoketest(
         return result
 
     finally:
-        # Clean teardown unless keep_artifacts is specified
+        # Release all process-lifetime APM locks before removing temporary WALs.
+        # Sidecar .lock files are intentionally persistent and are never unlinked.
+        shutdown_error = None
+        if advisor is not None:
+            try:
+                shutdown = advisor.shutdown_apm_wal_ownership()
+                if shutdown.get("failures"):
+                    shutdown_error = RuntimeError(
+                        f"smoketest advisor WAL shutdown incomplete: {shutdown['failures']}"
+                    )
+            except Exception as exc:
+                shutdown_error = exc
+
+        # Clean teardown unless keep_artifacts is specified or lock release failed.
         if not keep_artifacts:
-            if temp_wal.exists():
+            if shutdown_error is None and temp_wal.exists():
                 try:
                     temp_wal.unlink()
                 except Exception:
                     pass
             # Also clean companion WAL files created during multi-index setup
-            for companion in temp_dir.glob(f"smoketest_apm_wal_{pid}*.json"):
-                try:
-                    companion.unlink()
-                except Exception:
-                    pass
+            if shutdown_error is None:
+                for companion in temp_dir.glob(f"smoketest_apm_wal_{pid}*.json"):
+                    try:
+                        companion.unlink()
+                    except Exception:
+                        pass
             if temp_journal_dir.exists():
                 try:
                     for f in temp_journal_dir.glob("*"):
@@ -242,6 +259,13 @@ def run_smoketest(
                     temp_journal_dir.rmdir()
                 except Exception:
                     pass
+        if shutdown_error is not None:
+            if sys.exc_info()[0] is None:
+                raise RuntimeError("smoketest could not safely release APM WAL ownership") from shutdown_error
+            logger.error(
+                "Smoketest APM WAL ownership shutdown failed while preserving an earlier error (%s)",
+                type(shutdown_error).__name__,
+            )
 
 
 def main():
