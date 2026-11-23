@@ -40,6 +40,46 @@
       "authority": "TradeBot agent safety constraints",
       "status": "VERIFIED",
       "limitations": "Local policy reference only; this registry cannot prove compliance by itself."
+    },
+    {
+      "source_id": "PR987_R4_USER_REQUEST",
+      "locator": "conversation://current-task/Sentinel-PR987-R4-WAL-Ownership-Correctness",
+      "source_type": "user_requirement",
+      "authority": "Explicit user scope and safety constraints for R4",
+      "status": "VERIFIED",
+      "limitations": "Conversation authorization is not production deployment or live-trading approval."
+    },
+    {
+      "source_id": "PR987_R4_APM_SOURCE",
+      "locator": "core/active_position_manager.py sha256:77faf41dc548ac7f90963390ad6c9eebef2e61ecbb80dc2365fba5ed3bb02771",
+      "source_type": "implementation_source",
+      "authority": "Exact pre-R4 APM source in isolated remediation worktree",
+      "status": "VERIFIED",
+      "limitations": "Hash binds only this pre-fix snapshot; it does not prove behavior beyond reproduced cases."
+    },
+    {
+      "source_id": "PR987_R3_REMEDIATION_REPORT",
+      "locator": "docs/agent_reviews/pr987-r2-controlled-remediation/PR987_R3_TARGETED_REMEDIATION.md",
+      "source_type": "verification_report",
+      "authority": "R3 source identity, test history, and unresolved limitations",
+      "status": "VERIFIED",
+      "limitations": "R3 reported tests are prior evidence and are not R4 post-fix regression results."
+    },
+    {
+      "source_id": "PR987_CODERABBIT_INDEPENDENT_REVIEW",
+      "locator": "docs/agent_reviews/pr987-r2-controlled-remediation/PR987_CODERABBIT_INDEPENDENT_REVIEW.md",
+      "source_type": "independent_code_review",
+      "authority": "CodeRabbit review record and R4 collision claim",
+      "status": "VERIFIED",
+      "limitations": "CodeRabbit claims are independently reproduced only where the R4 report records direct evidence."
+    },
+    {
+      "source_id": "PR987_CODEX_FROZEN_WAL_REPORT",
+      "locator": "/tmp/PR987_WAL_FROZEN_VERIFICATION.md",
+      "source_type": "independent_verification_report",
+      "authority": "Codex frozen WAL verification record",
+      "status": "VERIFIED",
+      "limitations": "Historical report for the R3 bytes; not post-R4 acceptance."
     }
   ]
 }
