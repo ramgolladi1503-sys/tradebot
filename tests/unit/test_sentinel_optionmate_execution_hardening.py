@@ -128,14 +128,14 @@ def _seed_rp1_reversal_case(advisor, tmp_path: Path, side: str) -> None:
     )
     advisor.rbfn_grids_frozen["NIFTY"] = True
     if side == "lower":
-        advisor.bars_5m_history["NIFTY"] = [
+        advisor.bars_5m_strategy_history["NIFTY"] = [
             {"open": 24420.0, "high": 24430.0, "low": 24390.0, "close": 24410.0,
              "volume": 1000, "time": dt_time(12, 0), "timestamp_ms": 0, "epoch_5min": 0},
             {"open": 24420.0, "high": 24435.0, "low": 24410.0, "close": 24430.0,
              "volume": 1000, "time": dt_time(12, 5), "timestamp_ms": 0, "epoch_5min": 0},
         ]
     else:
-        advisor.bars_5m_history["NIFTY"] = [
+        advisor.bars_5m_strategy_history["NIFTY"] = [
             {"open": 24580.0, "high": 24610.0, "low": 24570.0, "close": 24580.0,
              "volume": 1000, "time": dt_time(12, 0), "timestamp_ms": 0, "epoch_5min": 0},
             {"open": 24580.0, "high": 24590.0, "low": 24565.0, "close": 24570.0,
@@ -400,7 +400,7 @@ def test_rp2_fade_producers_snapshot_their_triggering_boundary(
     if variant == "fast":
         current_epoch = _test_bar_epoch(dt_time(11, 25))
         advisor._rp2_session_dates["NIFTY"] = date(2026, 11, 17)
-        advisor.bars_5m_history["NIFTY"] = [
+        advisor.bars_5m_strategy_history["NIFTY"] = [
             {
                 "open": 24000.0, "high": 24020.0, "low": 23980.0, "close": 24000.0,
                 "volume": 45000.0, "time": dt_time(11, 15), "timestamp_ms": (current_epoch - 2) * 300_000,
@@ -492,7 +492,7 @@ def test_rp1_upper_expansion_producer_snapshots_frozen_rp1_boundary(tmp_path: Pa
     advisor.rbfn_grids_frozen["NIFTY"] = True
     prior_epoch = _test_bar_epoch(dt_time(11, 30))
     advisor._rp2_session_dates["NIFTY"] = date(2026, 11, 17)
-    advisor.bars_5m_history["NIFTY"] = [
+    advisor.bars_5m_strategy_history["NIFTY"] = [
         {
             "open": 25570.0,
             "high": 25595.0,
@@ -561,7 +561,7 @@ def test_rp1_lower_expansion_producer_snapshots_frozen_rp1_boundary(tmp_path: Pa
     advisor.rbfn_grids_frozen["NIFTY"] = True
     prior_epoch = _test_bar_epoch(dt_time(11, 30))
     advisor._rp2_session_dates["NIFTY"] = date(2026, 11, 17)
-    advisor.bars_5m_history["NIFTY"] = [
+    advisor.bars_5m_strategy_history["NIFTY"] = [
         {
             "open": 25170.0,
             "high": 25180.0,

@@ -645,6 +645,53 @@ def test_india_local_date_transition_resets_only_current_index_opening_range(tmp
     assert advisor.or_bounds["BANKNIFTY"] == {"high": 48000.0, "low": 47800.0}
 
 
+def test_same_session_spot_does_not_clear_nifty_active_range(tmp_path: Path, monkeypatch):
+    day = date(2026, 11, 18)
+    current_ts = _india_ts(day, dt_time(10, 0))
+    _freeze_advisor_clock(monkeypatch, current_ts)
+    monkeypatch.setenv("UPSTOX_ACCESS_TOKEN", "")
+    advisor = SentinelLiveStreamAdvisor(wal_path=str(tmp_path / "same-session.json"), enable_stdout=False)
+    advisor.trade_lock_active = False
+    advisor._rp2_session_dates["NIFTY"] = day
+    advisor.or_evidence["NIFTY"] = {"session_date": day.isoformat(), "status": "COMPLETE"}
+    advisor.or_bounds["NIFTY"] = {"high": 24050.0, "low": 23950.0}
+    advisor.active_range_high = 24050.0
+    advisor.active_range_low = 23950.0
+
+    assert advisor._update_spot("NIFTY", 24010, current_ts) is True
+    assert advisor.active_range_high == 24050.0
+    assert advisor.active_range_low == 23950.0
+    assert advisor.or_bounds["NIFTY"] == {"high": 24050.0, "low": 23950.0}
+
+
+@pytest.mark.parametrize(("index_name", "spot", "bounds"), [
+    ("SENSEX", 81000.0, {"high": 81000.0, "low": 80800.0}),
+    ("BANKNIFTY", 48000.0, {"high": 48000.0, "low": 47800.0}),
+])
+def test_non_nifty_rollover_preserves_nifty_active_range(
+    tmp_path: Path,
+    monkeypatch,
+    index_name: str,
+    spot: float,
+    bounds: dict[str, float],
+):
+    day = date(2026, 11, 18)
+    transition_ts = _india_ts(day, dt_time(10, 0))
+    _freeze_advisor_clock(monkeypatch, transition_ts)
+    monkeypatch.setenv("UPSTOX_ACCESS_TOKEN", "")
+    advisor = SentinelLiveStreamAdvisor(wal_path=str(tmp_path / f"{index_name.lower()}-rollover.json"), enable_stdout=False)
+    advisor.trade_lock_active = False
+    advisor._rp2_session_dates[index_name] = day - timedelta(days=1)
+    advisor.or_bounds[index_name] = dict(bounds)
+    advisor.active_range_high = 24050.0
+    advisor.active_range_low = 23950.0
+
+    assert advisor._update_spot(index_name, spot, transition_ts) is True
+    assert advisor.or_bounds[index_name] == {"high": -math.inf, "low": math.inf}
+    assert advisor.active_range_high == 24050.0
+    assert advisor.active_range_low == 23950.0
+
+
 @pytest.mark.parametrize(("index_name", "instrument_key"), [
     ("NIFTY", "NSE_FO|45408"),
     ("NIFTY", "NSE_FO|NIFTY26NOV24150CE"),
@@ -1117,8 +1164,12 @@ def test_mode5_bar_abstains_before_history_mutation_without_valid_or(tmp_path: P
     )
     assert signal is not None and signal.action == "ABSTAIN"
     assert signal.veto_reason == "MODE5_TARGET_OR_BOUNDS_INVALID"
-    assert advisor.bars_5m_history["NIFTY"] == []
-    assert json.loads((tmp_path / "or-veto-trace.jsonl").read_text().splitlines()[-1])["reason"] == signal.veto_reason
+    assert len(advisor.bars_5m_history["NIFTY"]) == 1  # raw observation retained
+    assert advisor.bars_5m_strategy_history["NIFTY"] == []  # vetoed bar cannot feed patterns
+    advisor._mode5_trace_queue.join()
+    records = [json.loads(line) for line in (tmp_path / "or-veto-trace.jsonl").read_text().splitlines()]
+    decision_records = [record for record in records if record.get("event_type") == "MODE5_DECISION_TRACE"]
+    assert decision_records[-1]["reason"] == signal.veto_reason
 
 
 @pytest.mark.parametrize("trade_phase", ["OPENING_DRIVE", "CONTINUOUS_STATE_MACHINE"])

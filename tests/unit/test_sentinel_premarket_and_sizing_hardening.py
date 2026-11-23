@@ -400,3 +400,65 @@ def test_tc_sm_04_multi_index_smoketest_and_lot_bounds():
         assert res["apm_state"] == STATE_IN_FLIGHT
         assert res["lots"] >= 1
         assert res["lots"] <= res["lot_cap"]
+
+
+def test_smoketest_repeated_calls_release_wal_ownership_and_keep_sidecars(tmp_path, monkeypatch):
+    monkeypatch.setattr("scripts.run_premarket_firing_smoketest.tempfile.gettempdir", lambda: str(tmp_path))
+    monkeypatch.setenv("UPSTOX_ACCESS_TOKEN", "")
+
+    def reject_http(*args, **kwargs):
+        raise AssertionError("synthetic smoketest attempted an HTTP request")
+
+    monkeypatch.setattr("requests.get", reject_http)
+    wal = tmp_path / f"smoketest_apm_wal_{os.getpid()}.json"
+    lock_path = Path(str(wal) + ".lock")
+    lock_inode = None
+    for _ in range(2):
+        with pytest.raises(AssertionError, match="Expected APM state IN_FLIGHT, got STANDBY"):
+            run_smoketest(index_name="NIFTY", assert_live_wal_clean=False, keep_artifacts=False)
+        assert not wal.exists()  # ordinary exception teardown removes only the WAL
+        assert lock_path.exists()  # the stable sidecar is never unlinked
+        current_inode = lock_path.stat().st_ino
+        if lock_inode is None:
+            lock_inode = current_inode
+        assert current_inode == lock_inode
+        reopened = ActivePositionManager(wal_path=str(wal))
+        reopened.close()
+
+
+def test_smoketest_reports_shutdown_failure_without_masking_existing_error(tmp_path, monkeypatch, caplog):
+    monkeypatch.setattr("scripts.run_premarket_firing_smoketest.tempfile.gettempdir", lambda: str(tmp_path))
+    original_shutdown = SentinelLiveStreamAdvisor.shutdown_apm_wal_ownership
+
+    def report_shutdown_failure(advisor):
+        original_shutdown(advisor)
+        return {"closed": [], "failures": ["injected"], "status": "ERROR"}
+
+    monkeypatch.setattr(SentinelLiveStreamAdvisor, "shutdown_apm_wal_ownership", report_shutdown_failure)
+    with caplog.at_level("ERROR"), pytest.raises(
+        AssertionError, match="Expected APM state IN_FLIGHT, got STANDBY"
+    ):
+        run_smoketest(index_name="NIFTY", assert_live_wal_clean=False, keep_artifacts=False)
+
+    wal = tmp_path / f"smoketest_apm_wal_{os.getpid()}.json"
+    assert "APM WAL ownership shutdown failed while preserving an earlier error" in caplog.text
+    assert Path(str(wal) + ".lock").exists()  # sidecar identity is persistent
+    reopened = ActivePositionManager(wal_path=str(wal))
+    reopened.close()
+
+
+def test_smoketest_exception_path_releases_wal_ownership(tmp_path, monkeypatch):
+    monkeypatch.setattr("scripts.run_premarket_firing_smoketest.tempfile.gettempdir", lambda: str(tmp_path))
+    monkeypatch.setenv("UPSTOX_ACCESS_TOKEN", "")
+    monkeypatch.setattr(
+        SentinelLiveStreamAdvisor,
+        "_evaluate_option_depth",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("injected offline failure")),
+    )
+    with pytest.raises(RuntimeError, match="injected offline failure"):
+        run_smoketest(index_name="NIFTY", assert_live_wal_clean=False, keep_artifacts=False)
+    wal = tmp_path / f"smoketest_apm_wal_{os.getpid()}.json"
+    assert not wal.exists()
+    assert Path(str(wal) + ".lock").exists()
+    reopened = ActivePositionManager(wal_path=str(wal))
+    reopened.close()

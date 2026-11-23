@@ -74,7 +74,7 @@ def test_s2_expansion_breakout_triggers_otm_call(tmp_path):
     
     # RP1_UPPER is 24640.0, RP2_UPPER is 24760.0
     # Add two consecutive 5m bars closing above RP1_UPPER (10-minute hold)
-    advisor.bars_5m_history["NIFTY"].append({
+    advisor.bars_5m_strategy_history["NIFTY"].append({
         "open": 24630.0, "high": 24660.0, "low": 24625.0, "close": 24650.0,
         "volume": 1000, "time": dt_time(12, 15), "timestamp_ms": 1793190000000, "epoch_5min": 100
     })
@@ -109,7 +109,7 @@ def test_s4_expansion_breakdown_triggers_otm_put(tmp_path):
     advisor.session_open_prices["NIFTY"] = 24520.0
 
     # RP1_LOWER is 24400.0, RP2_LOWER is 24280.0
-    advisor.bars_5m_history["NIFTY"].append({
+    advisor.bars_5m_strategy_history["NIFTY"].append({
         "open": 24420.0, "high": 24430.0, "low": 24390.0, "close": 24395.0,
         "volume": 1000, "time": dt_time(12, 15), "timestamp_ms": 1793190000000, "epoch_5min": 100
     })
@@ -162,7 +162,7 @@ def test_rp2_piercing_invalidation_does_not_starve_opposite_side_setup(
 
     previous_close = 24395.0 if pierced_side == "upper" else 24610.0
     previous_epoch = _completed_bar_epoch(dt_time(12, 15))
-    advisor.bars_5m_history["NIFTY"] = [{
+    advisor.bars_5m_strategy_history["NIFTY"] = [{
         "open": previous_close,
         "high": previous_close + 5.0,
         "low": previous_close - 5.0,
@@ -206,7 +206,7 @@ def test_s7_floor_bounce_triggers_reversal_call(tmp_path):
     # Bar tested low <= 24280, then two consecutive closes >= 24280
     epoch_touch = _completed_bar_epoch(dt_time(12, 10))
     epoch_confirm_1 = _completed_bar_epoch(dt_time(12, 15))
-    advisor.bars_5m_history["NIFTY"] = [
+    advisor.bars_5m_strategy_history["NIFTY"] = [
         {"open": 24290.0, "high": 24295.0, "low": 24260.0, "close": 24285.0,
          "volume": 1000, "time": dt_time(12, 10), "timestamp_ms": epoch_touch * 300000, "epoch_5min": epoch_touch},
         {"open": 24285.0, "high": 24310.0, "low": 24280.0, "close": 24300.0,
@@ -267,7 +267,7 @@ def test_rp2_fast_path_suppressed_after_rp1_target_crossed(
     )
     advisor.session_open_prices["NIFTY"] = 24500.0
 
-    advisor.bars_5m_history["NIFTY"] = [
+    advisor.bars_5m_strategy_history["NIFTY"] = [
         {
             "open": prior_close,
             "high": prior_close + 5.0,
@@ -325,7 +325,7 @@ def test_rp2_touch_on_current_bar_does_not_count_as_10m_hold(
         prior_closes = [24320.0, 24310.0]
     else:
         prior_closes = [24680.0, 24690.0]
-    advisor.bars_5m_history["NIFTY"] = [
+    advisor.bars_5m_strategy_history["NIFTY"] = [
         {"open": close, "high": close + 5.0, "low": close - 5.0, "close": close,
          "volume": 1000, "time": dt_time(12, 10 + 5 * i),
          "timestamp_ms": int(datetime.combine(
@@ -378,7 +378,7 @@ def test_rp2_touch_on_previous_bar_has_only_one_post_touch_close(tmp_path, touch
             (24690.0, 24705.0, 24680.0, 24695.0),
         ]
         current = (24695.0, 24699.0, 24690.0, 24695.0)
-    advisor.bars_5m_history["NIFTY"] = [
+    advisor.bars_5m_strategy_history["NIFTY"] = [
         {"open": values[0], "high": values[1], "low": values[2], "close": values[3],
          "volume": 1000, "time": time,
          "timestamp_ms": epochs[i] * 300000, "epoch_5min": epochs[i]}
@@ -424,7 +424,7 @@ def test_rp2_gapped_post_touch_epochs_do_not_qualify_as_10m(tmp_path, touch_side
             (24695.0, 24700.0, 24680.0, 24690.0),
         ]
         current = (24690.0, 24695.0, 24680.0, 24685.0)
-    advisor.bars_5m_history["NIFTY"] = [
+    advisor.bars_5m_strategy_history["NIFTY"] = [
         {"open": values[0], "high": values[1], "low": values[2], "close": values[3],
          "volume": 1000, "time": bar_time,
          "timestamp_ms": epoch * 300000, "epoch_5min": epoch}
@@ -487,7 +487,7 @@ def test_rp2_fast_rejection_remains_available(
     advisor.seed_prior_day_levels("NIFTY", pdh=24600.0, pdl=24400.0, pdc=24500.0, atr_20=160.0)
     advisor.session_open_prices["NIFTY"] = 24500.0
     prior_closes = [24320.0, 24310.0] if touch_side == "lower" else [24680.0, 24690.0]
-    advisor.bars_5m_history["NIFTY"] = [
+    advisor.bars_5m_strategy_history["NIFTY"] = [
         {"open": close, "high": close + 5.0, "low": close - 5.0, "close": close,
          "volume": 1000, "time": dt_time(12, 10 + 5 * i),
          "timestamp_ms": int(datetime.combine(
@@ -543,7 +543,7 @@ def test_rp2_fast_guard_preserves_later_rp1_reversal(
     else:
         prior_closes = [24410.0, 24415.0]
         current = (24380.0, 24430.0, 24280.0, 24410.0)
-    advisor.bars_5m_history["NIFTY"] = [
+    advisor.bars_5m_strategy_history["NIFTY"] = [
         {
             "open": close,
             "high": close + 5.0,

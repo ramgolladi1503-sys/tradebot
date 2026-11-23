@@ -47,6 +47,29 @@ from core.sentinel_live_stream_advisor import (
 )
 
 
+
+def _seed_test_or(advisor, session_date=date(2026, 10, 28), high=24100.0, low=23950.0, bar_time=dt_time(9, 20)):
+    ist = ZoneInfo("Asia/Kolkata")
+    start = datetime.combine(session_date, dt_time(9, 15), tzinfo=ist)
+    complete = bar_time >= dt_time(9, 45)
+    source_time = dt_time(9, 44) if complete else dt_time(9, 15)
+    for idx_name in ("NIFTY", "SENSEX", "BANKNIFTY"):
+        h = 77400.0 if idx_name == "SENSEX" else (51000.0 if idx_name == "BANKNIFTY" else high)
+        l = 76800.0 if idx_name == "SENSEX" else (50500.0 if idx_name == "BANKNIFTY" else low)
+        advisor.or_bounds[idx_name] = {"high": h, "low": l}
+        advisor.or_evidence[idx_name] = {
+            "session_date": session_date.isoformat(),
+            "status": "COMPLETE" if complete else "PARTIAL",
+            "source": "UPSTOX_V2_1M_EXACT_30" if complete else "UPSTOX_TICK_PARTIAL",
+            "source_timestamp_ms": int(datetime.combine(session_date, source_time, tzinfo=ist).timestamp() * 1000),
+            "coverage_count": 30 if complete else 0,
+            "coverage_start_ms": int(start.timestamp() * 1000) if complete else 0,
+            "coverage_end_ms": int(datetime.combine(session_date, dt_time(9, 44), tzinfo=ist).timestamp() * 1000) if complete else 0,
+        }
+        if idx_name == "NIFTY":
+            advisor.active_range_high = h
+            advisor.active_range_low = l
+
 def _make_dummy_depth(
     token: str,
     symbol: str,
@@ -235,6 +258,7 @@ def test_phase_a_opening_drive_aggressive_0920_bullish(tmp_path):
     advisor = SentinelLiveStreamAdvisor(wal_path=str(wal), enable_stdout=False)
     advisor.seed_prior_day_levels("NIFTY", pdh=24100.0, pdl=23900.0, pdc=24000.0, atr_20=160.0)
     advisor.session_open_prices["NIFTY"] = 24000.0
+    _seed_test_or(advisor)
 
     # Trend Decider = 24000.0, RP1 Upper = 24000 + 120 = 24120.0
     # Strong expansion bar closing at 24160 > 24120 (and close > open)
@@ -246,8 +270,8 @@ def test_phase_a_opening_drive_aggressive_0920_bullish(tmp_path):
         bar_close=24160.0,
         bar_volume=60000.0,
         bar_time=dt_time(9, 20),
-        timestamp_ms=1793188800000,
-        epoch_5min=100,
+        timestamp_ms=1793159100000,
+        epoch_5min=5977197,
     )
 
     assert sig is not None
@@ -266,6 +290,7 @@ def test_phase_a_opening_drive_aggressive_0920_bearish(tmp_path):
     advisor = SentinelLiveStreamAdvisor(wal_path=str(wal), enable_stdout=False)
     advisor.seed_prior_day_levels("NIFTY", pdh=24100.0, pdl=23900.0, pdc=24000.0, atr_20=160.0)
     advisor.session_open_prices["NIFTY"] = 24000.0
+    _seed_test_or(advisor)
 
     # Trend Decider = 24000.0, RP1 Lower = 24000 - 120 = 23880.0
     # Strong expansion bar closing at 23850 < 23880 (and close < open)
@@ -277,8 +302,8 @@ def test_phase_a_opening_drive_aggressive_0920_bearish(tmp_path):
         bar_close=23850.0,
         bar_volume=60000.0,
         bar_time=dt_time(9, 20),
-        timestamp_ms=1793188800000,
-        epoch_5min=100,
+        timestamp_ms=1793159100000,
+        epoch_5min=5977197,
     )
 
     assert sig is not None
@@ -309,6 +334,7 @@ def test_phase_a_opening_drive_abstains_when_rp2_target_reached(
         "NIFTY", pdh=24100.0, pdl=23900.0, pdc=24000.0, atr_20=160.0
     )
     advisor.session_open_prices["NIFTY"] = 24000.0
+    _seed_test_or(advisor)
 
     bar_start = datetime.combine(
         date(2026, 11, 17), dt_time(9, 15), tzinfo=ZoneInfo("Asia/Kolkata")
@@ -343,6 +369,7 @@ def test_phase_a_opening_drive_aggressive_0920_veto_weak_expansion(tmp_path):
     advisor = SentinelLiveStreamAdvisor(wal_path=str(wal), enable_stdout=False)
     advisor.seed_prior_day_levels("NIFTY", pdh=24100.0, pdl=23900.0, pdc=24000.0, atr_20=160.0)
     advisor.session_open_prices["NIFTY"] = 24000.0
+    _seed_test_or(advisor)
 
     # Bar opened high (24180) and dumped down to close at 24130 (> RP1 Upper 24120, but close < open)
     sig = advisor._on_5m_bar_close(
@@ -353,8 +380,8 @@ def test_phase_a_opening_drive_aggressive_0920_veto_weak_expansion(tmp_path):
         bar_close=24130.0,
         bar_volume=60000.0,
         bar_time=dt_time(9, 20),
-        timestamp_ms=1793188800000,
-        epoch_5min=100,
+        timestamp_ms=1793159100000,
+        epoch_5min=5977197,
     )
 
     assert sig is not None
@@ -369,19 +396,20 @@ def test_phase_a_opening_drive_conservative_0925_two_candle_confirmation(tmp_pat
     advisor = SentinelLiveStreamAdvisor(wal_path=str(wal), enable_stdout=False)
     advisor.seed_prior_day_levels("NIFTY", pdh=24100.0, pdl=23900.0, pdc=24000.0, atr_20=160.0)
     advisor.session_open_prices["NIFTY"] = 24000.0
+    _seed_test_or(advisor)
 
     # Bar 1 (09:15-09:20): closes at 24140 > 24120
     advisor._on_5m_bar_close(
         index_name="NIFTY",
         bar_open=24010.0, bar_high=24150.0, bar_low=24000.0, bar_close=24140.0,
-        bar_volume=50000.0, bar_time=dt_time(9, 20), timestamp_ms=1793188800000, epoch_5min=100,
+        bar_volume=50000.0, bar_time=dt_time(9, 20), timestamp_ms=1793159100000, epoch_5min=5977197,
     )
 
     # Bar 2 (09:20-09:25): closes at 24160 > 24120
     sig2 = advisor._on_5m_bar_close(
         index_name="NIFTY",
         bar_open=24140.0, bar_high=24170.0, bar_low=24130.0, bar_close=24160.0,
-        bar_volume=50000.0, bar_time=dt_time(9, 25), timestamp_ms=1793764530000, epoch_5min=101,
+        bar_volume=50000.0, bar_time=dt_time(9, 25), timestamp_ms=1793159400000, epoch_5min=5977198,
     )
 
     assert sig2 is not None
@@ -398,19 +426,20 @@ def test_phase_a_opening_drive_conservative_0925_veto_unconfirmed(tmp_path):
     advisor = SentinelLiveStreamAdvisor(wal_path=str(wal), enable_stdout=False)
     advisor.seed_prior_day_levels("NIFTY", pdh=24100.0, pdl=23900.0, pdc=24000.0, atr_20=160.0)
     advisor.session_open_prices["NIFTY"] = 24000.0
+    _seed_test_or(advisor)
 
     # Bar 1 (09:15-09:20): closes at 24140 > 24120
     advisor._on_5m_bar_close(
         index_name="NIFTY",
         bar_open=24010.0, bar_high=24150.0, bar_low=24000.0, bar_close=24140.0,
-        bar_volume=50000.0, bar_time=dt_time(9, 20), timestamp_ms=1793188800000, epoch_5min=100,
+        bar_volume=50000.0, bar_time=dt_time(9, 20), timestamp_ms=1793159100000, epoch_5min=5977197,
     )
 
     # Bar 2 (09:20-09:25): falls back to close inside RP1 at 24090 (< 24120)
     sig2 = advisor._on_5m_bar_close(
         index_name="NIFTY",
         bar_open=24140.0, bar_high=24145.0, bar_low=24080.0, bar_close=24090.0,
-        bar_volume=50000.0, bar_time=dt_time(9, 25), timestamp_ms=1793764530000, epoch_5min=101,
+        bar_volume=50000.0, bar_time=dt_time(9, 25), timestamp_ms=1793159400000, epoch_5min=5977198,
     )
 
     assert sig2 is not None
@@ -459,11 +488,12 @@ def test_strict_gate_2_veto_atr_frictional_hurdle(tmp_path):
     advisor = SentinelLiveStreamAdvisor(wal_path=str(wal), enable_stdout=False)
     advisor.seed_prior_day_levels("NIFTY", pdh=24100.0, pdl=23900.0, pdc=24000.0, atr_20=50.0)  # ATR 50 < 65 calibrated hurdle
     advisor.session_open_prices["NIFTY"] = 24000.0
+    _seed_test_or(advisor)
 
     sig = advisor._on_5m_bar_close(
         index_name="NIFTY",
         bar_open=24010.0, bar_high=24200.0, bar_low=24000.0, bar_close=24180.0,
-        bar_volume=50000.0, bar_time=dt_time(9, 20), timestamp_ms=1793188800000, epoch_5min=100,
+        bar_volume=50000.0, bar_time=dt_time(9, 20), timestamp_ms=1793159100000, epoch_5min=5977197,
     )
 
     assert sig is not None
@@ -479,12 +509,13 @@ def test_strict_gate_2_veto_compression_chop(tmp_path):
     # ATR is 200.0 (hurdle passed). Threshold = 0.35 * 200 = 70.0.
     advisor.seed_prior_day_levels("NIFTY", pdh=24100.0, pdl=23900.0, pdc=24000.0, atr_20=200.0)
     advisor.session_open_prices["NIFTY"] = 24000.0
+    _seed_test_or(advisor)
 
     # Bar range is only 40 pts (24140 - 24100 = 40 < 70)
     sig = advisor._on_5m_bar_close(
         index_name="NIFTY",
         bar_open=24105.0, bar_high=24140.0, bar_low=24100.0, bar_close=24135.0,
-        bar_volume=50000.0, bar_time=dt_time(9, 20), timestamp_ms=1793188800000, epoch_5min=100,
+        bar_volume=50000.0, bar_time=dt_time(9, 20), timestamp_ms=1793159100000, epoch_5min=5977197,
     )
 
     assert sig is not None
@@ -503,21 +534,27 @@ def test_1030_rp2_piercing_invalidation_suppresses_midday_reversal(tmp_path):
     advisor = SentinelLiveStreamAdvisor(wal_path=str(wal), enable_stdout=False)
     advisor.seed_prior_day_levels("NIFTY", pdh=24100.0, pdl=23900.0, pdc=24000.0, atr_20=160.0)
     advisor.session_open_prices["NIFTY"] = 24000.0
+    _seed_test_or(advisor, bar_time=dt_time(11, 30))
 
     # Grid: TD = 24000, RP1 Upper = 24120, RP2 Upper = 24240
-    # At 10:15 AM (before 10:30), spot spikes to 24250 >= RP2 Upper (24240)
+    # At 10:15 AM (before 10:30), spot spikes to 24250 >= RP2 Upper (24240) and low remains blown out above RP2 Upper
     advisor._on_5m_bar_close(
         index_name="NIFTY",
-        bar_open=24180.0, bar_high=24250.0, bar_low=24170.0, bar_close=24220.0,
-        bar_volume=80000.0, bar_time=dt_time(10, 15), timestamp_ms=1793192100000, epoch_5min=110,
+        bar_open=24242.0, bar_high=24255.0, bar_low=24241.0, bar_close=24250.0,
+        bar_volume=80000.0, bar_time=dt_time(10, 15), timestamp_ms=1793162400000, epoch_5min=5977208,
     )
     assert advisor.rp2_pierced_before_1030["NIFTY"] is True
 
-    # At 11:30 AM (Phase B Midday Reversal window), price attempts a 2-bar rejection close below RP1 Upper
+    # At 11:25 & 11:30 AM (Phase B Midday Reversal window), price remains above RP2 Upper (no retest <= 24240)
+    advisor._on_5m_bar_close(
+        index_name="NIFTY",
+        bar_open=24250.0, bar_high=24260.0, bar_low=24245.0, bar_close=24255.0,
+        bar_volume=40000.0, bar_time=dt_time(11, 25), timestamp_ms=1793166600000, epoch_5min=5977222,
+    )
     sig_reversal = advisor._on_5m_bar_close(
         index_name="NIFTY",
-        bar_open=24130.0, bar_high=24135.0, bar_low=24090.0, bar_close=24100.0,
-        bar_volume=40000.0, bar_time=dt_time(11, 30), timestamp_ms=1793196600000, epoch_5min=125,
+        bar_open=24255.0, bar_high=24265.0, bar_low=24242.0, bar_close=24258.0,
+        bar_volume=40000.0, bar_time=dt_time(11, 30), timestamp_ms=1793166900000, epoch_5min=5977223,
     )
 
     # Reversal fade MUST be permanently vetoed because 10:30 RP2 blowout invalidation tripped!
@@ -533,19 +570,20 @@ def test_phase_b_midday_reversal_confirmed_without_rp2_piercing(tmp_path):
     advisor = SentinelLiveStreamAdvisor(wal_path=str(wal), enable_stdout=False)
     advisor.seed_prior_day_levels("NIFTY", pdh=24100.0, pdl=23900.0, pdc=24000.0, atr_20=160.0)
     advisor.session_open_prices["NIFTY"] = 24000.0
+    _seed_test_or(advisor, bar_time=dt_time(11, 30))
 
     # Bar 1 tested RP1 Upper (24120) and closed inside at 24110
     advisor._on_5m_bar_close(
         index_name="NIFTY",
         bar_open=24080.0, bar_high=24130.0, bar_low=24075.0, bar_close=24110.0,
-        bar_volume=40000.0, bar_time=dt_time(11, 25), timestamp_ms=1793196300000, epoch_5min=124,
+        bar_volume=40000.0, bar_time=dt_time(11, 25), timestamp_ms=1793166600000, epoch_5min=5977222,
     )
 
     # Bar 2 confirmed close inside at 24095 (< 24120 - 5.0)
     sig = advisor._on_5m_bar_close(
         index_name="NIFTY",
         bar_open=24110.0, bar_high=24115.0, bar_low=24085.0, bar_close=24095.0,
-        bar_volume=40000.0, bar_time=dt_time(11, 30), timestamp_ms=1793196600000, epoch_5min=125,
+        bar_volume=40000.0, bar_time=dt_time(11, 30), timestamp_ms=1793166900000, epoch_5min=5977223,
     )
 
     assert sig is not None
@@ -568,17 +606,20 @@ def test_opening_shock_freeze_allows_mode_5_while_holding_mode_2(tmp_path):
     advisor.seed_prior_day_levels("NIFTY", pdh=24100.0, pdl=23900.0, pdc=24000.0, atr_20=160.0)
     advisor.spots["NIFTY"] = 24160.0
     advisor.spots_ts_ms["NIFTY"] = 1793764530000
-    advisor.or_bounds["NIFTY"] = {"high": 24100.0, "low": 23980.0}
+    _seed_test_or(advisor, session_date=date(2026, 11, 4), bar_time=dt_time(9, 25))
+    _seed_test_or(advisor, session_date=date(2026, 11, 4), bar_time=dt_time(9, 25))
 
     # At 09:25 IST: in opening shock (< 09:45:00)
     fake_now = datetime(2026, 11, 4, 9, 25, 30)
 
-    with patch("core.sentinel_live_stream_advisor.datetime") as mock_dt:
+    with patch("core.sentinel_live_stream_advisor.datetime") as mock_dt, \
+         patch("core.sentinel_live_stream_advisor.time.time", return_value=1793764530.0), \
+         patch("core.sentinel_live_stream_advisor.time.monotonic_ns", return_value=1000000):
         mock_dt.now.return_value = fake_now
         mock_dt.fromtimestamp = datetime.fromtimestamp
 
         # Case A: Mode 5 signal IS cached for NIFTY 24150 CE
-        advisor.cached_rbfn_signals["NIFTY"] = CachedRBFNAuctionSignal(
+        sig = CachedRBFNAuctionSignal(
             timestamp_ms=1793764530000,
             index_name="NIFTY",
             action="BUY_CALL",
@@ -592,6 +633,8 @@ def test_opening_shock_freeze_allows_mode_5_while_holding_mode_2(tmp_path):
             is_active=True,
             is_vetoed=False,
         )
+        with patch("core.sentinel_live_stream_advisor.time.monotonic_ns", return_value=500000):
+            advisor._cache_rbfn_signal_locked("NIFTY", sig, 5979214)
 
         depth = _make_dummy_depth(
             token="NSE_FO|NIFTY26NOV24150CE",
@@ -654,14 +697,17 @@ def test_apm_single_position_and_cool_off(tmp_path):
     advisor.seed_prior_day_levels("NIFTY", pdh=24100.0, pdl=23900.0, pdc=24000.0, atr_20=160.0)
     advisor.spots["NIFTY"] = 24160.0
     advisor.spots_ts_ms["NIFTY"] = 1793764530000
+    _seed_test_or(advisor, session_date=date(2026, 11, 4), bar_time=dt_time(9, 25))
 
     fake_now = datetime(2026, 11, 4, 9, 25, 30)
 
-    with patch("core.sentinel_live_stream_advisor.datetime") as mock_dt:
+    with patch("core.sentinel_live_stream_advisor.datetime") as mock_dt, \
+         patch("core.sentinel_live_stream_advisor.time.time", return_value=1793764530.0), \
+         patch("core.sentinel_live_stream_advisor.time.monotonic_ns", return_value=1000000):
         mock_dt.now.return_value = fake_now
         mock_dt.fromtimestamp = datetime.fromtimestamp
 
-        advisor.cached_rbfn_signals["NIFTY"] = CachedRBFNAuctionSignal(
+        sig = CachedRBFNAuctionSignal(
             timestamp_ms=1793764530000,
             index_name="NIFTY",
             action="BUY_CALL",
@@ -675,6 +721,8 @@ def test_apm_single_position_and_cool_off(tmp_path):
             is_active=True,
             is_vetoed=False,
         )
+        with patch("core.sentinel_live_stream_advisor.time.monotonic_ns", return_value=500000):
+            advisor._cache_rbfn_signal_locked("NIFTY", sig, 5979214)
 
         depth = _make_dummy_depth(
             token="NSE_FO|NIFTY26NOV24150CE",
@@ -697,7 +745,7 @@ def test_apm_single_position_and_cool_off(tmp_path):
         apm.state = STATE_COOL_OFF
 
         # Re-arm signal
-        advisor.cached_rbfn_signals["NIFTY"] = CachedRBFNAuctionSignal(
+        sig2 = CachedRBFNAuctionSignal(
             timestamp_ms=1793764530000,
             index_name="NIFTY",
             action="BUY_CALL",
@@ -711,6 +759,8 @@ def test_apm_single_position_and_cool_off(tmp_path):
             is_active=True,
             is_vetoed=False,
         )
+        with patch("core.sentinel_live_stream_advisor.time.monotonic_ns", return_value=500000):
+            advisor._cache_rbfn_signal_locked("NIFTY", sig2, 5979214)
 
         advisor.on_depth(depth)
         # Entry rejected because APM is in COOL_OFF
@@ -727,13 +777,14 @@ def test_sensex_optionmate_rbfn_auction_mode_5(tmp_path):
     advisor = SentinelLiveStreamAdvisor(wal_path=str(wal), enable_stdout=False)
     advisor.seed_prior_day_levels("SENSEX", pdh=77200.0, pdl=76800.0, pdc=77000.0, atr_20=550.0)
     advisor.session_open_prices["SENSEX"] = 77000.0
+    _seed_test_or(advisor)
 
     # Trend Decider = 77000, RP1 Upper = 77400, RP2 Upper = 77800 (Dynamic 0.50% step = 400 pts)
     # Strong expansion bar closing at 77450 > 77400
     sig = advisor._on_5m_bar_close(
         index_name="SENSEX",
         bar_open=77050.0, bar_high=77480.0, bar_low=77040.0, bar_close=77450.0,
-        bar_volume=100000.0, bar_time=dt_time(9, 20), timestamp_ms=1793188800000, epoch_5min=100,
+        bar_volume=100000.0, bar_time=dt_time(9, 20), timestamp_ms=1793159100000, epoch_5min=5977197,
     )
 
     assert sig is not None
@@ -790,6 +841,7 @@ def test_mode5_zero_tolerance_rp1_strike_discrimination(tmp_path):
     advisor = SentinelLiveStreamAdvisor(wal_path=str(wal), enable_stdout=False)
     advisor.seed_prior_day_levels("NIFTY", pdh=24100.0, pdl=23900.0, pdc=24000.0, atr_20=160.0)
     advisor.session_open_prices["NIFTY"] = 24000.0
+    _seed_test_or(advisor)
 
     # Trigger opening drive signal targeting RP1 strike 24100 CE
     sig = advisor._on_5m_bar_close(
@@ -800,8 +852,8 @@ def test_mode5_zero_tolerance_rp1_strike_discrimination(tmp_path):
         bar_close=24160.0,
         bar_volume=60000.0,
         bar_time=dt_time(9, 20),
-        timestamp_ms=1793188800000,
-        epoch_5min=100,
+        timestamp_ms=1793159100000,
+        epoch_5min=5977197,
     )
     assert sig is not None
     assert sig.target_strike == 24100.0
