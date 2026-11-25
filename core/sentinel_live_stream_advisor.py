@@ -26,6 +26,7 @@ import hashlib
 import json
 import logging
 import math
+from numbers import Real
 import os
 import queue
 import stat
@@ -34,8 +35,8 @@ import threading
 import time
 import uuid
 from collections import deque
-from dataclasses import dataclass
-from datetime import date, datetime, time as dt_time, timedelta
+from dataclasses import asdict, dataclass
+from datetime import date, datetime, time as dt_time, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional, Dict
 from zoneinfo import ZoneInfo
@@ -118,6 +119,20 @@ from core.upstox_stream_broadcaster import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _wall_clock_seconds() -> float:
+    """Module-local wall clock seam; tests can freeze advisor time without mutating time globally."""
+    return time.time()
+
+
+def _monotonic_clock_ns() -> int:
+    """Module-local monotonic clock seam for deterministic advisor tests."""
+    return time.monotonic_ns()
+
+
+class _ORSnapshotInvalidated(RuntimeError):
+    """A durable OR snapshot lost its session/request fence before memory apply."""
 
 
 @dataclass(slots=True, frozen=True)
@@ -243,6 +258,20 @@ MODE_5_RP1_EXPANSIONS: set[str] = {
     "RP1_UPPER_10M_EXPANSION_BREAKOUT",
     "RP1_LOWER_10M_EXPANSION_BREAKDOWN",
 }
+
+# Candidate-only profile: shared Sentinel overlays are observable diagnostics,
+# not Mode 5 signal/target/confidence authority. It is deliberately not a
+# runtime-selectable policy. Mode 5 remains non-authorizing below until sizing
+# has an independently reviewed contract.
+MODE5_POLICY_PROFILE = "RBFN_SIGNAL_ONLY_RESEARCH"
+
+
+def mode5_overlays_are_diagnostic(strategy_name: str) -> bool:
+    """Return whether the candidate-only Mode5 overlay policy applies."""
+    return (
+        strategy_name == "OPTIONMATE_RBFN_AUCTION"
+        and MODE5_POLICY_PROFILE == "RBFN_SIGNAL_ONLY_RESEARCH"
+    )
 
 def mode5_rp_exhaustion_displacement(
     setup_reason: str,
@@ -450,6 +479,10 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         # Live eligibility is derived only from validated candle ingestion or
         # a validated persisted completion proof, never from mutable metadata.
         self._trusted_or_proofs: dict[str, tuple[str, str]] = {}
+        # Distinguishes current-process provider receipts from proofs restored
+        # from disk; only the former may preserve an in-memory COMPLETE range
+        # when the durable ledger no longer has admissible proof.
+        self._provider_verified_or_proofs: dict[str, tuple[str, str]] = {}
 
         # If current time is past opening shock (09:45), trade lock is cleared
         self.trade_lock_active = (datetime.now(ZoneInfo("Asia/Kolkata")).time() < self.opening_shock_end_time)
@@ -774,6 +807,12 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             "SENSEX": None,
             "BANKNIFTY": None,
         }
+        self._mode5_policy_observed_generation: dict[str, Optional[int]] = {
+            "NIFTY": None,
+            "SENSEX": None,
+            "BANKNIFTY": None,
+        }
+        self._mode5_bar_policy_observations: dict[str, dict[str, Any]] = {}
         self._mode5_post_lock_trace_local = threading.local()
         self._mode5_quote_trace_active_generation: dict[str, Optional[int]] = {
             "NIFTY": None,
@@ -971,7 +1010,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             "terminal_reason": terminal_reason,
             "record_origin": "LOCAL_APM" if terminal_state.startswith("APM_ENTRY_") else "MODE5_LIFECYCLE",
             "broker_fill_confirmed": False,
-            "timestamp_ms": timestamp_ms or int(time.time() * 1000),
+            "timestamp_ms": timestamp_ms or int(_wall_clock_seconds() * 1000),
         }
         self._publish_mode5_lifecycle_record(record)
 
@@ -993,7 +1032,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             "candidate_stage": stage,
             "record_origin": "LOCAL_APM",
             "broker_fill_confirmed": False,
-            "timestamp_ms": timestamp_ms if timestamp_ms is not None else int(time.time() * 1000),
+            "timestamp_ms": timestamp_ms if timestamp_ms is not None else int(_wall_clock_seconds() * 1000),
         })
 
     def _mode5_trace_health_changed(self, **updates: Any) -> None:
@@ -1261,7 +1300,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             ts_ms = (
                 timestamp_ms
                 if isinstance(timestamp_ms, int) and not isinstance(timestamp_ms, bool) and timestamp_ms > 0
-                else int(time.time() * 1000)
+                else int(_wall_clock_seconds() * 1000)
             )
             with self._lock:
                 metadata = self._cached_rbfn_candidate_meta.get(index_name)
@@ -1307,7 +1346,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         ts_ms = (
             timestamp_ms
             if isinstance(timestamp_ms, int) and not isinstance(timestamp_ms, bool) and timestamp_ms > 0
-            else int(time.time() * 1000)
+            else int(_wall_clock_seconds() * 1000)
         )
         try:
             details_snapshot = copy.deepcopy(details or {})
@@ -1378,16 +1417,59 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         t = check_time or datetime.now(ZoneInfo("Asia/Kolkata")).time()
         return t >= self.eod_entry_freeze_time
 
-    @staticmethod
-    def _source_timestamp_exceeds_future_skew(timestamp_ms: int) -> bool:
+    def _source_timestamp_exceeds_future_skew(
+        self, timestamp_ms: int, *, wall_now_ms: Optional[int] = None
+    ) -> bool:
         """Fail closed when a source timestamp exceeds the configured future-clock allowance."""
         try:
+            if isinstance(timestamp_ms, bool) or not isinstance(timestamp_ms, Real):
+                return True
+            source_ms = float(timestamp_ms)
+            if not math.isfinite(source_ms) or source_ms <= 0:
+                return True
             max_skew_sec = float(app_config.MAX_CLOCK_SKEW_SEC)
             if not math.isfinite(max_skew_sec) or max_skew_sec < 0:
                 return True
-            return (float(timestamp_ms) - (time.time() * 1000.0)) > max_skew_sec * 1000.0
-        except (AttributeError, TypeError, ValueError, OverflowError):
+            if wall_now_ms is not None:
+                now_ms = wall_now_ms
+            else:
+                # Keep one guarded clock contract for live and replay. Replay
+                # resolves through session_clock; live resolves through the
+                # host clock, and either missing clock fails closed.
+                now_ms = self._decision_wall_clock_ms()
+                if now_ms is None:
+                    return True
+            if isinstance(now_ms, bool) or not isinstance(now_ms, Real):
+                return True
+            current_ms = float(now_ms)
+            if not math.isfinite(current_ms) or current_ms <= 0:
+                return True
+            return (source_ms - current_ms) > max_skew_sec * 1000.0
+        except Exception:
             return True
+
+    def _decision_wall_clock_ms(self) -> Optional[int]:
+        """Return the authoritative evaluation wall clock, or None when it is unusable."""
+        try:
+            if self.replay_mode:
+                if self.session_clock is None:
+                    return None
+                current = self.session_clock()
+                if (
+                    not isinstance(current, datetime)
+                    or current.tzinfo is None
+                    or current.utcoffset() is None
+                ):
+                    return None
+                value = current.timestamp() * 1000.0
+            else:
+                value = _wall_clock_seconds() * 1000.0
+            if not math.isfinite(value) or value <= 0:
+                return None
+            return int(value)
+        except Exception:
+            # A broken or unavailable clock must never authorize evaluation.
+            return None
 
     @staticmethod
     def _canonical_option_instrument_key(index_name: str, raw_key: Any) -> Optional[str]:
@@ -1437,6 +1519,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         status: str = "COMPLETE",
         source_timestamp_ms: Optional[int] = None,
         source: Optional[str] = None,
+        available_at_ms: Optional[int] = None,
     ) -> None:
         """Seed synthetic opening-range fixtures; cannot establish live provenance."""
         with self._lock:
@@ -1458,6 +1541,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 "status": status,
                 "source": src,
                 "source_timestamp_ms": src_ts,
+                "available_at_ms": available_at_ms,
                 "coverage_count": coverage_count,
                 "coverage_start_ms": expected_start if status == "COMPLETE" else 0,
                 "coverage_end_ms": expected_end if status == "COMPLETE" else 0,
@@ -1839,7 +1923,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         )
         self._cached_rbfn_candidate_meta[index_name] = CachedRBFNCandidateMetadata(
             generation=generation,
-            issued_monotonic_ns=time.monotonic_ns(),
+            issued_monotonic_ns=_monotonic_clock_ns(),
             boundary_timestamp_ms=boundary_ms,
             session_day=session_day,
             status="AVAILABLE" if actionable else "SUPERSEDED_BY_ABSTENTION",
@@ -1930,7 +2014,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         metadata = self._cached_rbfn_candidate_meta.get(index_name)
         if signal is None or metadata is None or metadata.status != "AVAILABLE":
             return None, None
-        current_ns = time.monotonic_ns() if now_ns is None else now_ns
+        current_ns = _monotonic_clock_ns() if now_ns is None else now_ns
         if isinstance(current_ns, bool) or not isinstance(current_ns, int) or current_ns < metadata.issued_monotonic_ns:
             self._clear_cached_rbfn_candidate_locked(index_name, "INVALID_MONOTONIC_CLOCK")
             return None, None
@@ -1943,6 +2027,20 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         if not signal.is_active or signal.is_vetoed or signal.action not in {"BUY_CALL", "BUY_PUT"}:
             return None, None
         return signal, metadata
+
+    def _mode5_candidate_state_locked(
+        self, index_name: str, generation: int
+    ) -> tuple[str, str]:
+        """Describe current generation without turning a suppressed quote into a terminal state."""
+        metadata = self._cached_rbfn_candidate_meta.get(index_name)
+        signal = self.cached_rbfn_signals.get(index_name)
+        if metadata is None:
+            return "UNAVAILABLE", "NO_CURRENT_CANDIDATE"
+        if metadata.generation != generation:
+            return "SUPERSEDED", "CANDIDATE_GENERATION_CHANGED"
+        if metadata.status == "AVAILABLE" and signal is not None:
+            return "AVAILABLE", "RETRYABLE_QUOTE_SUPPRESSION"
+        return "TERMINAL", str(metadata.status or "UNKNOWN_TERMINAL_STATE")
 
     def _option_quote_identity(
         self,
@@ -1967,8 +2065,17 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             max_skew_sec = float(app_config.MAX_CLOCK_SKEW_SEC)
             if not math.isfinite(max_age_sec) or max_age_sec <= 0 or not math.isfinite(max_skew_sec) or max_skew_sec < 0:
                 return False, "OPTION_DEPTH_INVALID_FRESHNESS_CONFIG", None, None, None
-            current_wall_ms = int(time.time() * 1000) if wall_now_ms is None else wall_now_ms
-            current_monotonic_ns = time.monotonic_ns() if monotonic_now_ns is None else monotonic_now_ns
+            if wall_now_ms is None:
+                wall_now_ms = self._decision_wall_clock_ms()
+                if wall_now_ms is None:
+                    return False, "OPTION_DEPTH_INVALID_CLOCK_OR_FRESHNESS", None, None, None
+            current_wall_ms = wall_now_ms
+            if monotonic_now_ns is None:
+                current_monotonic_ns = (
+                    ingress_ns if self.replay_mode else _monotonic_clock_ns()
+                )
+            else:
+                current_monotonic_ns = monotonic_now_ns
             source_age_sec = (current_wall_ms - timestamp_ms) / 1000.0
             ingress_age_sec = (current_monotonic_ns - ingress_ns) / 1_000_000_000.0
             if source_age_sec > max_age_sec or source_age_sec < -max_skew_sec:
@@ -2013,6 +2120,23 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             token_watermarks[instrument_key] = (quote_day, current[0], current[1])
             return True
 
+    def _option_quote_order_is_current_locked(
+        self, index_name: str, quote_day: date, instrument_key: str,
+        source_order: tuple[int, int],
+    ) -> bool:
+        return self._option_depth_watermarks.get(index_name, {}).get(instrument_key) == (
+            quote_day, source_order[0], source_order[1]
+        )
+
+    def _option_quote_order_is_current(
+        self, index_name: str, quote_day: date, instrument_key: str,
+        source_order: tuple[int, int],
+    ) -> bool:
+        with self._lock:
+            return self._option_quote_order_is_current_locked(
+                index_name, quote_day, instrument_key, source_order
+            )
+
     def _candidate_for_option_depth(
         self, index_name: str, depth: UpstoxLevel5DepthRecord, quote_day: date, instrument_key: str,
         source_order: tuple[int, int], now_ns: Optional[int] = None,
@@ -2021,7 +2145,25 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         suppressions: list[tuple[CachedRBFNAuctionSignal, CachedRBFNCandidateMetadata, str]] = []
         result: tuple[Optional[CachedRBFNAuctionSignal], Optional[int]] = (None, None)
         with self._lock:
-            signal, metadata = self._candidate_snapshot_locked(index_name, now_ns=now_ns)
+            lookup_now_ns = now_ns
+            if not self.replay_mode:
+                try:
+                    lookup_now_ns = _monotonic_clock_ns()
+                except Exception:
+                    return result
+                if (
+                    isinstance(lookup_now_ns, bool)
+                    or not isinstance(lookup_now_ns, int)
+                    or lookup_now_ns <= 0
+                ):
+                    return result
+            elif (
+                isinstance(lookup_now_ns, bool)
+                or not isinstance(lookup_now_ns, int)
+                or lookup_now_ns <= 0
+            ):
+                return result
+            signal, metadata = self._candidate_snapshot_locked(index_name, now_ns=lookup_now_ns)
             if signal is None or metadata is None:
                 return result
             try:
@@ -2042,7 +2184,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 result = (signal, metadata.generation)
         if suppressions:
             decision_ts_ms = (
-                int(time.time() * 1000)
+                int(_wall_clock_seconds() * 1000)
                 if validated_decision_timestamp_ms is None
                 else validated_decision_timestamp_ms
             )
@@ -2104,6 +2246,187 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             status=status,
         )
         self._replace_mode5_trace_generation_locked(index_name, None)
+        return True
+
+    def _record_mode5_policy_observation_and_block_locked(
+        self,
+        index_name: str,
+        generation: int,
+        timestamp_ms: int,
+        observations: dict[str, Any],
+        *,
+        depth: UpstoxLevel5DepthRecord,
+        quote_day: date,
+        instrument_key: str,
+        source_order: tuple[int, int],
+        target_strike: float,
+        tolerance_strikes: int,
+        strike_interval: float,
+        now_ns: int,
+        wall_now_ms: int,
+    ) -> bool:
+        """Terminalize a research-only candidate once and snapshot its overlay diagnostics."""
+        if not self._lock._is_owned():
+            raise RuntimeError("Mode5 policy observation requires advisor lock")
+        metadata = self._cached_rbfn_candidate_meta.get(index_name)
+        signal = self.cached_rbfn_signals.get(index_name)
+        if (
+            metadata is None
+            or signal is None
+            or metadata.generation != generation
+            or metadata.status != "AVAILABLE"
+            or self._mode5_policy_observed_generation.get(index_name) == generation
+        ):
+            return False
+        nonfinite_paths: list[str] = []
+
+        def sanitize(value: Any, path: str = "observations") -> Any:
+            if value is None or isinstance(value, (str, bool, int)):
+                return value
+            if isinstance(value, Real):
+                numeric = float(value)
+                if math.isfinite(numeric):
+                    return numeric
+                nonfinite_paths.append(path)
+                return None
+            if isinstance(value, dict):
+                sanitized: dict[str, Any] = {}
+                for key, item in value.items():
+                    if not isinstance(key, str):
+                        raise TypeError("diagnostic mapping keys must be strings")
+                    sanitized[key] = sanitize(item, f"{path}.{key}")
+                return sanitized
+            if isinstance(value, (list, tuple)):
+                return [sanitize(item, f"{path}[{offset}]") for offset, item in enumerate(value)]
+            raise TypeError(f"unsupported diagnostic value: {type(value).__name__}")
+
+        try:
+            safe_observations = sanitize(observations)
+            safe_observations["diagnostic_sanitization"] = {
+                "status": "NONFINITE_REPLACED_WITH_NULL" if nonfinite_paths else "CLEAN",
+                "replaced_paths": nonfinite_paths,
+            }
+            # Preflight strict serialization before terminalizing the candidate.
+            json.dumps(safe_observations, separators=(",", ":"), allow_nan=False)
+        except (TypeError, ValueError, OverflowError) as exc:
+            logger.warning(
+                "Mode5 candidate retained because diagnostics are not strict JSON: %s",
+                type(exc).__name__,
+            )
+            return False
+        # Revalidate the complete quote/candidate contract at the actual point
+        # of candidate consumption. A newer watermark or a non-target contract
+        # may have appeared while the overlay observations were computed.
+        current_signal, current_metadata = self._candidate_snapshot_locked(
+            index_name, now_ns=now_ns
+        )
+        if (
+            current_signal is None
+            or current_metadata is None
+            or current_metadata.generation != generation
+            or not self.strike_resolver.is_contract_matching(
+                symbol=depth.symbol,
+                target_strike=target_strike,
+                option_type=current_signal.direction,
+                tolerance_strikes=tolerance_strikes,
+                strike_interval=strike_interval,
+            )
+        ):
+            return False
+        authorized, _ = self._final_candidate_authorization_locked(
+            index_name=index_name,
+            generation=generation,
+            depth=depth,
+            quote_day=quote_day,
+            instrument_key=instrument_key,
+            source_order=source_order,
+            now_ns=now_ns,
+            wall_now_ms=wall_now_ms,
+        )
+        if not authorized:
+            return False
+        final_or_valid, final_or_reason, final_or_details = self._validate_mode5_or_pair(
+            index_name,
+            depth.exchange_timestamp_ms,
+            metadata.boundary_timestamp_ms,
+            self._observed_ingress_timestamp_ms(depth.ingress_wall_utc),
+        )
+        opening_range = {
+            "valid": final_or_valid,
+            "reason": final_or_reason,
+            "decision_authority": "DIAGNOSTIC_ONLY",
+            **final_or_details,
+        }
+        safe_opening_range = self._sanitize_mode5_or_telemetry(opening_range)
+        safe_observations["opening_range"] = safe_opening_range
+        safe_observations["diagnostic_sanitization"] = {
+            "status": "NONFINITE_REPLACED_WITH_NULL" if nonfinite_paths else "CLEAN",
+            "replaced_paths": nonfinite_paths,
+        }
+        policy_record = {
+            "event_type": "MODE5_POLICY_OBSERVATION",
+            "index_name": index_name,
+            "session_date": metadata.session_day.isoformat(),
+            "candidate_generation": generation,
+            "candidate_id": self._mode5_candidate_id(
+                index_name, metadata.session_day, generation
+            ),
+            "candidate_action": signal.action,
+            "candidate_setup": signal.setup_reason,
+            "candidate_state": "NON_AUTHORIZING",
+            "policy_profile": MODE5_POLICY_PROFILE,
+            "authorization_block": "MODE5_SIZING_POLICY_UNVERIFIED",
+            "allowed_for_live_execution": False,
+            "observations": safe_observations,
+            "timestamp_ms": timestamp_ms,
+        }
+        try:
+            json.dumps(policy_record, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+            json.dumps(safe_opening_range, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+        except (TypeError, ValueError, OverflowError):
+            logger.warning("Mode5 candidate retained because final diagnostics are not strict JSON")
+            return False
+        if self.replay_mode:
+            recheck_wall_ms = self._decision_wall_clock_ms()
+            if recheck_wall_ms is None:
+                logger.warning("Mode5 replay quote recheck has no explicit aware event clock")
+                return False
+            recheck_monotonic_ns = now_ns
+        else:
+            recheck_wall_ms = self._decision_wall_clock_ms()
+            if recheck_wall_ms is None:
+                logger.warning("Mode5 quote recheck has no usable wall clock")
+                return False
+            recheck_monotonic_ns = _monotonic_clock_ns()
+        final_authorized, final_reason = self._final_candidate_authorization_locked(
+            index_name=index_name,
+            generation=generation,
+            depth=depth,
+            quote_day=quote_day,
+            instrument_key=instrument_key,
+            source_order=source_order,
+            now_ns=recheck_monotonic_ns,
+            wall_now_ms=recheck_wall_ms,
+        )
+        if not final_authorized:
+            logger.info("Mode5 diagnostic candidate retained after final quote recheck: %s", final_reason)
+            return False
+        if not self._consume_cached_rbfn_candidate_locked(
+            index_name, generation, "MODE5_SIZING_POLICY_UNVERIFIED"
+        ):
+            return False
+        self.log_decision_trace(
+            index_name=index_name,
+            bar_time=signal.bar_time,
+            action=signal.action,
+            reason="MODE5_OR_FINAL_DIAGNOSTIC_ONLY",
+            details=safe_opening_range,
+            timestamp_ms=depth.exchange_timestamp_ms,
+            candidate_generation=generation,
+        )
+        self._mode5_policy_observed_generation[index_name] = generation
+        self.record_veto("MODE5_AUTHORIZATION", "MODE5_SIZING_POLICY_UNVERIFIED")
+        self._publish_mode5_lifecycle_record(policy_record)
         return True
 
     def get_valid_cached_rbfn_signal(
@@ -2197,7 +2520,10 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 idx_key = "BANKNIFTY"
 
             if idx_key is not None and not self._update_spot(
-                idx_key, tick.ltp, tick.exchange_timestamp_ms
+                idx_key,
+                tick.ltp,
+                tick.exchange_timestamp_ms,
+                available_at_ms=self._observed_ingress_timestamp_ms(tick.ingress_wall_utc),
             ):
                 return
 
@@ -2281,7 +2607,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         completed_epoch = bucket_5m.bucket_epoch_5min
                         if completed_epoch not in self.evaluated_5m_epochs[idx_key]:
                             bar_time = datetime.fromtimestamp((completed_epoch + 1) * 300, tz=ZoneInfo("Asia/Kolkata")).time()
-                            self._on_5m_bar_close(
+                            self._record_unverified_synthetic_5m_bar_locked(
                                 index_name=idx_key,
                                 bar_open=bucket_5m.open,
                                 bar_high=bucket_5m.high,
@@ -2317,9 +2643,9 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         """Clock-driven reconciler for 5-minute bars to handle low-tick/stale stream periods.
 
         Checks all tracked indices under self._lock. If wall_clock_time has crossed into a new
-        5-minute epoch (current_epoch_5min > bucket_5m.bucket_epoch_5min), finalizes the pending bar
-        and evaluates Mode 5 (OPTIONMATE_RBFN_AUCTION) idempotently, ensuring zero duplicate
-        evaluations via self.evaluated_5m_epochs.
+        5-minute epoch (current_epoch_5min > bucket_5m.bucket_epoch_5min), records the pending
+        tick bucket as UNKNOWN_TICK_BUCKET and returns its epoch. It does not evaluate Mode 5;
+        the returned epoch is not evidence that a strategy bar was complete or evaluated.
 
         Args:
             wall_clock_time: Optional reference datetime. Defaults to datetime.now().
@@ -2351,7 +2677,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
                         if completed_epoch not in self.evaluated_5m_epochs[idx_key]:
                             bar_time = datetime.fromtimestamp((completed_epoch + 1) * 300, tz=ZoneInfo("Asia/Kolkata")).time()
-                            self._on_5m_bar_close(
+                            self._record_unverified_synthetic_5m_bar_locked(
                                 index_name=idx_key,
                                 bar_open=bucket_5m.open,
                                 bar_high=bucket_5m.high,
@@ -2370,17 +2696,169 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         self._flush_mode5_lifecycle_records_after_unlock()
         return result
 
+    def _record_unverified_synthetic_5m_bar_locked(
+        self,
+        *,
+        index_name: str,
+        bar_open: float,
+        bar_high: float,
+        bar_low: float,
+        bar_close: float,
+        bar_volume: float,
+        bar_time: dt_time,
+        timestamp_ms: int,
+        epoch_5min: int,
+    ) -> None:
+        """Keep a synthetic tick bar diagnostic-only when coverage is unknown.
+
+        The current stream contract supplies no subscription continuity proof
+        and no authoritative completed five-minute bars. The live tick and
+        clock-reconciliation paths therefore cannot promote their synthetic
+        OHLC to strategy evidence merely because the bucket elapsed.
+        """
+        try:
+            session_day = datetime.fromtimestamp(
+                timestamp_ms / 1000.0, tz=ZoneInfo("Asia/Kolkata")
+            ).date()
+        except (OverflowError, OSError, TypeError, ValueError):
+            session_day = None
+        if session_day is not None:
+            self._reset_rp2_state_for_session(index_name, session_day)
+        raw_record = {
+            "open": bar_open,
+            "high": bar_high,
+            "low": bar_low,
+            "close": bar_close,
+            "volume": bar_volume,
+            "time": bar_time,
+            "timestamp_ms": timestamp_ms,
+            "epoch_5min": epoch_5min,
+            "completeness": "UNKNOWN_TICK_BUCKET",
+        }
+        history = self.bars_5m_history.setdefault(index_name, [])
+        history.append(raw_record)
+        del history[:-4096]
+        candidate_signal = self.cached_rbfn_signals.get(index_name)
+        candidate_meta = self._cached_rbfn_candidate_meta.get(index_name)
+        candidate_exists = candidate_signal is not None or candidate_meta is not None
+        boundary_timestamp_ms = getattr(candidate_meta, "boundary_timestamp_ms", None)
+        candidate_epoch = None
+        candidate_valid = False
+        signal_timestamp_ms = getattr(candidate_signal, "timestamp_ms", None)
+        metadata_generation = getattr(candidate_meta, "generation", None)
+        metadata_session_day = getattr(candidate_meta, "session_day", None)
+        action = getattr(candidate_signal, "action", None)
+        direction = getattr(candidate_signal, "direction", None)
+        try:
+            signal_session_day = (
+                datetime.fromtimestamp(
+                    signal_timestamp_ms / 1000.0, tz=ZoneInfo("Asia/Kolkata")
+                ).date()
+                if isinstance(signal_timestamp_ms, int)
+                and not isinstance(signal_timestamp_ms, bool)
+                and signal_timestamp_ms > 0
+                else None
+            )
+            synthetic_session_day = (
+                datetime.fromtimestamp(
+                    timestamp_ms / 1000.0, tz=ZoneInfo("Asia/Kolkata")
+                ).date()
+                if isinstance(timestamp_ms, int)
+                and not isinstance(timestamp_ms, bool)
+                and timestamp_ms > 0
+                else None
+            )
+        except (OverflowError, OSError, TypeError, ValueError):
+            signal_session_day = None
+            synthetic_session_day = None
+        if (
+            isinstance(epoch_5min, int)
+            and not isinstance(epoch_5min, bool)
+            and epoch_5min >= 0
+            and isinstance(boundary_timestamp_ms, int)
+            and not isinstance(boundary_timestamp_ms, bool)
+            and boundary_timestamp_ms > 0
+        ):
+            candidate_epoch = boundary_timestamp_ms // 300_000 - 1
+
+        current_generation = self._cached_rbfn_generation.get(index_name)
+        candidate_valid = bool(
+            candidate_signal is not None
+            and candidate_meta is not None
+            and isinstance(current_generation, int)
+            and not isinstance(current_generation, bool)
+            and isinstance(metadata_generation, int)
+            and not isinstance(metadata_generation, bool)
+            and metadata_generation == current_generation
+            and getattr(candidate_meta, "status", None) == "AVAILABLE"
+            and isinstance(signal_timestamp_ms, int)
+            and not isinstance(signal_timestamp_ms, bool)
+            and signal_timestamp_ms > 0
+            and isinstance(boundary_timestamp_ms, int)
+            and not isinstance(boundary_timestamp_ms, bool)
+            and boundary_timestamp_ms > 0
+            and boundary_timestamp_ms % 300_000 == 0
+            and candidate_epoch is not None
+            and candidate_epoch >= 0
+            and signal_timestamp_ms // 300_000 == candidate_epoch
+            and getattr(candidate_signal, "index_name", None) == index_name
+            and getattr(candidate_signal, "is_active", False) is True
+            and getattr(candidate_signal, "is_vetoed", True) is False
+            and action in {"BUY_CALL", "BUY_PUT"}
+            and direction == ("CE" if action == "BUY_CALL" else "PE")
+            and type(metadata_session_day) is date
+            and signal_session_day == metadata_session_day
+            and synthetic_session_day == metadata_session_day
+        )
+
+        # The synthetic bucket invalidates only candidates from an older
+        # completed epoch. Same-epoch and newer candidates are outside this
+        # bucket's invalidation authority. A candidate is preserved only when
+        # its signal, generation, action, boundary and session metadata agree;
+        # missing or malformed metadata retains fail-closed clearing.
+        if candidate_exists and (
+            not candidate_valid
+            or candidate_epoch < epoch_5min
+        ):
+            self._clear_cached_rbfn_candidate_locked(
+                index_name, "MODE5_BAR_COMPLETENESS_UNKNOWN"
+            )
+        self._mode5_last_eval_rejection[index_name] = "MODE5_BAR_COMPLETENESS_UNKNOWN"
+        self.record_veto("MODE5_BAR", "MODE5_BAR_COMPLETENESS_UNKNOWN")
+        self._defer_mode5_decision_trace_locked(
+            index_name=index_name,
+            bar_time=bar_time,
+            action="ABSTAIN",
+            reason="MODE5_BAR_COMPLETENESS_UNKNOWN",
+            details={
+                "completeness": "UNKNOWN_TICK_BUCKET",
+                "raw_observation_retained": True,
+                "strategy_history_appended": False,
+                "candidate_generation_created": False,
+            },
+            timestamp_ms=timestamp_ms,
+        )
+
     def on_depth(self, depth: UpstoxLevel5DepthRecord) -> None:
         """Handle incoming Level-5 depth snapshot."""
         token = depth.token
         if "Nifty 50" in token:
-            self._update_spot("NIFTY", depth.ltp, depth.exchange_timestamp_ms)
+            self._update_spot(
+                "NIFTY", depth.ltp, depth.exchange_timestamp_ms,
+                available_at_ms=self._observed_ingress_timestamp_ms(depth.ingress_wall_utc),
+            )
             return
         elif "SENSEX" in token:
-            self._update_spot("SENSEX", depth.ltp, depth.exchange_timestamp_ms)
+            self._update_spot(
+                "SENSEX", depth.ltp, depth.exchange_timestamp_ms,
+                available_at_ms=self._observed_ingress_timestamp_ms(depth.ingress_wall_utc),
+            )
             return
         elif "Nifty Bank" in token:
-            self._update_spot("BANKNIFTY", depth.ltp, depth.exchange_timestamp_ms)
+            self._update_spot(
+                "BANKNIFTY", depth.ltp, depth.exchange_timestamp_ms,
+                available_at_ms=self._observed_ingress_timestamp_ms(depth.ingress_wall_utc),
+            )
             return
 
         # Trigger option assessment on option depth updates (NIFTY, SENSEX, or BANKNIFTY options)
@@ -2393,10 +2871,27 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             "status": "UNSEEDED",
             "source": "NONE",
             "source_timestamp_ms": 0,
+            "available_at_ms": None,
             "coverage_count": 0,
             "coverage_start_ms": 0,
             "coverage_end_ms": 0,
         }
+
+    @staticmethod
+    def _observed_ingress_timestamp_ms(value: Any) -> Optional[int]:
+        """Parse an explicitly observed, timezone-aware local ingress clock."""
+        if not isinstance(value, str) or not value.strip():
+            return None
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+            if parsed.tzinfo is None or parsed.utcoffset() is None:
+                return None
+            stamp = parsed.astimezone(timezone.utc).timestamp() * 1000.0
+        except (OverflowError, OSError, TypeError, ValueError):
+            return None
+        if not math.isfinite(stamp) or stamp <= 0:
+            return None
+        return int(stamp)
 
     @staticmethod
     def _or_candles_digest(candles: list[list[Any]]) -> str:
@@ -2409,6 +2904,31 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         return hashlib.sha256(encoded).hexdigest()
 
     @staticmethod
+    def _or_completion_metadata_digest(proof: dict[str, Any]) -> str:
+        """Checksum persisted proof metadata to detect accidental/torn changes."""
+        metadata = {
+            key: proof.get(key)
+            for key in (
+                "source",
+                "coverage_count",
+                "coverage_start_ms",
+                "coverage_end_ms",
+                "source_timestamp_ms",
+                "available_at_ms",
+                "sha256",
+                "request_id",
+            )
+        }
+        encoded = json.dumps(
+            metadata,
+            ensure_ascii=True,
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    @staticmethod
     def _new_or_reconciliation_ledger(session_day: date) -> dict[str, Any]:
         return {
             "schema_version": 1,
@@ -2417,6 +2937,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 index_name: {
                     "attempt_count": 0,
                     "last_attempt_timestamp_ms": 0,
+                    "request_id": None,
                 }
                 for index_name in ("NIFTY", "BANKNIFTY", "SENSEX")
             },
@@ -2585,9 +3106,22 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     or type(last_attempt_ms) is not int or last_attempt_ms < 0
                     or (attempts == 0) != (last_attempt_ms == 0)):
                 raise ValueError("invalid OR reconciliation attempt counters")
+            legacy_refetch_count = state.get("legacy_availability_refetch_count", 0)
+            legacy_refetch_required = state.get("legacy_availability_refetch_required", False)
+            request_id = state.get("request_id")
+            if request_id is not None and (
+                not isinstance(request_id, str) or not request_id.strip()
+            ):
+                raise ValueError("invalid OR reconciliation request identity")
+            if (type(legacy_refetch_count) is not int or legacy_refetch_count not in (0, 1)
+                    or type(legacy_refetch_required) is not bool):
+                raise ValueError("invalid legacy OR availability refetch state")
             normalized = {
                 "attempt_count": attempts,
                 "last_attempt_timestamp_ms": last_attempt_ms,
+                "legacy_availability_refetch_count": legacy_refetch_count,
+                "legacy_availability_refetch_required": legacy_refetch_required,
+                "request_id": request_id,
             }
             proof = state.get("completion_proof")
             if proof is not None:
@@ -2611,9 +3145,41 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 }
                 if any(proof.get(key) != value for key, value in expected_proof.items()):
                     raise ValueError("OR completion proof metadata mismatch")
+                available_at_ms = proof.get("available_at_ms")
+                if available_at_ms is not None and (
+                    isinstance(available_at_ms, bool)
+                    or not isinstance(available_at_ms, int)
+                    or available_at_ms < parsed["source_timestamp_ms"]
+                ):
+                    raise ValueError("OR completion proof availability timestamp invalid")
+                proof_request_id = proof.get("request_id")
+                if proof_request_id is not None and (
+                    not isinstance(proof_request_id, str) or not proof_request_id.strip()
+                ):
+                    raise ValueError("invalid OR completion proof request identity")
                 if parsed.get("normalized_candles") != candles:
                     raise ValueError("OR completion proof candles are not canonical")
-                normalized["completion_proof"] = proof
+                metadata_digest = proof.get("metadata_sha256")
+                metadata_matches = (
+                    isinstance(metadata_digest, str)
+                    and metadata_digest == self._or_completion_metadata_digest(proof)
+                    and isinstance(proof_request_id, str)
+                    and proof_request_id == request_id
+                )
+                availability_after_attempt = (
+                    available_at_ms is not None
+                    and available_at_ms >= last_attempt_ms
+                )
+                # A proof written before availability timestamps were required
+                # or without an intact metadata checksum is valid evidence of
+                # candle contents only. It cannot establish availability after
+                # the durable request reservation, so retain counters and use
+                # the bounded retry/migration path instead of restoring COMPLETE.
+                if metadata_matches and availability_after_attempt:
+                    normalized["completion_proof"] = proof
+                    normalized["legacy_availability_refetch_required"] = False
+                elif legacy_refetch_count == 0:
+                    normalized["legacy_availability_refetch_required"] = True
             validated_indices[index_name] = normalized
 
         ledger = {
@@ -2668,105 +3234,295 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         return ledger, indices
 
     def _apply_or_ledger_snapshot(
-        self, session_day: date, indices: dict[str, dict[str, Any]]
-    ) -> None:
+        self,
+        session_day: date,
+        indices: dict[str, dict[str, Any]],
+        *,
+        index_names: Optional[set[str]] = None,
+        update_global_state: bool = True,
+        expected_generations: Optional[dict[str, int]] = None,
+        expected_active_sessions: Optional[dict[str, Optional[date]]] = None,
+        request_context: Optional[tuple[str, date, dict[str, int]]] = None,
+    ) -> bool:
         with self._lock:
-            for index_name in self.or_bounds:
-                state = indices[index_name]
-                self.or_reconcile_retry_count[index_name] = state["attempt_count"]
-                self.or_last_reconcile_attempt_ms[index_name] = state["last_attempt_timestamp_ms"]
-                self._or_last_ledger_check_ms[index_name] = state["last_attempt_timestamp_ms"]
-                proof = state.get("completion_proof")
-                if proof is None:
-                    current_evidence = self.or_evidence.get(index_name) or {}
-                    if current_evidence.get("session_date") != session_day.isoformat():
-                        self.or_bounds[index_name] = {"high": -math.inf, "low": math.inf}
-                        self.or_evidence[index_name] = self._empty_or_evidence(session_day)
-                        if index_name == "NIFTY":
-                            self.active_range_high = -math.inf
-                            self.active_range_low = math.inf
-                    continue
-                parsed = self._parse_complete_v2_or_candles(proof["candles"], session_day)
-                if parsed is None:
-                    raise ValueError("validated OR proof failed restore-time parsing")
-                self.or_bounds[index_name] = {"high": parsed["high"], "low": parsed["low"]}
-                self.or_evidence[index_name] = {
-                    "session_date": session_day.isoformat(),
-                    "status": "COMPLETE",
-                    "source": proof["source"],
-                    "source_timestamp_ms": proof["source_timestamp_ms"],
-                    "coverage_count": proof["coverage_count"],
-                    "coverage_start_ms": proof["coverage_start_ms"],
-                    "coverage_end_ms": proof["coverage_end_ms"],
-                }
-                self._trusted_or_proofs[index_name] = (session_day.isoformat(), self._or_candles_digest(proof["candles"]))
-                if index_name == "NIFTY":
-                    self.active_range_high = parsed["high"]
-                    self.active_range_low = parsed["low"]
-            self.or_reconciliation_frozen = all(
-                (self.or_evidence.get(index_name) or {}).get("session_date") == session_day.isoformat()
-                and (self.or_evidence.get(index_name) or {}).get("status") == "COMPLETE"
-                for index_name in self.or_bounds
-            )
-            self._or_reconciliation_loaded_session_day = session_day
+            names = [
+                name for name in self.or_bounds
+                if index_names is None or name in index_names
+            ]
+            with self._or_request_lock:
+                if request_context is not None and not self._or_request_context_matches_under_request_lock(
+                    request_context, names[0] if names else ""
+                ):
+                    return False
+                for index_name in names:
+                    if (
+                        expected_generations is not None
+                        and self._or_generation.get(index_name, 0)
+                        != expected_generations.get(index_name, -1)
+                    ):
+                        return False
+                    current_session = self._rp2_session_dates.get(index_name)
+                    if (
+                        expected_active_sessions is not None
+                        and current_session != expected_active_sessions.get(index_name)
+                    ):
+                        return False
+                    if current_session is not None and current_session > session_day:
+                        return False
+                for index_name in names:
+                    state = indices[index_name]
+                    self.or_reconcile_retry_count[index_name] = state["attempt_count"]
+                    self.or_last_reconcile_attempt_ms[index_name] = state["last_attempt_timestamp_ms"]
+                    self._or_last_ledger_check_ms[index_name] = state["last_attempt_timestamp_ms"]
+                    proof = state.get("completion_proof")
+                    if proof is None:
+                        current_evidence = self.or_evidence.get(index_name) or {}
+                        same_session_complete = (
+                            current_evidence.get("session_date") == session_day.isoformat()
+                            and current_evidence.get("status") == "COMPLETE"
+                        )
+                        current_provider_proof = self._provider_verified_or_proofs.get(index_name)
+                        current_memory_is_provider_verified = (
+                            same_session_complete
+                            and current_provider_proof == (
+                                session_day.isoformat(),
+                                current_evidence.get("proof_sha256"),
+                            )
+                            and isinstance(current_evidence.get("proof_sha256"), str)
+                        )
+                        if (current_evidence.get("session_date") != session_day.isoformat()
+                                or (same_session_complete and not current_memory_is_provider_verified)):
+                            self.or_bounds[index_name] = {"high": -math.inf, "low": math.inf}
+                            self.or_evidence[index_name] = self._empty_or_evidence(session_day)
+                            self._trusted_or_proofs.pop(index_name, None)
+                            self._provider_verified_or_proofs.pop(index_name, None)
+                            if index_name == "NIFTY":
+                                self.active_range_high = -math.inf
+                                self.active_range_low = math.inf
+                        continue
+                    parsed = self._parse_complete_v2_or_candles(proof["candles"], session_day)
+                    if parsed is None:
+                        raise ValueError("validated OR proof failed restore-time parsing")
+                    self.or_bounds[index_name] = {"high": parsed["high"], "low": parsed["low"]}
+                    self.or_evidence[index_name] = {
+                        "session_date": session_day.isoformat(),
+                        "status": "COMPLETE",
+                        "source": proof["source"],
+                        "source_timestamp_ms": proof["source_timestamp_ms"],
+                        "available_at_ms": proof.get("available_at_ms"),
+                        "coverage_count": proof["coverage_count"],
+                        "coverage_start_ms": proof["coverage_start_ms"],
+                        "coverage_end_ms": proof["coverage_end_ms"],
+                        "proof_sha256": self._or_candles_digest(proof["candles"]),
+                    }
+                    self._trusted_or_proofs[index_name] = (
+                        session_day.isoformat(), self._or_candles_digest(proof["candles"])
+                    )
+                    if index_name == "NIFTY":
+                        self.active_range_high = parsed["high"]
+                        self.active_range_low = parsed["low"]
+                if update_global_state:
+                    self.or_reconciliation_frozen = all(
+                        (self.or_evidence.get(index_name) or {}).get("session_date") == session_day.isoformat()
+                        and (self.or_evidence.get(index_name) or {}).get("status") == "COMPLETE"
+                        for index_name in self.or_bounds
+                    )
+                    self._or_reconciliation_loaded_session_day = session_day
+            return True
 
-    def _read_or_ledger_snapshot(self, expected_day: date) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    def _read_or_ledger_snapshot(
+        self, expected_day: date, *, apply_snapshot: bool = True,
+        request_context: Optional[tuple[str, date, dict[str, int]]] = None,
+    ) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+        with self._lock:
+            expected_generations = dict(self._or_generation)
+            expected_active_sessions = dict(self._rp2_session_dates)
         lock_fd, lock_created = self._acquire_or_reconciliation_lock()
         try:
             ledger, indices = self._load_or_reconciliation_ledger_locked(expected_day, lock_created)
-            self._apply_or_ledger_snapshot(expected_day, indices)
+            if apply_snapshot:
+                applied = self._apply_or_ledger_snapshot(
+                    expected_day,
+                    indices,
+                    expected_generations=expected_generations,
+                    expected_active_sessions=expected_active_sessions,
+                    request_context=request_context,
+                )
+                if not applied:
+                    raise _ORSnapshotInvalidated(
+                        "OR ledger snapshot invalidated before in-memory apply"
+                    )
             return ledger, indices
         finally:
             fcntl.flock(lock_fd, fcntl.LOCK_UN)
             os.close(lock_fd)
 
+    def _or_request_context_matches_under_request_lock(
+        self, context: Optional[tuple[str, date, dict[str, int]]], index_name: str
+    ) -> bool:
+        if context is None:
+            return True
+        if not self._or_request_lock.locked():
+            raise RuntimeError("OR context check requires request lock")
+        request_id, session_day, generations = context
+        return (
+            not self._or_reconciliation_stopping.is_set()
+            and self._or_outstanding_request == context
+            and self._or_generation.get(index_name, 0) == generations.get(index_name, -1)
+            and self._rp2_session_dates.get(index_name) in (None, session_day)
+        )
+
+    def _or_snapshot_is_current_under_request_lock(
+        self,
+        session_day: date,
+        index_names: set[str],
+        expected_generations: dict[str, int],
+        request_context: Optional[tuple[str, date, dict[str, int]]] = None,
+    ) -> bool:
+        if not self._or_request_lock.locked():
+            raise RuntimeError("OR snapshot check requires request lock")
+        for index_name in index_names:
+            if self._or_generation.get(index_name, 0) != expected_generations.get(index_name, -1):
+                return False
+            current_session = self._rp2_session_dates.get(index_name)
+            if current_session is not None and current_session > session_day:
+                return False
+            if request_context is not None and not self._or_request_context_matches_under_request_lock(
+                request_context, index_name
+            ):
+                return False
+        return True
+
     def _reserve_or_reconciliation_attempt(
-        self, expected_day: date, index_name: str, now_ms: int, force: bool
+        self, expected_day: date, index_name: str, now_ms: int, force: bool,
+        *, request_id: Optional[str] = None,
+        request_context: Optional[tuple[str, date, dict[str, int]]] = None,
     ) -> tuple[bool, str, int]:
+        if request_id is None:
+            request_id = uuid.uuid4().hex
+        if not isinstance(request_id, str) or not request_id.strip():
+            raise ValueError("OR request identity must be a non-empty string")
+        names = set(self.or_bounds)
+        with self._lock:
+            reservation_generations = dict(self._or_generation)
+            with self._or_request_lock:
+                if not self._or_snapshot_is_current_under_request_lock(
+                    expected_day, names, reservation_generations, request_context
+                ):
+                    return False, "REQUEST_INVALIDATED", self.or_reconcile_retry_count.get(index_name, 0)
         lock_fd, lock_created = self._acquire_or_reconciliation_lock()
         try:
             ledger, indices = self._load_or_reconciliation_ledger_locked(expected_day, lock_created)
-            self._apply_or_ledger_snapshot(expected_day, indices)
+            # A durable retry reservation records when this lock actually
+            # granted the request. A timestamp captured before a prior index's
+            # HTTP wait would otherwise let later per-index reservations share
+            # a stale retry origin.
+            reservation_now_ms = int(_wall_clock_seconds() * 1000.0)
+            if reservation_now_ms <= 0:
+                raise ValueError("OR reservation clock is invalid")
             state = indices[index_name]
             if state.get("completion_proof") is not None:
                 with self._lock:
-                    self._or_last_ledger_check_ms[index_name] = now_ms
+                    self._or_last_ledger_check_ms[index_name] = reservation_now_ms
                 return False, "COMPLETE", state["attempt_count"]
             attempts = state["attempt_count"]
             last_attempt_ms = state["last_attempt_timestamp_ms"]
-            if attempts >= self.OR_MAX_RETRY_ATTEMPTS:
-                with self._lock:
-                    self._or_last_ledger_check_ms[index_name] = now_ms
-                return False, "ATTEMPT_CAP_REACHED", attempts
-            if now_ms < last_attempt_ms:
+            if reservation_now_ms < last_attempt_ms:
                 raise ValueError("OR retry clock moved backward")
-            if not force and last_attempt_ms > 0 and now_ms - last_attempt_ms < self.OR_MIN_RETRY_INTERVAL_MS:
+            if attempts >= self.OR_MAX_RETRY_ATTEMPTS:
+                if (state.get("legacy_availability_refetch_required") is True
+                        and state.get("legacy_availability_refetch_count", 0) == 0):
+                    if (not force and last_attempt_ms > 0
+                            and reservation_now_ms - last_attempt_ms < self.OR_MIN_RETRY_INTERVAL_MS):
+                        with self._lock:
+                            self._or_last_ledger_check_ms[index_name] = reservation_now_ms
+                        return False, "THROTTLED", attempts
+                    # Consume the single compatibility refetch durably before
+                    # the HTTP request. A crash or incomplete response cannot
+                    # turn this into an unbounded retry or reset ordinary
+                    # attempt accounting.
+                    indices[index_name] = {
+                        "attempt_count": attempts,
+                        "last_attempt_timestamp_ms": reservation_now_ms,
+                        "request_id": request_id,
+                        "legacy_availability_refetch_count": 1,
+                        "legacy_availability_refetch_required": False,
+                    }
+                    ledger["indices"] = indices
+                    with self._or_request_lock:
+                        if not self._or_snapshot_is_current_under_request_lock(
+                            expected_day, names, reservation_generations, request_context
+                        ):
+                            return False, "REQUEST_INVALIDATED", attempts
+                        self._write_or_reconciliation_ledger_locked(ledger)
+                    with self._lock:
+                        with self._or_request_lock:
+                            if not self._or_snapshot_is_current_under_request_lock(
+                                expected_day, names, reservation_generations, request_context
+                            ):
+                                return False, "REQUEST_INVALIDATED", attempts
+                            self.or_reconcile_retry_count[index_name] = attempts
+                            self.or_last_reconcile_attempt_ms[index_name] = reservation_now_ms
+                            self._or_last_ledger_check_ms[index_name] = reservation_now_ms
+                            self._or_reconciliation_loaded_session_day = expected_day
+                    return True, "LEGACY_AVAILABILITY_REFETCH_RESERVED", attempts
                 with self._lock:
-                    self._or_last_ledger_check_ms[index_name] = now_ms
+                    self._or_last_ledger_check_ms[index_name] = reservation_now_ms
+                return False, "ATTEMPT_CAP_REACHED", attempts
+            if (not force and last_attempt_ms > 0
+                    and reservation_now_ms - last_attempt_ms < self.OR_MIN_RETRY_INTERVAL_MS):
+                with self._lock:
+                    self._or_last_ledger_check_ms[index_name] = reservation_now_ms
                 return False, "THROTTLED", attempts
 
             next_attempt = attempts + 1
             indices[index_name] = {
                 "attempt_count": next_attempt,
-                "last_attempt_timestamp_ms": now_ms,
+                "last_attempt_timestamp_ms": reservation_now_ms,
+                "request_id": request_id,
+                "legacy_availability_refetch_count": state.get(
+                    "legacy_availability_refetch_count", 0
+                ),
+                "legacy_availability_refetch_required": state.get(
+                    "legacy_availability_refetch_required", False
+                ),
             }
             ledger["indices"] = indices
-            self._write_or_reconciliation_ledger_locked(ledger)
+            with self._or_request_lock:
+                if not self._or_snapshot_is_current_under_request_lock(
+                    expected_day, names, reservation_generations, request_context
+                ):
+                    return False, "REQUEST_INVALIDATED", attempts
+                self._write_or_reconciliation_ledger_locked(ledger)
             with self._lock:
-                self.or_reconcile_retry_count[index_name] = next_attempt
-                self.or_last_reconcile_attempt_ms[index_name] = now_ms
-                self._or_last_ledger_check_ms[index_name] = now_ms
-                self._or_reconciliation_loaded_session_day = expected_day
+                with self._or_request_lock:
+                    if not self._or_snapshot_is_current_under_request_lock(
+                        expected_day, names, reservation_generations, request_context
+                    ):
+                        return False, "REQUEST_INVALIDATED", next_attempt
+                    self.or_reconcile_retry_count[index_name] = next_attempt
+                    self.or_last_reconcile_attempt_ms[index_name] = reservation_now_ms
+                    self._or_last_ledger_check_ms[index_name] = reservation_now_ms
+                    self._or_reconciliation_loaded_session_day = expected_day
             return True, "RESERVED", next_attempt
         finally:
             fcntl.flock(lock_fd, fcntl.LOCK_UN)
             os.close(lock_fd)
 
     def _persist_or_completion_proof(
-        self, expected_day: date, index_name: str, parsed: dict[str, Any]
+        self, expected_day: date, index_name: str, parsed: dict[str, Any],
+        *, available_at_ms: int,
+        request_id: Optional[str] = None,
+        request_context: Optional[tuple[str, date, dict[str, int]]] = None,
     ) -> bool:
         candles = parsed.get("normalized_candles")
         if not isinstance(candles, list) or len(candles) != 30:
+            return False
+        if (
+            isinstance(available_at_ms, bool)
+            or not isinstance(available_at_ms, int)
+            or available_at_ms < parsed["source_timestamp_ms"]
+        ):
             return False
         proof = {
             "source": "UPSTOX_V2_1M_EXACT_30",
@@ -2774,9 +3530,11 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             "coverage_start_ms": parsed["coverage_start_ms"],
             "coverage_end_ms": parsed["coverage_end_ms"],
             "source_timestamp_ms": parsed["source_timestamp_ms"],
+            "available_at_ms": available_at_ms,
             "candles": candles,
             "sha256": self._or_candles_digest(candles),
         }
+        proof["metadata_sha256"] = self._or_completion_metadata_digest(proof)
         lock_fd: Optional[int] = None
         try:
             lock_fd, lock_created = self._acquire_or_reconciliation_lock()
@@ -2784,13 +3542,38 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             state = indices.get(index_name)
             if state is None or state["attempt_count"] <= 0:
                 raise ValueError("OR completion has no durable retry reservation")
+            effective_request_id = request_id or state.get("request_id")
+            if (
+                not isinstance(effective_request_id, str)
+                or not effective_request_id.strip()
+                or effective_request_id != state.get("request_id")
+            ):
+                raise ValueError("OR completion request identity does not match durable reservation")
+            proof["request_id"] = effective_request_id
+            proof["metadata_sha256"] = self._or_completion_metadata_digest(proof)
+            if available_at_ms < state["last_attempt_timestamp_ms"]:
+                raise ValueError("OR completion predates its durable request reservation")
             previous = state.get("completion_proof")
             if previous is not None and previous["sha256"] != proof["sha256"]:
                 raise ValueError("conflicting exact OR completion proof")
-            state["completion_proof"] = proof
+            # The ledger loader exposes only proofs whose metadata checksum and
+            # receipt are admissible for the current durable request attempt.
+            # Preserve that proof verbatim on same-digest retries: a later
+            # response cannot rewrite when the original proof became available.
+            state["completion_proof"] = previous if previous is not None else proof
+            state["legacy_availability_refetch_required"] = False
             indices[index_name] = state
             ledger["indices"] = indices
-            self._write_or_reconciliation_ledger_locked(ledger)
+            if request_context is None:
+                self._write_or_reconciliation_ledger_locked(ledger)
+            else:
+                # Lock ordering stays ledger-file -> advisor -> request, matching
+                # durable reservation. This fences in-process generation/session
+                # changes across the atomic proof commit without schema changes.
+                with self._lock:
+                    if not self._or_request_is_current(request_context, index_name):
+                        return False
+                    self._write_or_reconciliation_ledger_locked(ledger)
             return True
         except Exception as exc:
             logger.error(
@@ -2799,7 +3582,12 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 expected_day.isoformat(),
                 type(exc).__name__,
             )
-            self._or_reconciliation_ledger_degraded = True
+            with self._lock:
+                if (
+                    request_context is None
+                    or self._or_request_is_current(request_context, index_name)
+                ):
+                    self._or_reconciliation_ledger_degraded = True
             return False
         finally:
             if lock_fd is not None:
@@ -2876,11 +3664,15 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
     def _reset_opening_range_for_session_locked(self, index_name: str, session_day: date) -> None:
         # Any index rollover invalidates a multi-index reconciliation response.
-        for name in self._or_generation:
-            self._or_generation[name] += 1
+        # The caller holds advisor lock; take the request lock in the established
+        # advisor -> request order shared with shutdown and proof completion.
+        with self._or_request_lock:
+            for name in self._or_generation:
+                self._or_generation[name] += 1
         self.or_bounds[index_name] = {"high": -math.inf, "low": math.inf}
         self.or_evidence[index_name] = self._empty_or_evidence(session_day)
         self._trusted_or_proofs.pop(index_name, None)
+        self._provider_verified_or_proofs.pop(index_name, None)
         if index_name == "NIFTY":
             self.active_range_high = -math.inf
             self.active_range_low = math.inf
@@ -2903,10 +3695,14 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         if self._or_reconciliation_stopping.is_set():
             return False
         with self._lock:
+            if self._or_reconciliation_stopping.is_set():
+                return False
             generations = dict(self._or_generation)
             request_id = uuid.uuid4().hex
             context = (request_id, session_day, generations)
             with self._or_request_lock:
+                if self._or_reconciliation_stopping.is_set():
+                    return False
                 outstanding = self._or_outstanding_request
                 if outstanding is not None and outstanding[1] == session_day:
                     return False
@@ -2945,12 +3741,15 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
     def shutdown_or_reconciliation_worker(self) -> None:
         """Invalidate pending work; an in-flight response will be discarded."""
-        self._or_reconciliation_stopping.set()
-        with self._or_request_lock:
-            self._or_outstanding_request = None
+        # Proof commits use advisor -> request lock order while holding the
+        # ledger-file lock. Share that order so shutdown either invalidates
+        # first or waits until a proof commit completes; no lock spans HTTP I/O.
         with self._lock:
-            for name in self._or_generation:
-                self._or_generation[name] += 1
+            with self._or_request_lock:
+                self._or_reconciliation_stopping.set()
+                self._or_outstanding_request = None
+                for name in self._or_generation:
+                    self._or_generation[name] += 1
 
     def _or_request_is_current(self, context: Optional[tuple[str, date, dict[str, int]]], index_name: str) -> bool:
         if context is None:
@@ -2990,10 +3789,19 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         _request_context: Optional[tuple[str, date, dict[str, int]]] = None,
     ) -> bool:
         """Retry exact OR reconciliation with a durable per-index attempt budget."""
-        if self.session_clock is not None:
+        if self.replay_mode:
+            # Replay event time is its only admissible clock. It must never
+            # consult the host clock or reserve a live-provider request.
+            if isinstance(current_time_ms, bool) or not isinstance(current_time_ms, int) or current_time_ms <= 0:
+                return False
+            try:
+                now_dt = datetime.fromtimestamp(
+                    current_time_ms / 1000.0, tz=ZoneInfo("Asia/Kolkata")
+                )
+            except (OverflowError, OSError, ValueError):
+                return False
+        elif self.session_clock is not None:
             now_dt = self.session_clock()
-        elif self.replay_mode and current_time_ms is not None:
-            now_dt = datetime.fromtimestamp(current_time_ms / 1000.0, tz=ZoneInfo("Asia/Kolkata"))
         else:
             now_dt = datetime.now(ZoneInfo("Asia/Kolkata"))
 
@@ -3001,13 +3809,13 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         if now_dt.time() < self.opening_shock_end_time:
             return False
 
-        now_ms = current_time_ms if current_time_ms is not None else int(now_dt.timestamp() * 1000)
-        if type(now_ms) is not int or now_ms <= 0:
+        event_timestamp_ms = current_time_ms if current_time_ms is not None else int(now_dt.timestamp() * 1000)
+        if type(event_timestamp_ms) is not int or event_timestamp_ms <= 0:
             logger.error("OR reconciliation blocked: invalid event timestamp")
             return False
         try:
             event_day = datetime.fromtimestamp(
-                now_ms / 1000.0, tz=ZoneInfo("Asia/Kolkata")
+                event_timestamp_ms / 1000.0, tz=ZoneInfo("Asia/Kolkata")
             ).date()
         except (OverflowError, OSError, ValueError):
             logger.error("OR reconciliation blocked: invalid event timestamp")
@@ -3021,13 +3829,30 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             )
             return False
 
+        # Historical replay must not reserve retries, consult wall time, or
+        # call even an injected HTTP client. Its historical OR evidence must
+        # be supplied through the offline evidence path.
+        if self.replay_mode:
+            return False
+
+        request_now_ms = int(_wall_clock_seconds() * 1000.0)
+        if request_now_ms <= 0:
+            logger.error("OR reconciliation blocked: invalid local request clock")
+            return False
+
         if self._or_reconciliation_loaded_session_day != expected_day:
-            if now_ms < self._or_ledger_retry_after_ms:
+            if request_now_ms < self._or_ledger_retry_after_ms:
                 return False
             try:
-                self._read_or_ledger_snapshot(expected_day)
+                self._read_or_ledger_snapshot(
+                    expected_day, request_context=_request_context
+                )
                 self._or_reconciliation_ledger_degraded = False
                 self._or_ledger_retry_after_ms = 0
+            except _ORSnapshotInvalidated:
+                # A rollover/cancellation won during the disk read. Preserve
+                # the newer in-memory session and skip this stale request.
+                return False
             except Exception as exc:
                 logger.error(
                     "OR reconciliation ledger unavailable for session=%s (%s); no API request issued",
@@ -3035,13 +3860,22 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     type(exc).__name__,
                 )
                 self._or_reconciliation_ledger_degraded = True
-                self._or_ledger_retry_after_ms = now_ms + self.OR_MIN_RETRY_INTERVAL_MS
+                self._or_ledger_retry_after_ms = request_now_ms + self.OR_MIN_RETRY_INTERVAL_MS
                 return False
-        elif now_ms < self._or_ledger_retry_after_ms:
+        elif request_now_ms < self._or_ledger_retry_after_ms:
             return False
 
         with self._lock:
-            if self.or_reconciliation_frozen:
+            provider_verified_complete = all(
+                (evidence := self.or_evidence.get(name) or {}).get("session_date")
+                == expected_day.isoformat()
+                and evidence.get("status") == "COMPLETE"
+                and isinstance(evidence.get("proof_sha256"), str)
+                and self._provider_verified_or_proofs.get(name)
+                == (expected_day.isoformat(), evidence.get("proof_sha256"))
+                for name in self.or_bounds
+            )
+            if self.or_reconciliation_frozen and provider_verified_complete:
                 return True
 
         import os
@@ -3064,13 +3898,23 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 continue
             with self._lock:
                 current = self.or_evidence.get(index_name) or {}
-                if current.get("session_date") == expected_day.isoformat() and current.get("status") == "COMPLETE":
+                current_proof_sha = current.get("proof_sha256")
+                provider_proof_matches = (
+                    isinstance(current_proof_sha, str)
+                    and self._provider_verified_or_proofs.get(index_name)
+                    == (expected_day.isoformat(), current_proof_sha)
+                )
+                if (
+                    current.get("session_date") == expected_day.isoformat()
+                    and current.get("status") == "COMPLETE"
+                    and provider_proof_matches
+                ):
                     continue
                 last_attempt_ms = self.or_last_reconcile_attempt_ms.get(index_name, 0)
                 last_check_ms = self._or_last_ledger_check_ms.get(index_name, 0)
                 attempt_count = self.or_reconcile_retry_count.get(index_name, 0)
 
-            if now_ms < max(last_attempt_ms, last_check_ms):
+            if request_now_ms < max(last_attempt_ms, last_check_ms):
                 logger.error(
                     "OR reconciliation clock regressed for %s session=%s; request suppressed",
                     index_name,
@@ -3080,16 +3924,21 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 continue
             if not force:
                 if attempt_count >= self.OR_MAX_RETRY_ATTEMPTS:
-                    if last_check_ms > 0 and now_ms - last_check_ms < self.OR_MIN_RETRY_INTERVAL_MS:
+                    if last_check_ms > 0 and request_now_ms - last_check_ms < self.OR_MIN_RETRY_INTERVAL_MS:
                         all_valid = False
                         continue
-                elif last_attempt_ms > 0 and now_ms - last_attempt_ms < self.OR_MIN_RETRY_INTERVAL_MS:
+                elif last_attempt_ms > 0 and request_now_ms - last_attempt_ms < self.OR_MIN_RETRY_INTERVAL_MS:
                     all_valid = False
                     continue
 
+            with self._lock:
+                proof_reload_generations = dict(self._or_generation)
             try:
+                durable_request_id = uuid.uuid4().hex
                 reserved, reserve_reason, retry_count = self._reserve_or_reconciliation_attempt(
-                    expected_day, index_name, now_ms, force
+                    expected_day, index_name, request_now_ms, force,
+                    request_id=durable_request_id,
+                    request_context=_request_context,
                 )
             except Exception as exc:
                 logger.error(
@@ -3099,10 +3948,55 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     type(exc).__name__,
                 )
                 self._or_reconciliation_ledger_degraded = True
-                self._or_ledger_retry_after_ms = now_ms + self.OR_MIN_RETRY_INTERVAL_MS
+                self._or_ledger_retry_after_ms = request_now_ms + self.OR_MIN_RETRY_INTERVAL_MS
                 all_valid = False
                 continue
             if not reserved:
+                if reserve_reason == "COMPLETE":
+                    try:
+                        _, durable_indices = self._read_or_ledger_snapshot(
+                            expected_day,
+                            request_context=_request_context,
+                        )
+                        durable_proof = durable_indices[index_name].get("completion_proof")
+                        if not isinstance(durable_proof, dict):
+                            raise ValueError("durable COMPLETE reservation has no validated proof")
+                        proof_sha256 = durable_proof.get("sha256")
+                        if not isinstance(proof_sha256, str) or len(proof_sha256) != 64:
+                            raise ValueError("durable COMPLETE proof digest is invalid")
+                        with self._lock:
+                            with self._or_request_lock:
+                                if not self._or_snapshot_is_current_under_request_lock(
+                                    expected_day,
+                                    {index_name},
+                                    proof_reload_generations,
+                                    _request_context,
+                                ):
+                                    raise _ORSnapshotInvalidated(
+                                        "OR completion proof reload invalidated before confirmation"
+                                    )
+                                effective_evidence = self.or_evidence.get(index_name) or {}
+                                if (
+                                    effective_evidence.get("session_date") != expected_day.isoformat()
+                                    or effective_evidence.get("status") != "COMPLETE"
+                                    or effective_evidence.get("proof_sha256") != proof_sha256
+                                ):
+                                    raise ValueError(
+                                        "applied OR completion evidence does not match durable proof"
+                                    )
+                                self._trusted_or_proofs[index_name] = (
+                                    expected_day.isoformat(), proof_sha256
+                                )
+                        continue
+                    except Exception as exc:
+                        all_valid = False
+                        logger.warning(
+                            "OR COMPLETE reservation could not restore validated proof for %s session=%s (%s)",
+                            index_name,
+                            expected_day.isoformat(),
+                            type(exc).__name__,
+                        )
+                        continue
                 if reserve_reason != "COMPLETE":
                     all_valid = False
                     if reserve_reason == "ATTEMPT_CAP_REACHED":
@@ -3114,17 +4008,20 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         )
                 continue
 
+            if not self._or_request_is_current(_request_context, index_name):
+                # The durable attempt can be spent if cancellation wins after
+                # its commit, but no HTTP request may begin under stale context.
+                all_valid = False
+                continue
+
+            response_received_at_ms: Optional[int] = None
             try:
-                if self.replay_mode:
-                    # Invariant: Replay mode strictly suppresses live broker REST calls
-                    candles = None
-                    parsed = None
-                else:
-                    client = self._http_client if self._http_client is not None else requests
-                    url = f"https://api.upstox.com/v2/historical-candle/intraday/{instrument}/1minute"
-                    response = client.get(url, headers=headers, timeout=4)
-                    candles = response.json().get("data", {}).get("candles", []) if getattr(response, "status_code", 0) == 200 else None
-                    parsed = self._parse_complete_v2_or_candles(candles, expected_day)
+                client = self._http_client if self._http_client is not None else requests
+                url = f"https://api.upstox.com/v2/historical-candle/intraday/{instrument}/1minute"
+                response = client.get(url, headers=headers, timeout=4)
+                response_received_at_ms = int(_wall_clock_seconds() * 1000.0)
+                candles = response.json().get("data", {}).get("candles", []) if getattr(response, "status_code", 0) == 200 else None
+                parsed = self._parse_complete_v2_or_candles(candles, expected_day)
             except Exception as exc:
                 logger.warning("Failed to fetch/validate v2 OR candles for %s: %s", index_name, exc)
                 parsed = None
@@ -3151,9 +4048,21 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             if not self._or_request_is_current(_request_context, index_name):
                 all_valid = False
                 continue
-            if not self._persist_or_completion_proof(expected_day, index_name, parsed):
+            if response_received_at_ms is None:
+                all_valid = False
+                continue
+            if not self._persist_or_completion_proof(
+                expected_day,
+                index_name,
+                parsed,
+                available_at_ms=response_received_at_ms,
+                request_id=durable_request_id,
+                request_context=_request_context,
+            ):
                 all_valid = False
                 with self._lock:
+                    if not self._or_request_is_current(_request_context, index_name):
+                        continue
                     current = dict(self.or_evidence.get(index_name) or {})
                     current.update({
                         "session_date": expected_day.isoformat(),
@@ -3164,24 +4073,79 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     self.or_evidence[index_name] = current
                 continue
 
+            # Only this process's successful provider response can establish
+            # provider receipt authority. A disk restore may recover durable
+            # trust, but cannot recreate this current-process marker.
+            provider_receipt_sha256 = self._or_candles_digest(
+                parsed["normalized_candles"]
+            )
+            with self._lock:
+                with self._or_request_lock:
+                    if not self._or_snapshot_is_current_under_request_lock(
+                        expected_day,
+                        {index_name},
+                        proof_reload_generations,
+                        _request_context,
+                    ):
+                        all_valid = False
+                        continue
+                    self._provider_verified_or_proofs[index_name] = (
+                        expected_day.isoformat(), provider_receipt_sha256
+                    )
+
+            try:
+                _, persisted_indices = self._read_or_ledger_snapshot(
+                    expected_day, apply_snapshot=False
+                )
+                effective_proof = persisted_indices[index_name].get("completion_proof")
+            except Exception as exc:
+                logger.error(
+                    "OR completion proof reread failed for %s session=%s (%s)",
+                    index_name,
+                    expected_day.isoformat(),
+                    type(exc).__name__,
+                )
+                effective_proof = None
+            if not isinstance(effective_proof, dict):
+                all_valid = False
+                with self._lock:
+                    if not self._or_request_is_current(_request_context, index_name):
+                        continue
+                    current = dict(self.or_evidence.get(index_name) or {})
+                    current.update({
+                        "session_date": expected_day.isoformat(),
+                        "status": "PENDING_RECONCILIATION",
+                        "source": "OR_EFFECTIVE_PROOF_UNAVAILABLE",
+                        "retry_count": retry_count,
+                    })
+                    self.or_evidence[index_name] = current
+                continue
+
             with self._lock:
                 if not self._or_request_is_current(_request_context, index_name):
                     all_valid = False
                     continue
-                self.or_bounds[index_name] = {"high": parsed["high"], "low": parsed["low"]}
-                self.or_evidence[index_name] = {
-                    "session_date": expected_day.isoformat(),
-                    "status": "COMPLETE",
-                    "source": "UPSTOX_V2_1M_EXACT_30",
-                    "source_timestamp_ms": parsed["source_timestamp_ms"],
-                    "coverage_count": parsed["coverage_count"],
-                    "coverage_start_ms": parsed["coverage_start_ms"],
-                    "coverage_end_ms": parsed["coverage_end_ms"],
-                }
-                self._trusted_or_proofs[index_name] = (expected_day.isoformat(), self._or_candles_digest(parsed["normalized_candles"]))
-                if index_name == "NIFTY":
-                    self.active_range_high = parsed["high"]
-                    self.active_range_low = parsed["low"]
+                expected_digest = self._or_candles_digest(parsed["normalized_candles"])
+                if effective_proof.get("sha256") != expected_digest:
+                    all_valid = False
+                    current = dict(self.or_evidence.get(index_name) or {})
+                    current.update({
+                        "session_date": expected_day.isoformat(),
+                        "status": "PENDING_RECONCILIATION",
+                        "source": "OR_EFFECTIVE_PROOF_CONFLICT",
+                        "retry_count": retry_count,
+                    })
+                    self.or_evidence[index_name] = current
+                    continue
+                self._apply_or_ledger_snapshot(
+                    expected_day,
+                    {index_name: persisted_indices[index_name]},
+                    index_names={index_name},
+                    update_global_state=False,
+                    request_context=_request_context,
+                )
+                proof_sha256 = effective_proof["sha256"]
+                self._provider_verified_or_proofs[index_name] = (expected_day.isoformat(), proof_sha256)
                 if self.enable_stdout:
                     print(f"📥 [OR RECOVERY/RECONCILE] {index_name}: Verified 30 timestamped v2 1m candles -> High={parsed['high']:.2f}, Low={parsed['low']:.2f}")
 
@@ -3200,11 +4164,47 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
         return all_valid
 
+    @staticmethod
+    def _sanitize_mode5_or_telemetry(details: dict[str, Any]) -> dict[str, Any]:
+        """Normalize OR telemetry to strict JSON while reporting every replacement."""
+        replaced_paths: list[str] = []
+
+        def clean(value: Any, path: str) -> Any:
+            if value is None or isinstance(value, (str, bool, int)):
+                return value
+            if isinstance(value, Real):
+                number = float(value)
+                if math.isfinite(number):
+                    return number
+                replaced_paths.append(path)
+                return None
+            if isinstance(value, dict):
+                result: dict[str, Any] = {}
+                for key, item in value.items():
+                    if not isinstance(key, str):
+                        replaced_paths.append(f"{path}.<non_string_key>")
+                        continue
+                    result[key] = clean(item, f"{path}.{key}")
+                return result
+            if isinstance(value, (list, tuple)):
+                return [clean(item, f"{path}[{index}]") for index, item in enumerate(value)]
+            replaced_paths.append(path)
+            return None
+
+        safe = clean(details, "or_details")
+        safe["telemetry_sanitization"] = {
+            "status": "REPLACED_WITH_NULL" if replaced_paths else "CLEAN",
+            "replaced_paths": replaced_paths,
+        }
+        json.dumps(safe, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+        return safe
+
     def _validate_mode5_or_evidence(
         self,
         index_name: str,
         decision_timestamp_ms: int,
         completed_bar_boundary_ms: Optional[int] = None,
+        decision_available_at_ms: Optional[int] = None,
     ) -> tuple[bool, str, dict[str, Any]]:
         """Validate OR evidence against an explicit completed-bar boundary."""
         try:
@@ -3214,6 +4214,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         except (OverflowError, OSError, ValueError):
             return False, "OR_DECISION_TIMESTAMP_INVALID", {"index": index_name}
         with self._lock:
+            snapshot_generation = self._or_generation.get(index_name, 0)
             state = dict(self.or_evidence.get(index_name) or {})
             bounds = dict(self.or_bounds.get(index_name) or {})
         details = {"index": index_name, "evidence": state, "bounds": bounds}
@@ -3237,12 +4238,41 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             high = float(bounds["high"])
             low = float(bounds["low"])
             source_timestamp_ms = int(state.get("source_timestamp_ms") or 0)
+            available_at_ms = state.get("available_at_ms")
         except (KeyError, TypeError, ValueError, OverflowError):
             return False, "OR_EVIDENCE_MISSING", details
         if not (math.isfinite(high) and math.isfinite(low) and low > 0 and high >= low):
-            return False, "OR_BOUNDS_INVALID", details
-        if source_timestamp_ms <= 0 or source_timestamp_ms > completed_bar_boundary_ms:
-            return False, "OR_SOURCE_NONCAUSAL", details
+            return SentinelLiveStreamAdvisor._confirm_or_snapshot_current(
+                self, index_name, snapshot_generation, details, "OR_BOUNDS_INVALID"
+            )
+        if source_timestamp_ms <= 0 or source_timestamp_ms >= completed_bar_boundary_ms:
+            return SentinelLiveStreamAdvisor._confirm_or_snapshot_current(
+                self, index_name, snapshot_generation, details, "OR_SOURCE_NONCAUSAL"
+            )
+        if (
+            isinstance(available_at_ms, bool)
+            or not isinstance(available_at_ms, int)
+            or available_at_ms <= 0
+            or isinstance(decision_available_at_ms, bool)
+            or not isinstance(decision_available_at_ms, int)
+            or decision_available_at_ms <= 0
+        ):
+            return SentinelLiveStreamAdvisor._confirm_or_snapshot_current(
+                self, index_name, snapshot_generation, details, "OR_AVAILABILITY_UNPROVEN"
+            )
+        if available_at_ms < source_timestamp_ms:
+            return SentinelLiveStreamAdvisor._confirm_or_snapshot_current(
+                self, index_name, snapshot_generation, details, "OR_AVAILABILITY_PRECEDES_SOURCE"
+            )
+        if available_at_ms > decision_available_at_ms:
+            return SentinelLiveStreamAdvisor._confirm_or_snapshot_current(
+                self, index_name, snapshot_generation, details, "OR_NOT_AVAILABLE_AT_DECISION"
+            )
+        if available_at_ms == decision_available_at_ms:
+            details["availability_relation"] = "EQUAL_CLOCKS_AMBIGUOUS"
+            return SentinelLiveStreamAdvisor._confirm_or_snapshot_current(
+                self, index_name, snapshot_generation, details, "OR_AVAILABILITY_AMBIGUOUS"
+            )
         try:
             source_dt = datetime.fromtimestamp(
                 source_timestamp_ms / 1000.0, tz=ZoneInfo("Asia/Kolkata")
@@ -3287,33 +4317,61 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         index_name: str,
         decision_timestamp_ms: int,
         completed_bar_boundary_ms: Optional[int] = None,
+        decision_available_at_ms: Optional[int] = None,
     ) -> tuple[bool, str, dict[str, Any]]:
-        target_ok, target_reason, target_detail = self._validate_mode5_or_evidence(
-            index_name, decision_timestamp_ms, completed_bar_boundary_ms
-        )
         companion_index = "SENSEX" if index_name == "NIFTY" else "NIFTY"
-        companion_ok, companion_reason, companion_detail = self._validate_mode5_or_evidence(
-            companion_index, decision_timestamp_ms, completed_bar_boundary_ms
-        )
-        details = {"target": target_detail, "companion": companion_detail}
-        if not target_ok:
-            return False, f"MODE5_TARGET_{target_reason}", details
-        if not companion_ok:
-            return False, f"MODE5_COMPANION_{companion_reason}", details
-        return True, "MODE5_OR_VALID", details
+        with self._lock:
+            # The evidence helper uses this reentrant lock; hold it across both
+            # calls so target and companion are validated from one state view.
+            target_ok, target_reason, target_detail = self._validate_mode5_or_evidence(
+                index_name, decision_timestamp_ms, completed_bar_boundary_ms,
+                decision_available_at_ms,
+            )
+            companion_ok, companion_reason, companion_detail = self._validate_mode5_or_evidence(
+                companion_index, decision_timestamp_ms, completed_bar_boundary_ms,
+                decision_available_at_ms,
+            )
+            details = {"target": target_detail, "companion": companion_detail}
+            details["companion_authority"] = "DIAGNOSTIC_ONLY"
+            details["companion_validation"] = companion_reason if not companion_ok else "VALID"
+            if not target_ok:
+                return False, f"MODE5_TARGET_{target_reason}", details
+            return True, f"MODE5_TARGET_OR_VALID:{target_reason}", details
+
+    def _confirm_or_snapshot_current(
+        self, index_name: str, snapshot_generation: int,
+        details: dict[str, Any], reason: str,
+    ) -> tuple[bool, str, dict[str, Any]]:
+        """Reject an OR result if rollover replaced the evidence after its snapshot."""
+        with self._lock:
+            current_generation = self._or_generation.get(index_name, 0)
+            current_session = (self.or_evidence.get(index_name) or {}).get("session_date")
+        snapshot_session = (details.get("evidence") or {}).get("session_date")
+        if current_generation != snapshot_generation or current_session != snapshot_session:
+            details["snapshot_superseded"] = True
+            return False, "OR_SESSION_SNAPSHOT_SUPERSEDED", details
+        return False, reason, details
 
     def on_stream_status(self, status: Any) -> None:
         pass
 
-    def _update_spot(self, index_name: str, spot: float, ts_ms: int) -> bool:
+    def _update_spot(
+        self, index_name: str, spot: float, ts_ms: int,
+        *, available_at_ms: Optional[int] = None,
+    ) -> bool:
         caller_holds_stream_lock = self._lock._is_owned()
         with self._lock:
-            result = self._update_spot_locked(index_name, spot, ts_ms)
+            result = self._update_spot_locked(
+                index_name, spot, ts_ms, available_at_ms=available_at_ms
+            )
         if result and not caller_holds_stream_lock:
             self._or_request_queue.join()
         return result
 
-    def _update_spot_locked(self, index_name: str, spot: float, ts_ms: int) -> bool:
+    def _update_spot_locked(
+        self, index_name: str, spot: float, ts_ms: int,
+        *, available_at_ms: Optional[int] = None,
+    ) -> bool:
         try:
             spot_value = float(spot)
         except (TypeError, ValueError, OverflowError):
@@ -3364,11 +4422,53 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     if evidence.get("status") != "COMPLETE":
                         b["high"] = max(b["high"], spot_value)
                         b["low"] = min(b["low"], spot_value)
+                        prior_partial = (
+                            evidence.get("source") == "UPSTOX_TICK_PARTIAL"
+                            or evidence.get("partial_availability_unproven") is True
+                        )
+                        current_availability_valid = (
+                            type(available_at_ms) is int
+                            and available_at_ms > 0
+                            and available_at_ms >= ts_ms
+                        )
+                        if prior_partial:
+                            prior_source_ms = evidence.get("source_timestamp_ms")
+                            prior_available_ms = evidence.get("available_at_ms")
+                            prior_availability_valid = (
+                                type(prior_source_ms) is int
+                                and prior_source_ms > 0
+                                and type(prior_available_ms) is int
+                                and prior_available_ms > 0
+                                and prior_available_ms >= prior_source_ms
+                                and evidence.get("partial_availability_unproven") is not True
+                            )
+                            availability_unproven = not (
+                                prior_availability_valid and current_availability_valid
+                            )
+                            if availability_unproven:
+                                aggregate_available_at_ms = None
+                            else:
+                                aggregate_available_at_ms = max(
+                                    prior_available_ms, available_at_ms
+                                )
+                        else:
+                            clean_partial_start = (
+                                evidence.get("status") == "UNSEEDED"
+                                and evidence.get("source") == "NONE"
+                            )
+                            availability_unproven = not (
+                                clean_partial_start and current_availability_valid
+                            )
+                            aggregate_available_at_ms = (
+                                available_at_ms if not availability_unproven else None
+                            )
                         self.or_evidence[index_name] = {
                             "session_date": tick_day.isoformat(),
                             "status": "PARTIAL",
                             "source": "UPSTOX_TICK_PARTIAL",
                             "source_timestamp_ms": ts_ms,
+                            "available_at_ms": aggregate_available_at_ms,
+                            "partial_availability_unproven": availability_unproven,
                             "coverage_count": 0,
                             "coverage_start_ms": 0,
                             "coverage_end_ms": 0,
@@ -3383,7 +4483,8 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 if self.trade_lock_active:
                     self.trade_lock_active = False
                     # Reconcile OR with official 1m candles to eliminate any stream drops or spurious ticks
-                    self._enqueue_or_reconciliation(session_day=tick_day, current_time_ms=ts_ms)
+                    if not self.replay_mode:
+                        self._enqueue_or_reconciliation(session_day=tick_day, current_time_ms=ts_ms)
                     if self.enable_stdout:
                         print("\n🔓 [OPENING SHOCK CONCLUDED] Opening Range Boundaries Established:")
                         for idx, bounds in self.or_bounds.items():
@@ -3391,7 +4492,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                                 rng = bounds["high"] - bounds["low"]
                                 print(f"   • {idx}: OR High={bounds['high']:.1f} | OR Low={bounds['low']:.1f} | Range={rng:.1f} pts")
                         print("🛰️ Sentinel Live Setup Trigger Engine ACTIVE.")
-                elif not self.or_reconciliation_frozen:
+                elif not self.replay_mode and not self.or_reconciliation_frozen:
                     self._enqueue_or_reconciliation(session_day=tick_day, current_time_ms=ts_ms)
         return True
 
@@ -3556,6 +4657,21 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         return True
 
     @staticmethod
+    def _has_consecutive_bar_epochs(history: list[dict[str, Any]], count: int) -> bool:
+        """Require exact adjacent five-minute buckets for multi-bar patterns."""
+        if count <= 0 or len(history) < count:
+            return False
+        epochs: list[int] = []
+        for record in history[-count:]:
+            if not isinstance(record, dict):
+                return False
+            epoch = record.get("epoch_5min")
+            if isinstance(epoch, bool) or not isinstance(epoch, int) or epoch < 0:
+                return False
+            epochs.append(epoch)
+        return all(left + 1 == right for left, right in zip(epochs, epochs[1:]))
+
+    @staticmethod
     def _has_consecutive_rp2_hold_epochs(history: list[dict[str, Any]]) -> bool:
         """Require a touched bar followed by two contiguous five-minute bars."""
         if len(history) < 3:
@@ -3573,7 +4689,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
     def _on_5m_bar_close(
         self, index_name: str, bar_open: float, bar_high: float, bar_low: float,
         bar_close: float, bar_volume: float, bar_time: dt_time, timestamp_ms: int,
-        epoch_5min: int,
+        epoch_5min: int, *, decision_available_at_ms: Optional[int] = None,
     ) -> Optional[CachedRBFNAuctionSignal]:
         caller_holds_stream_lock = self._lock._is_owned()
         try:
@@ -3583,6 +4699,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     result = self._on_5m_bar_close_locked(
                         index_name, bar_open, bar_high, bar_low, bar_close, bar_volume,
                         bar_time, timestamp_ms, epoch_5min,
+                        decision_available_at_ms=decision_available_at_ms,
                     )
                 except Exception as exc:
                     try:
@@ -3642,6 +4759,13 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     self._mode5_candidate_id(index_name, metadata.session_day, metadata.generation)
                     if active_candidate and metadata is not None else None
                 )
+                safe_bar_ohlcv = self._sanitize_mode5_or_telemetry({
+                    "open": bar_open,
+                    "high": bar_high,
+                    "low": bar_low,
+                    "close": bar_close,
+                    "volume": bar_volume,
+                })
                 self._publish_mode5_lifecycle_record({
                     "event_type": "MODE5_EVALUATION_SUMMARY",
                     "evaluation_id": f"{self.trace_run_id}:{session_date}:{index_name}:{epoch_key}",
@@ -3651,7 +4775,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     "epoch_5min": epoch_key,
                     "bar_time": bar_time.strftime("%H:%M:%S") if hasattr(bar_time, "strftime") else str(bar_time),
                     "timestamp_ms": timestamp_ms if isinstance(timestamp_ms, int) and not isinstance(timestamp_ms, bool) else None,
-                    "bar_ohlcv": {"open": bar_open, "high": bar_high, "low": bar_low, "close": bar_close, "volume": bar_volume},
+                    "bar_ohlcv": safe_bar_ohlcv,
                     "evaluation_state": evaluation_state,
                     "candidate_state": candidate_state,
                     "candidate_id": candidate_id,
@@ -3668,7 +4792,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         self._flush_mode5_lifecycle_records_after_unlock()
         # Preserve deterministic direct-call helper semantics while the live
         # on_tick path remains nonblocking under its already-held stream lock.
-        if not caller_holds_stream_lock:
+        if not caller_holds_stream_lock and not self.replay_mode:
             self._or_request_queue.join()
         return result
 
@@ -3683,6 +4807,8 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         bar_time: dt_time,
         timestamp_ms: int,
         epoch_5min: int,
+        *,
+        decision_available_at_ms: Optional[int] = None,
     ) -> Optional[CachedRBFNAuctionSignal]:
         """Evaluates Mode 5 (OPTIONMATE_RBFN_AUCTION) on discrete 5-minute bar close.
         
@@ -3703,7 +4829,11 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             if index_name in self._cached_rbfn_candidate_meta:
                 self._clear_cached_rbfn_candidate_locked(index_name, "INVALID_COMPLETED_BAR")
             return None
-        if self._source_timestamp_exceeds_future_skew(timestamp_ms):
+        evaluation_wall_ms = self._decision_wall_clock_ms()
+        if evaluation_wall_ms is None:
+            self._mode5_last_eval_rejection[index_name] = "INVALID_COMPLETED_BAR_CLOCK"
+            return None
+        if self._source_timestamp_exceeds_future_skew(timestamp_ms, wall_now_ms=evaluation_wall_ms):
             self._mode5_last_eval_rejection[index_name] = "INVALID_COMPLETED_BAR_CLOCK"
             if index_name in self._cached_rbfn_candidate_meta:
                 self._clear_cached_rbfn_candidate_locked(index_name, "INVALID_COMPLETED_BAR_CLOCK")
@@ -3723,11 +4853,66 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             if index_name in self._cached_rbfn_candidate_meta:
                 self._clear_cached_rbfn_candidate_locked(index_name, "INVALID_COMPLETED_BAR_TIME")
             return None
+        if not (dt_time(9, 20) <= expected_bar_time <= dt_time(15, 0)):
+            self._mode5_last_eval_rejection[index_name] = "MODE5_BAR_OUTSIDE_ACTIVE_SESSION"
+            return None
         if not isinstance(bar_time, dt_time) or bar_time != expected_bar_time:
             self._mode5_last_eval_rejection[index_name] = "INVALID_COMPLETED_BAR_TIME"
             if index_name in self._cached_rbfn_candidate_meta:
                 self._clear_cached_rbfn_candidate_locked(index_name, "INVALID_COMPLETED_BAR_TIME")
             return None
+        # A 5m bucket timestamp identifies its opening epoch. Its completed
+        # contents cannot be available until after the next boundary. Millisecond
+        # equality cannot prove which event happened first, so fail closed.
+        if (
+            isinstance(decision_available_at_ms, bool)
+            or not isinstance(decision_available_at_ms, int)
+            or decision_available_at_ms <= 0
+        ):
+            self._mode5_last_eval_rejection[index_name] = "MODE5_BAR_AVAILABILITY_UNPROVEN"
+            return None
+        if decision_available_at_ms == completed_bar_boundary_ms:
+            self._mode5_last_eval_rejection[index_name] = "MODE5_BAR_AVAILABILITY_AMBIGUOUS"
+            return None
+        if decision_available_at_ms < completed_bar_boundary_ms:
+            self._mode5_last_eval_rejection[index_name] = "MODE5_BAR_NOT_AVAILABLE_AT_DECISION"
+            return None
+        if decision_available_at_ms > evaluation_wall_ms:
+            self._mode5_last_eval_rejection[index_name] = "MODE5_BAR_AVAILABILITY_AFTER_EVALUATION_CLOCK"
+            return None
+
+        bar_values: dict[str, float] = {}
+        for field_name, value in (
+            ("open", bar_open), ("high", bar_high), ("low", bar_low),
+            ("close", bar_close), ("volume", bar_volume),
+        ):
+            if isinstance(value, bool) or not isinstance(value, Real):
+                self._mode5_last_eval_rejection[index_name] = "INVALID_COMPLETED_BAR_OHLCV"
+                return None
+            try:
+                numeric_value = float(value)
+            except (OverflowError, TypeError, ValueError):
+                self._mode5_last_eval_rejection[index_name] = "INVALID_COMPLETED_BAR_OHLCV"
+                return None
+            if not math.isfinite(numeric_value):
+                self._mode5_last_eval_rejection[index_name] = "INVALID_COMPLETED_BAR_OHLCV"
+                return None
+            bar_values[field_name] = numeric_value
+        if (
+            any(bar_values[key] <= 0 for key in ("open", "high", "low", "close"))
+            or bar_values["volume"] < 0
+            or bar_values["high"] < max(bar_values["open"], bar_values["close"])
+            or bar_values["low"] > min(bar_values["open"], bar_values["close"])
+            or bar_values["high"] < bar_values["low"]
+        ):
+            self._mode5_last_eval_rejection[index_name] = "INVALID_COMPLETED_BAR_OHLCV"
+            return None
+        # From here forward calculations use only validated normalized numbers.
+        bar_open = bar_values["open"]
+        bar_high = bar_values["high"]
+        bar_low = bar_values["low"]
+        bar_close = bar_values["close"]
+        bar_volume = bar_values["volume"]
         previous_ts = self._last_5m_timestamp_ms.get(index_name, 0)
         previous_epoch = self._last_completed_5m_epoch.get(index_name, -1)
         if timestamp_ms <= previous_ts or epoch_5min <= previous_epoch:
@@ -3753,24 +4938,27 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         self._last_completed_5m_epoch[index_name] = epoch_5min
 
         bar_record = {
-            "open": bar_open,
-            "high": bar_high,
-            "low": bar_low,
-            "close": bar_close,
-            "volume": bar_volume,
+            "open": bar_values["open"],
+            "high": bar_values["high"],
+            "low": bar_values["low"],
+            "close": bar_values["close"],
+            "volume": bar_values["volume"],
             "time": bar_time,
             "timestamp_ms": timestamp_ms,
             "epoch_5min": epoch_5min,
+            "completeness": "CALLER_COMPLETED_BAR",
         }
         if index_name not in self.bars_5m_history:
             self.bars_5m_history[index_name] = []
         self.bars_5m_history[index_name].append(bar_record)
 
+
         if self.session_open_prices.get(index_name, 0.0) <= 0.0:
             self.session_open_prices[index_name] = bar_open
 
         # GATE-SENTINEL-15: Retry Opening Range reconciliation until complete
-        if expected_bar_time >= self.opening_shock_end_time and not self.or_reconciliation_frozen:
+        if (not self.replay_mode and expected_bar_time >= self.opening_shock_end_time
+                and not self.or_reconciliation_frozen):
             self._enqueue_or_reconciliation(session_day=session_day, current_time_ms=timestamp_ms)
 
         if self._ground_truth_required.get(index_name, False) and not self._has_valid_ground_truth_grid(index_name, session_day):
@@ -3792,37 +4980,15 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             self._cache_rbfn_signal_locked(index_name, signal, epoch_5min)
             return signal
         or_valid, or_reason, or_details = self._validate_mode5_or_pair(
-            index_name, timestamp_ms, completed_bar_boundary_ms
+            index_name,
+            timestamp_ms,
+            completed_bar_boundary_ms,
+            decision_available_at_ms,
         )
-        if not or_valid:
-            signal = CachedRBFNAuctionSignal(
-                timestamp_ms=timestamp_ms,
-                index_name=index_name,
-                action="ABSTAIN",
-                direction="",
-                target_strike=0.0,
-                target_pts=0.0,
-                sl_pts=0.0,
-                setup_reason="MODE5_OR_UNVERIFIED",
-                trade_phase="OR_GATED",
-                bar_time=bar_time,
-                is_active=False,
-                is_vetoed=True,
-                veto_reason=or_reason,
-            )
-            self._cache_rbfn_signal_locked(index_name, signal, epoch_5min)
-            self.record_veto("MODE5_OR", or_reason)
-            self._defer_mode5_decision_trace_locked(
-                index_name=index_name,
-                bar_time=bar_time,
-                action="ABSTAIN",
-                reason=or_reason,
-                details=or_details,
-                timestamp_ms=timestamp_ms,
-            )
-            return signal
-
-        # Only OR-qualified bars may feed subsequent strategy pattern history.
+        or_details["decision_authority"] = "DIAGNOSTIC_ONLY"
+        or_details = self._sanitize_mode5_or_telemetry(or_details)
+        # The approved provisional Mode 5 profile observes target and companion
+        # OR evidence but does not let either suppress structural RBFN signals.
         self.bars_5m_strategy_history[index_name].append(bar_record)
 
         history = self.bars_5m_strategy_history[index_name]
@@ -3911,11 +5077,13 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         # Dynamic ATR scale-down factor for low-volatility regimes (ATR < 150)
         is_low_vol = (macro_daily_atr < min_atr or vix_val < min_vix)
         target_scale = 0.60 if is_low_vol else 1.0
+        if MODE5_POLICY_PROFILE == "RBFN_SIGNAL_ONLY_RESEARCH":
+            target_scale = 1.0
 
         if is_session_active:
             phase_label = "OPENING_DRIVE" if eff_time <= dt_time(9, 45) else "CONTINUOUS_STATE_MACHINE"
             # Strict Gate 2 Frictional Hurdle: Hard-abort when daily ATR is below minimum threshold (150 for NIFTY, 450 for SENSEX)
-            if macro_daily_atr < min_atr:
+            if macro_daily_atr < min_atr and MODE5_POLICY_PROFILE != "RBFN_SIGNAL_ONLY_RESEARCH":
                 signal = CachedRBFNAuctionSignal(
                     timestamp_ms=timestamp_ms,
                     index_name=index_name,
@@ -3931,7 +5099,12 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     is_vetoed=True,
                     veto_reason="GATE_2_FRICTIONAL_HURDLE",
                 )
-            elif range_10m < (0.35 * macro_daily_atr) and not is_low_vol and len(history) < 2:
+            elif (
+                range_10m < (0.35 * macro_daily_atr)
+                and not is_low_vol
+                and len(history) < 2
+                and MODE5_POLICY_PROFILE != "RBFN_SIGNAL_ONLY_RESEARCH"
+            ):
                 signal = CachedRBFNAuctionSignal(
                     timestamp_ms=timestamp_ms,
                     index_name=index_name,
@@ -4110,8 +5283,9 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
                 c_prev = history[-2].get("close", history[-2].get("high", 0.0))
                 c_curr = history[-1].get("close", history[-1].get("high", 0.0))
-                is_10m_breakout_upper = (c_prev >= grid.rp1_upper and c_curr >= grid.rp1_upper)
-                is_10m_breakdown_lower = (c_prev <= grid.rp1_lower and c_curr <= grid.rp1_lower)
+                has_two_consecutive_bars = self._has_consecutive_bar_epochs(history, 2)
+                is_10m_breakout_upper = has_two_consecutive_bars and (c_prev >= grid.rp1_upper and c_curr >= grid.rp1_upper)
+                is_10m_breakdown_lower = has_two_consecutive_bars and (c_prev <= grid.rp1_lower and c_curr <= grid.rp1_lower)
 
                 # Check for S7: Extreme Floor Bounce (Tested RP2_LOWER and holds above for 10 mins, or single-bar fast bounce)
                 rejection_buffer = 25.0 if index_name in {"SENSEX", "BANKNIFTY"} else 10.0
@@ -4263,7 +5437,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 # 5. SCENARIO 6 (S6): RP1_UPPER Reversal Fade (Capped Target)
                 # Tested RP1_UPPER and 2 consecutive closes below RP1_UPPER - buf -> Targets TD
                 # -------------------------------------------------------------
-                elif any(b["high"] >= grid.rp1_upper for b in history[-3:]) and all(b["close"] <= (grid.rp1_upper - buf) for b in history[-2:]) and bar_close > grid.trend_decider and bar_close < bar_open:
+                elif self._has_consecutive_bar_epochs(history, 3) and any(b["high"] >= grid.rp1_upper for b in history[-3:]) and all(b["close"] <= (grid.rp1_upper - buf) for b in history[-2:]) and bar_close > grid.trend_decider and bar_close < bar_open:
                     t_strike = round(grid.trend_decider / step) * step
                     t_pts = max(18.0 if index_name != "SENSEX" else 50.0, round(abs(bar_close - grid.trend_decider), 2))
                     s_pts = max(12.0 if index_name != "SENSEX" else 35.0, abs((grid.rp1_upper + (30.0 if index_name == "SENSEX" else 20.0)) - bar_close))
@@ -4288,7 +5462,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 # 6. SCENARIO 8 (S8): RP1_LOWER Reversal Fade (Capped Target)
                 # Tested RP1_LOWER and 2 consecutive closes above RP1_LOWER + buf -> Targets TD
                 # -------------------------------------------------------------
-                elif any(b["low"] <= grid.rp1_lower for b in history[-3:]) and all(b["close"] >= (grid.rp1_lower + buf) for b in history[-2:]) and bar_close < grid.trend_decider and bar_close > bar_open:
+                elif self._has_consecutive_bar_epochs(history, 3) and any(b["low"] <= grid.rp1_lower for b in history[-3:]) and all(b["close"] >= (grid.rp1_lower + buf) for b in history[-2:]) and bar_close < grid.trend_decider and bar_close > bar_open:
                     t_strike = round(grid.trend_decider / step) * step
                     t_pts = max(18.0 if index_name != "SENSEX" else 50.0, round(abs(grid.trend_decider - bar_close), 2))
                     s_pts = max(12.0 if index_name != "SENSEX" else 35.0, abs(bar_close - (grid.rp1_lower - (30.0 if index_name == "SENSEX" else 20.0))))
@@ -4322,6 +5496,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
                     prev_bar = history[-2]
                     curr_bar = history[-1]
+                    has_two_consecutive_bars = self._has_consecutive_bar_epochs(history, 2)
 
                     # Candle 1 (previous bar) tested Trend Decider
                     c1_tested_td_bull = prev_bar.get("low", 0.0) <= (grid.trend_decider + td_touch_tolerance)
@@ -4332,8 +5507,8 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     c2_confirmed_bull = (curr_bar.get("close", 0.0) > curr_bar.get("open", 0.0)) and (curr_bar.get("close", 0.0) >= grid.trend_decider)
                     c2_confirmed_bear = (curr_bar.get("close", 0.0) < curr_bar.get("open", 0.0)) and (curr_bar.get("close", 0.0) <= grid.trend_decider)
 
-                    holding_at_td_bull = c1_tested_td_bull and c2_confirmed_bull and c2_holds_near_td
-                    holding_at_td_bear = c1_tested_td_bear and c2_confirmed_bear and c2_holds_near_td
+                    holding_at_td_bull = has_two_consecutive_bars and c1_tested_td_bull and c2_confirmed_bull and c2_holds_near_td
+                    holding_at_td_bear = has_two_consecutive_bars and c1_tested_td_bear and c2_confirmed_bear and c2_holds_near_td
                     call_k = getattr(grid, "call_strike", getattr(grid, "target_call_strike", round(grid.rp1_upper / step) * step))
                     put_k = getattr(grid, "put_strike", getattr(grid, "target_put_strike", round(grid.rp1_lower / step) * step))
 
@@ -4403,7 +5578,10 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             # If Ω_10 < 1.00: Require 3 consecutive 5m bars of corridor compression
             # before de-escalating to GEAR_1_RANGE, preventing trailing stop chattering.
             # -------------------------------------------------------------
-            if macro_daily_atr > 0.0:
+            if (
+                macro_daily_atr > 0.0
+                and MODE5_POLICY_PROFILE != "RBFN_SIGNAL_ONLY_RESEARCH"
+            ):
                 omega_10 = round(range_10m / macro_daily_atr, 3)
                 self.gear_expansion_ratios[index_name] = omega_10
                 curr_gear = self.session_gears.get(index_name, "GEAR_1_RANGE")
@@ -4436,6 +5614,32 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     self.gear_trend_bar_counters[index_name] = 0
 
         if signal is not None:
+            if signal.is_active and not signal.is_vetoed:
+                gate2_friction = macro_daily_atr < min_atr
+                gate2_compression = (
+                    range_10m < (0.35 * macro_daily_atr)
+                    and not is_low_vol
+                    and len(history) < 2
+                )
+                self._mode5_bar_policy_observations[index_name] = {
+                    "policy_profile": MODE5_POLICY_PROFILE,
+                    "gate2": {
+                        "atr_frictional_hurdle": {
+                            "observed_atr20": macro_daily_atr,
+                            "threshold": min_atr,
+                            "would_veto": gate2_friction,
+                            "effect": "DIAGNOSTIC_ONLY",
+                        },
+                        "compression": {
+                            "observed_range10": range_10m,
+                            "threshold": 0.35 * macro_daily_atr,
+                            "is_low_vol_observation": is_low_vol,
+                            "history_count": len(history),
+                            "would_veto": gate2_compression,
+                            "effect": "DIAGNOSTIC_ONLY",
+                        },
+                    },
+                }
             self._defer_mode5_decision_trace_locked(
                 index_name=index_name,
                 bar_time=bar_time,
@@ -4457,8 +5661,152 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
         return signal
 
+    @staticmethod
+    def _strict_positive_finite_quote_value(value: Any) -> Optional[float]:
+        """Return a positive finite quote number; booleans and coercion failures are invalid."""
+        if isinstance(value, bool) or not isinstance(value, Real):
+            return None
+        try:
+            numeric = float(value)
+        except (OverflowError, TypeError, ValueError):
+            return None
+        return numeric if math.isfinite(numeric) and numeric > 0.0 else None
+
+    def _manage_matching_position_from_quote(
+        self,
+        *,
+        index_name: str,
+        depth: UpstoxLevel5DepthRecord,
+        broker_instrument_key: Optional[str],
+        spot: float,
+        option_ltp: float,
+        now_dt: datetime,
+        quote_day: date,
+        instrument_key: str,
+        source_order: tuple[int, int],
+    ) -> tuple[bool, bool]:
+        """Manage one exact matching active position and record its local terminal transition.
+
+        Returns (active at quote start, matching position evaluated). A local APM
+        transition is not proof of a broker fill.
+        """
+        active_states = {STATE_IN_FLIGHT, STATE_TRAIL_LOCK, STATE_EXIT_PENDING}
+        with self._lock:
+            if not self._option_quote_order_is_current_locked(
+                index_name, quote_day, instrument_key, source_order
+            ):
+                return False, False
+            apm = self.apms.get(index_name, self.apm)
+            active_at_start = apm.state in active_states
+            payload = apm.payload
+            if not active_at_start or payload is None or payload.opt_symbol != depth.symbol:
+                return active_at_start, False
+            payload_token = getattr(payload, "opt_token", None)
+            if payload_token is not None and str(payload_token) != str(depth.token):
+                return active_at_start, False
+
+            if not self.replay_mode:
+                recheck_wall_ms = self._decision_wall_clock_ms()
+                recheck_monotonic_ns = _monotonic_clock_ns()
+                if recheck_wall_ms is None:
+                    self.record_veto(
+                        "OPTION_DEPTH_TIMESTAMP",
+                        "OPTION_DEPTH_INVALID_CLOCK_BEFORE_APM_UPDATE",
+                    )
+                    return active_at_start, False
+                quote_valid, quote_reason, recheck_day, recheck_key, recheck_order = (
+                    self._option_quote_identity(
+                        index_name,
+                        depth,
+                        wall_now_ms=recheck_wall_ms,
+                        monotonic_now_ns=recheck_monotonic_ns,
+                    )
+                )
+                if not quote_valid:
+                    self.record_veto(
+                        "OPTION_DEPTH_TIMESTAMP",
+                        f"{quote_reason}_BEFORE_APM_UPDATE",
+                    )
+                    return active_at_start, False
+                if (
+                    recheck_day != quote_day
+                    or recheck_key != instrument_key
+                    or recheck_order != source_order
+                ):
+                    self.record_veto(
+                        "OPTION_DEPTH_TIMESTAMP",
+                        "OPTION_DEPTH_IDENTITY_CHANGED_BEFORE_APM_UPDATE",
+                    )
+                    return active_at_start, False
+
+            previous_state = apm.state
+            tick_time = (
+                now_dt.isoformat()
+                if now_dt.time() >= self.eod_mandatory_squareoff_time
+                else now_dt.strftime("%H:%M:%S")
+            )
+            apm.evaluate_tick(
+                current_spot=spot,
+                current_opt_ltp=option_ltp,
+                tick_time_str=tick_time,
+                atr_1m=12.0,
+            )
+
+            if previous_state != apm.state and apm.state in {STATE_LIQUIDATED, STATE_COOL_OFF}:
+                last_trade = apm.last_completed_trade or (
+                    apm.trade_history[-1] if apm.trade_history else None
+                )
+                if last_trade:
+                    trade = last_trade if isinstance(last_trade, dict) else asdict(last_trade)
+                    exit_ltp = float(trade.get("opt_exit_ltp") or option_ltp)
+                    self.journal.record_exit(
+                        position_id=trade.get("position_id", ""),
+                        index_name=index_name,
+                        symbol=depth.symbol,
+                        direction=trade.get("direction", ""),
+                        entry_price_spot=float(trade.get("entry_price") or 0.0),
+                        exit_price_spot=float(trade.get("exit_price") or 0.0),
+                        entry_price_opt=float(trade.get("opt_entry_ltp") or 0.0),
+                        exit_price_opt=exit_ltp,
+                        opt_pnl_pts=float(trade.get("opt_pnl_pts") or 0.0),
+                        spot_pnl_pts=float(trade.get("pnl_pts") or 0.0),
+                        exit_reason=str(trade.get("exit_reason") or "LIQUIDATED"),
+                        max_spot_excursion=float(trade.get("max_spot_excursion") or 0.0),
+                        max_opt_excursion=float(trade.get("max_opt_excursion") or 0.0),
+                        target_1_hit=bool(trade.get("target_1_hit")),
+                        target_2_hit=bool(trade.get("target_2_hit")),
+                        half_booked=bool(trade.get("half_booked")),
+                        trail_locked=bool(trade.get("trail_locked")),
+                        total_quantity=int(trade.get("total_quantity") or 65),
+                        timestamp_ms=depth.exchange_timestamp_ms,
+                        wall_time_str=now_dt.strftime("%H:%M:%S"),
+                    )
+                    if self.automated_dispatcher:
+                        if broker_instrument_key is not None:
+                            self.automated_dispatcher.on_apm_exit(
+                                index_name=index_name,
+                                symbol=broker_instrument_key,
+                                exit_price=exit_ltp,
+                                reason=str(trade.get("exit_reason") or "LIQUIDATED"),
+                                qty=int(trade.get("total_quantity") or 0),
+                                intent_id=str(trade.get("position_id") or ""),
+                            )
+                        else:
+                            self.record_veto(
+                                "BROKER_INSTRUMENT_KEY",
+                                "EXIT_DISPATCH_BLOCKED_MISSING_OR_MALFORMED_KEY",
+                            )
+            return active_at_start, True
+
     def _evaluate_option_depth(self, depth: UpstoxLevel5DepthRecord) -> None:
-        now_ts = time.time()
+        decision_wall_ms = self._decision_wall_clock_ms()
+        if decision_wall_ms is None:
+            self.record_veto("OPTION_DEPTH_TIMESTAMP", "OPTION_DEPTH_INVALID_CLOCK_OR_FRESHNESS")
+            return
+        current_monotonic_ns = (
+            depth.ingress_monotonic_ns if self.replay_mode else _monotonic_clock_ns()
+        )
+        now_ts = decision_wall_ms / 1000.0
         # Rate-limit console telemetry prints to at most 1 per second unless a live BUY signal occurs
         is_throttled = (now_ts - self._last_alert_time < 1.0)
 
@@ -4471,14 +5819,30 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             )
             return
         quote_valid, quote_reason, quote_day, option_instrument_key, source_order = self._option_quote_identity(
-            index_name, depth
+            index_name, depth, wall_now_ms=decision_wall_ms,
+            monotonic_now_ns=current_monotonic_ns,
         )
         if not quote_valid or quote_day is None or option_instrument_key is None or source_order is None:
             self.record_veto("OPTION_DEPTH_TIMESTAMP", quote_reason)
             return
-        validated_decision_timestamp_ms = int(time.time() * 1000)
+        if self.replay_mode:
+            # Persisted ingress_monotonic_ns belongs to the capture process.
+            # Without an explicit domain mapping it cannot be compared with
+            # this replay process's candidate/position lifecycle clocks.
+            self.record_veto(
+                "OPTION_DEPTH_TIMESTAMP",
+                "REPLAY_INGRESS_MONOTONIC_DOMAIN_UNPROVEN",
+            )
+            return
+        validated_decision_timestamp_ms = decision_wall_ms
         if not self._record_option_depth_order(index_name, quote_day, option_instrument_key, source_order):
             self.record_veto("OPTION_DEPTH_ORDER", "OPTION_DEPTH_DUPLICATE_DECREASING_OR_PRIOR_SESSION")
+            return
+        bid = self._strict_positive_finite_quote_value(depth.bid_p1)
+        ask = self._strict_positive_finite_quote_value(depth.ask_p1)
+        ltp = self._strict_positive_finite_quote_value(depth.ltp)
+        if bid is None or ask is None or ltp is None or ask < bid:
+            self.record_veto("OPTION_DEPTH_PRICE", "OPTION_DEPTH_INVALID_TOP_OF_BOOK")
             return
         sym = depth.symbol.upper()
         if index_name == "SENSEX":
@@ -4540,7 +5904,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
             wall_obs.on_option_tick(
                 symbol=depth.symbol,
-                ltp=depth.ltp or depth.bid_p1,
+                ltp=ltp,
                 volume=float(depth.volume),
                 oi=effective_oi,
                 bid_depth=bid_d,
@@ -4557,6 +5921,11 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     pass
 
         with self._lock:
+            if not self._option_quote_order_is_current_locked(
+                index_name, quote_day, option_instrument_key, source_order
+            ):
+                self.record_veto("OPTION_DEPTH_ORDER", "OPTION_DEPTH_SUPERSEDED_BEFORE_STATE_UPDATE")
+                return
             spot = self.spots.get(index_name, 0.0)
             spot_ts = self.spots_ts_ms.get(index_name, 0)
             trade_lock = self.trade_lock_active
@@ -4564,15 +5933,46 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             or_high = or_b["high"]
             or_low = or_b["low"]
 
-        if spot <= 0:
+        strict_spot = self._strict_positive_finite_quote_value(spot)
+        if strict_spot is None:
+            self.record_veto("SPOT_DEPTH_SKEW", "OPTION_DEPTH_BLOCKED_INVALID_SPOT")
+            return
+        spot = strict_spot
+        if isinstance(spot_ts, bool) or not isinstance(spot_ts, int) or spot_ts <= 0:
+            self.record_veto("SPOT_DEPTH_SKEW", "OPTION_DEPTH_BLOCKED_MISSING_SPOT_TIMESTAMP")
             return
 
-        # Derive causal wall time from exchange timestamp or fallback to system clock
-        if depth.exchange_timestamp_ms > 0:
-            now_dt = datetime.fromtimestamp(depth.exchange_timestamp_ms / 1000.0, tz=ZoneInfo("Asia/Kolkata"))
-        else:
-            now_dt = datetime.now(ZoneInfo("Asia/Kolkata"))
+        # Quote identity validation above guarantees a positive exchange timestamp.
+        now_dt = datetime.fromtimestamp(depth.exchange_timestamp_ms / 1000.0, tz=ZoneInfo("Asia/Kolkata"))
         now_time = now_dt.time()
+
+        skew_limit_ms = float(self.skew_threshold_ms)
+        skew_ms = abs(depth.exchange_timestamp_ms - spot_ts)
+        if not math.isfinite(skew_limit_ms) or skew_limit_ms < 0 or skew_ms > skew_limit_ms:
+            self.record_veto("SPOT_DEPTH_SKEW", "OPTION_DEPTH_BLOCKED_STALE_OR_SKEWED_SPOT")
+            return
+
+        # Manage a matching existing position before OR, OI, spread, or strategy
+        # entry gates. The active-at-start snapshot also prevents same-quote re-entry
+        # if this update terminalizes the local APM state.
+        active_position_at_quote_start, matching_position_managed = (
+            self._manage_matching_position_from_quote(
+                index_name=index_name,
+                depth=depth,
+                broker_instrument_key=broker_instrument_key,
+                spot=spot,
+                option_ltp=ltp,
+                now_dt=now_dt,
+                quote_day=quote_day,
+                instrument_key=option_instrument_key,
+                source_order=source_order,
+            )
+        )
+        if not self._option_quote_order_is_current(
+            index_name, quote_day, option_instrument_key, source_order
+        ):
+            self.record_veto("OPTION_DEPTH_ORDER", "OPTION_DEPTH_SUPERSEDED_BEFORE_STRATEGY")
+            return
 
         # Opening shock freeze: strictly suppress all candidate setups unless Mode 5 Opening Drive is active
         # Mode 5 Opening Drive is permitted between 09:20:00 and 09:45:00 IST.
@@ -4591,6 +5991,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             quote_day=quote_day,
             instrument_key=option_instrument_key,
             source_order=source_order,
+            now_ns=current_monotonic_ns,
             validated_decision_timestamp_ms=validated_decision_timestamp_ms,
         )
         self._flush_mode5_lifecycle_records_after_unlock()
@@ -4605,6 +6006,7 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             if has_mode_5_signal and mode5_generation is not None
             else None
         )
+        mode5_or_observation: Optional[dict[str, Any]] = None
 
         if has_mode_5_signal and rbfn_sig is not None:
             with self._lock:
@@ -4615,50 +6017,43 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     else None
                 )
             or_valid, or_reason, or_details = self._validate_mode5_or_pair(
-                index_name, depth.exchange_timestamp_ms, completed_bar_boundary_ms
+                index_name,
+                depth.exchange_timestamp_ms,
+                completed_bar_boundary_ms,
+                self._observed_ingress_timestamp_ms(depth.ingress_wall_utc),
             )
-            if not or_valid:
-                self.record_veto("MODE5_OR", or_reason)
-                self.log_decision_trace(
-                    index_name=index_name,
-                    bar_time=now_time,
-                    action="ABSTAIN",
-                    reason=or_reason,
-                    details={"signal_timestamp_ms": rbfn_sig.timestamp_ms, **or_details},
-                    timestamp_ms=depth.exchange_timestamp_ms,
-                    candidate_generation=mode5_generation,
-                )
-                return
+            mode5_or_observation = self._sanitize_mode5_or_telemetry({
+                "valid": or_valid,
+                "reason": or_reason,
+                "decision_authority": "DIAGNOSTIC_ONLY",
+                **or_details,
+            })
+            self.log_decision_trace(
+                index_name=index_name,
+                bar_time=now_time,
+                action=rbfn_sig.action,
+                reason="MODE5_OR_DIAGNOSTIC_ONLY",
+                details={"signal_timestamp_ms": rbfn_sig.timestamp_ms, **mode5_or_observation},
+                timestamp_ms=depth.exchange_timestamp_ms,
+                candidate_generation=mode5_generation,
+            )
 
         if in_opening_shock and not has_mode_5_signal:
             return
 
+        if not self._option_quote_order_is_current(
+            index_name, quote_day, option_instrument_key, source_order
+        ):
+            self.record_veto("OPTION_DEPTH_ORDER", "OPTION_DEPTH_SUPERSEDED_BEFORE_STRATEGY")
+            return
+
         # Late-session entry freeze: strictly suppress all candidate setups (>= 15:00:00 IST)
         if self.is_eod_entry_frozen(now_time):
-            # Check if active position requires 15:15:00 mandatory square-off
-            if now_time >= self.eod_mandatory_squareoff_time:
-                apm = self.apms.get(index_name)
-                if apm and apm.state in {STATE_IN_FLIGHT, STATE_TRAIL_LOCK}:
-                    apm.evaluate_tick(current_spot=spot, current_opt_ltp=ltp, tick_time_str=now_dt.isoformat())
             return
 
         # Structural strike liquidity gate: require minimum open interest
         effective_oi = float(depth.open_interest)
         if not self.evaluate_strike_oi(index_name, effective_oi):
-            return
-
-        # Causal cross-strike skew check
-        skew_ms = abs(depth.exchange_timestamp_ms - spot_ts) if spot_ts > 0 else 0
-        if spot_ts > 0 and skew_ms > self.skew_threshold_ms:
-            # Stale skew gate
-            return
-
-        # Top-of-book quotes from Level-5 depth
-        bid = depth.bid_p1
-        ask = depth.ask_p1
-        ltp = depth.ltp or bid
-
-        if ltp <= 0 or bid <= 0 or ask <= 0:
             return
 
         spread = round(ask - bid, 2)
@@ -4740,7 +6135,10 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
 
         # Compute Multi-Factor Confidence Score
         conf_eval = None
-        if trigger_active and ((required_option_type == "CE" and is_ce) or (required_option_type == "PE" and is_pe)):
+        if (
+            trigger_active
+            and ((required_option_type == "CE" and is_ce) or (required_option_type == "PE" and is_pe))
+        ):
             depth_bids = depth.bid_q1 + depth.bid_q2 + depth.bid_q3 + depth.bid_q4 + depth.bid_q5
             depth_asks = depth.ask_q1 + depth.ask_q2 + depth.ask_q3 + depth.ask_q4 + depth.ask_q5
             if strategy_name == "OPTIONMATE_RBFN_AUCTION" and rbfn_sig is not None:
@@ -4916,10 +6314,6 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             else:
                 dyn_conviction = 0.50
 
-            # Boost conviction for Mode 5: RBFN auction breakout confirmed outside Gaussian barrier RP1
-            if strategy_name == "OPTIONMATE_RBFN_AUCTION":
-                dyn_conviction = max(0.75, dyn_conviction)
-
             conf_eval = self.confidence_scorer.evaluate_confidence(
                 macro_aligned=macro_ok,
                 macro_reason=macro_reason,
@@ -4987,13 +6381,23 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
             wall_gate = self.wall_gates.get(index_name)
             wall_vetoed = False
             wall_reason = ""
+            mode5_wall_observation: dict[str, Any] = {
+                "status": "EXEMPT" if is_wall_exempt else "NOT_CONFIGURED",
+                "effect": "DIAGNOSTIC_ONLY",
+            }
             if wall_gate is not None and not is_wall_exempt:
+                mode5_wall_observation["status"] = "EVALUATED"
                 wall_decision = wall_gate.evaluate_entry_gate(
                     direction=required_option_type,
                     spot_price=spot,
                     timestamp_ms=depth.exchange_timestamp_ms,
                 )
-                if wall_decision.action == GATE_ACTION_VETO:
+                if mode5_overlays_are_diagnostic(strategy_name):
+                    mode5_wall_observation["entry_decision"] = {
+                        "action": str(wall_decision.action),
+                        "reason": wall_decision.reason,
+                    }
+                elif wall_decision.action == GATE_ACTION_VETO:
                     wall_vetoed = True
                     wall_reason = wall_decision.reason
 
@@ -5008,7 +6412,14 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                         wall_buffer_pts=None,
                         min_rr_ratio=1.0,
                     )
-                    if clamp_decision.action == GATE_ACTION_VETO:
+                    if mode5_overlays_are_diagnostic(strategy_name):
+                        mode5_wall_observation["target_clamp"] = {
+                            "action": str(clamp_decision.action),
+                            "reason": clamp_decision.reason,
+                            "proposed_target_pts": clamp_decision.clamped_target_pts,
+                            "target_mutation_applied": False,
+                        }
+                    elif clamp_decision.action == GATE_ACTION_VETO:
                         wall_vetoed = True
                         wall_reason = clamp_decision.reason
                     elif clamp_decision.action == GATE_ACTION_CLAMP_TARGET and clamp_decision.clamped_target_pts is not None:
@@ -5072,6 +6483,83 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     wall_time_str=now_time.strftime("%H:%M:%S"),
                     candidate_id=mode5_candidate_id,
                 )
+            elif mode5_overlays_are_diagnostic(strategy_name):
+                status_flag = "VETO_MODE5_SIZING_POLICY_UNVERIFIED"
+                advisory = "WAIT (MODE5_SIGNAL_ONLY_RESEARCH; SIZING_POLICY_UNVERIFIED)"
+                policy_observations = {
+                    **self._mode5_bar_policy_observations.get(index_name, {
+                        "gate2": {"status": "UNAVAILABLE", "effect": "DIAGNOSTIC_ONLY"}
+                    }),
+                    "opening_range": mode5_or_observation or {
+                        "status": "UNAVAILABLE",
+                        "decision_authority": "DIAGNOSTIC_ONLY",
+                    },
+                    "macro": {"would_veto": not macro_ok, "reason": macro_reason, "effect": "DIAGNOSTIC_ONLY"},
+                    "exhaustion": {
+                        "would_veto": not vol_ok,
+                        "reason": vol_reason,
+                        "displacement_pts": vol_displacement,
+                        "input_error": vol_input_error,
+                        "effect": "DIAGNOSTIC_ONLY",
+                    },
+                    "wall_and_clamp": mode5_wall_observation,
+                    "friction": {"would_veto": not hurdle_ok, "reason": hurdle_reason, "effect": "DIAGNOSTIC_ONLY"},
+                    "confidence": {
+                        "score": conf_eval.total_score if conf_eval else None,
+                        "grade": conf_eval.grade if conf_eval else None,
+                        "would_be_actionable": conf_eval.is_actionable if conf_eval else None,
+                        "effect": "DIAGNOSTIC_ONLY",
+                    },
+                    "target": {
+                        "strategy_target_pts": rbfn_sig.target_pts if rbfn_sig else None,
+                        "effective_target_pts": target_pts,
+                        "overlay_mutation_applied": False,
+                    },
+                }
+                with self._mode5_state_lock_with_trace_flush():
+                    first_policy_observation = self._record_mode5_policy_observation_and_block_locked(
+                        index_name=index_name,
+                        generation=mode5_generation,
+                        timestamp_ms=depth.exchange_timestamp_ms,
+                        observations=policy_observations,
+                        depth=depth,
+                        quote_day=quote_day,
+                        instrument_key=option_instrument_key,
+                        source_order=source_order,
+                        target_strike=target_strike_to_match,
+                        tolerance_strikes=tolerance_to_use,
+                        strike_interval=strike_interval,
+                        now_ns=current_monotonic_ns,
+                        wall_now_ms=decision_wall_ms,
+                    ) if mode5_generation is not None else False
+                if not first_policy_observation:
+                    with self._lock:
+                        candidate_state, candidate_state_reason = self._mode5_candidate_state_locked(
+                            index_name, mode5_generation
+                        )
+                    if candidate_state == "AVAILABLE":
+                        status_flag = "MODE5_CANDIDATE_AVAILABLE"
+                        advisory = "WAIT (MODE5_CANDIDATE_AVAILABLE; ENTRY_NOT_AUTHORIZED)"
+                    else:
+                        status_flag = "VETO_MODE5_CANDIDATE_TERMINAL"
+                        advisory = (
+                            f"WAIT (MODE5_CANDIDATE_{candidate_state}:"
+                            f"{candidate_state_reason})"
+                        )
+                    self.log_decision_trace(
+                        index_name=index_name,
+                        bar_time=now_time,
+                        action=rbfn_sig.action,
+                        reason="MODE5_CANDIDATE_STATE_AFTER_QUOTE_REJECTION",
+                        details={
+                            "candidate_state": candidate_state,
+                            "state_reason": candidate_state_reason,
+                            "decision_authority": "DIAGNOSTIC_ONLY",
+                            "entry_authorized": False,
+                        },
+                        timestamp_ms=depth.exchange_timestamp_ms,
+                        candidate_generation=mode5_generation,
+                    )
             elif wall_vetoed:
                 status_flag = "VETO_ADVERSE_WALL"
                 advisory = f"🚨 [WALL VETO: {wall_reason}] BUY {depth.symbol} @ {setup_reason} -> SUPPRESSED (Within 0.5 ATR of fortified wall)"
@@ -5186,6 +6674,13 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                     timestamp_ms=depth.exchange_timestamp_ms,
                     wall_time_str=now_time.strftime("%H:%M:%S"),
                     candidate_id=mode5_candidate_id,
+                )
+            elif active_position_at_quote_start:
+                status_flag = "VETO_CONCURRENT_POSITION"
+                advisory = (
+                    "WAIT (MATCHING_POSITION_MANAGED_THIS_QUOTE; ENTRY_BLOCKED)"
+                    if matching_position_managed
+                    else "WAIT (ACTIVE_POSITION_OTHER_CONTRACT; ENTRY_BLOCKED)"
                 )
             else:
                 # Option Native Stop Loss: 20% of option premium or 15.0 pts minimum
@@ -5304,7 +6799,8 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                                         quote_day=quote_day,
                                         instrument_key=option_instrument_key,
                                         source_order=source_order,
-                                        now_ns=time.monotonic_ns(),
+                                        now_ns=current_monotonic_ns,
+                                        wall_now_ms=decision_wall_ms,
                                     )
                                 if entry_or_valid:
                                     candidate_meta = self._cached_rbfn_candidate_meta.get(index_name)
@@ -5313,10 +6809,26 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                                         if candidate_meta is not None and candidate_meta.generation == mode5_generation
                                         else None
                                     )
-                                    entry_or_valid, entry_or_reason, _ = self._validate_mode5_or_pair(
+                                    final_or_valid, final_or_reason, final_or_details = self._validate_mode5_or_pair(
                                         index_name,
                                         depth.exchange_timestamp_ms,
                                         completed_bar_boundary_ms,
+                                        self._observed_ingress_timestamp_ms(depth.ingress_wall_utc),
+                                    )
+                                    final_or_details = self._sanitize_mode5_or_telemetry(final_or_details)
+                                    self.log_decision_trace(
+                                        index_name=index_name,
+                                        bar_time=now_time,
+                                        action=rbfn_sig.action if rbfn_sig is not None else "NO_SIGNAL",
+                                        reason="MODE5_OR_FINAL_DIAGNOSTIC_ONLY",
+                                        details={
+                                            "valid": final_or_valid,
+                                            "reason": final_or_reason,
+                                            "decision_authority": "DIAGNOSTIC_ONLY",
+                                            **final_or_details,
+                                        },
+                                        timestamp_ms=depth.exchange_timestamp_ms,
+                                        candidate_generation=mode5_generation,
                                     )
                             if entry_or_valid:
                                 exec_reason = f"[{shadow_tier}] {setup_reason}"
@@ -5470,9 +6982,9 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                                             )
                             else:
                                 entered = False
-                                status_flag = "VETO_MODE5_OR"
-                                advisory = "WAIT (MODE5_OR_UNVERIFIED)"
-                                self.record_veto("MODE5_OR", entry_or_reason)
+                                status_flag = "VETO_MODE5_FINAL_AUTHORIZATION"
+                                advisory = f"WAIT (MODE5_FINAL_AUTHORIZATION_BLOCKED: {entry_or_reason})"
+                                self.record_veto("MODE5_FINAL_AUTHORIZATION", entry_or_reason)
                                 self._defer_mode5_decision_trace_locked(
                                     index_name=index_name,
                                     bar_time=now_time,
@@ -5532,63 +7044,6 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
                 status_flag = "VERIFIED_STATE"
                 advisory = "SCALP_MONITORING"
 
-        # Update in-flight APM position if open and matching option contract
-        with self._lock:
-            idx_apm = self.apms.get(index_name, self.apm)
-            if idx_apm.state in {STATE_IN_FLIGHT, "TRAIL_LOCK", "EXIT_PENDING"} and idx_apm.payload:
-                if idx_apm.payload.opt_symbol == depth.symbol:
-                    prev_state = idx_apm.state
-                    idx_apm.evaluate_tick(
-                        current_spot=spot,
-                        current_opt_ltp=ltp,
-                        tick_time_str=now_time.strftime("%H:%M:%S"),
-                        atr_1m=12.0,
-                    )
-                    # Check if position just liquidated
-                    if prev_state != idx_apm.state and idx_apm.state in {STATE_LIQUIDATED, STATE_COOL_OFF}:
-                        last_trade = idx_apm.last_completed_trade or (idx_apm.trade_history[-1] if idx_apm.trade_history else None)
-                        if last_trade:
-                            lt_dict = last_trade if isinstance(last_trade, dict) else asdict(last_trade)
-                            self.journal.record_exit(
-                                position_id=lt_dict.get("position_id", ""),
-                                index_name=index_name,
-                                symbol=depth.symbol,
-                                direction=lt_dict.get("direction", ""),
-                                entry_price_spot=float(lt_dict.get("entry_price") or 0.0),
-                                exit_price_spot=float(lt_dict.get("exit_price") or 0.0),
-                                entry_price_opt=float(lt_dict.get("opt_entry_ltp") or 0.0),
-                                exit_price_opt=float(lt_dict.get("opt_exit_ltp") or ltp),
-                                opt_pnl_pts=float(lt_dict.get("opt_pnl_pts") or 0.0),
-                                spot_pnl_pts=float(lt_dict.get("pnl_pts") or 0.0),
-                                exit_reason=str(lt_dict.get("exit_reason") or "LIQUIDATED"),
-                                max_spot_excursion=float(lt_dict.get("max_spot_excursion") or 0.0),
-                                max_opt_excursion=float(lt_dict.get("max_opt_excursion") or 0.0),
-                                target_1_hit=bool(lt_dict.get("target_1_hit")),
-                                target_2_hit=bool(lt_dict.get("target_2_hit")),
-                                half_booked=bool(lt_dict.get("half_booked")),
-                                trail_locked=bool(lt_dict.get("trail_locked")),
-                                total_quantity=int(lt_dict.get("total_quantity") or 65),
-                                timestamp_ms=depth.exchange_timestamp_ms,
-                                wall_time_str=now_time.strftime("%H:%M:%S"),
-                            )
-
-                            # Pure Algo Automated Order Dispatching on Exit
-                            if self.automated_dispatcher:
-                                if broker_instrument_key is not None:
-                                    self.automated_dispatcher.on_apm_exit(
-                                        index_name=index_name,
-                                        symbol=broker_instrument_key,
-                                        exit_price=float(lt_dict.get("opt_exit_ltp") or ltp),
-                                        reason=str(lt_dict.get("exit_reason") or "LIQUIDATED"),
-                                        qty=int(lt_dict.get("total_quantity") or 0),
-                                        intent_id=str(lt_dict.get("position_id") or ""),
-                                    )
-                                else:
-                                    self.record_veto(
-                                        "BROKER_INSTRUMENT_KEY",
-                                        "EXIT_DISPATCH_BLOCKED_MISSING_OR_MALFORMED_KEY",
-                                    )
-
         # Feed option depth tick to Shadow Barrier Path Evaluator
         self.journal.on_option_tick(
             symbol=depth.symbol,
@@ -5602,6 +7057,17 @@ class SentinelLiveStreamAdvisor(StreamSubscriber):
         # Do not throttle genuine BUY signals
         if not ("🎯 [BUY" in advisory) and is_throttled:
             return
+
+        if active_position_at_quote_start:
+            # Preserve the position-level block as the final user-facing reason,
+            # even if a non-authorizing Mode5 diagnostic also terminalized its
+            # candidate during this quote callback.
+            status_flag = "VETO_CONCURRENT_POSITION"
+            advisory = (
+                "WAIT (MATCHING_POSITION_MANAGED_THIS_QUOTE; ENTRY_BLOCKED)"
+                if matching_position_managed
+                else "WAIT (ACTIVE_POSITION_OTHER_CONTRACT; ENTRY_BLOCKED)"
+            )
 
         alert = AdvisoryAlert(
             timestamp_ms=depth.exchange_timestamp_ms,

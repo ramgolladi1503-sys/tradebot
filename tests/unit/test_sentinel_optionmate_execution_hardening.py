@@ -28,6 +28,7 @@ import math
 import threading
 import time
 import uuid
+from dataclasses import dataclass, replace
 from datetime import date, datetime, time as dt_time, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -46,28 +47,103 @@ from core.sentinel_live_stream_advisor import (
 )
 from core.sentinel_inmem_adapter import InMemorySentinelAdapter
 from core.upstox_stream_broadcaster import UpstoxLevel5DepthRecord
+from core.sentinel_realtime_journal import SentinelRealtimeJournal
 from strategies.optionmate_rbfn_strategy import OptionMateGrid
+
+
+def _join_queue_bounded(task_queue, timeout: float = 3.0) -> None:
+    deadline = time.monotonic() + timeout
+    while task_queue.unfinished_tasks:
+        if time.monotonic() >= deadline:
+            raise AssertionError(f"advisor queue did not drain within {timeout}s")
+        time.sleep(0.01)
 
 
 @pytest.fixture(autouse=True)
 def isolate_default_mode5_trace_file(tmp_path: Path, monkeypatch, request):
-    """Isolate default trace files and close every test-created writer."""
+    """Isolate advisor artifacts, deny default HTTP, and close every owned worker/handle."""
     original_init = SentinelLiveStreamAdvisor.__init__
     advisors = []
 
+    class FailFastHTTP:
+        def get(self, *args, **kwargs):
+            raise AssertionError("advisor test attempted unmocked HTTP")
+
+    monkeypatch.delenv("UPSTOX_ACCESS_TOKEN", raising=False)
+
     def isolated_init(self, *args, **kwargs):
+        advisor_index = len(advisors)
+        if kwargs.get("wal_path") is None:
+            kwargs["wal_path"] = str(tmp_path / f"default-wal-{advisor_index}.json")
+        if kwargs.get("or_reconciliation_state_path") is None:
+            kwargs["or_reconciliation_state_path"] = str(
+                tmp_path / f"default-or-ledger-{advisor_index}.json"
+            )
+        if kwargs.get("http_client") is None:
+            kwargs["http_client"] = FailFastHTTP()
+        supplied_journal = kwargs.get("journal")
+        if supplied_journal is None:
+            supplied_journal = SentinelRealtimeJournal(
+                logs_dir=tmp_path / f"journal-{advisor_index}",
+                enable_writer_thread=False,
+            )
+            kwargs["journal"] = supplied_journal
         original_init(self, *args, **kwargs)
-        advisors.append(self)
+        retained_journals = []
+        for journal in (supplied_journal, getattr(self, "journal", None)):
+            if journal is not None and all(journal is not existing for existing in retained_journals):
+                retained_journals.append(journal)
+        advisors.append((self, retained_journals))
         if self.decision_trace_path == Path("runtime") / "sentinel_decision_trace.jsonl":
             self.decision_trace_path = tmp_path / f"decision-trace-{id(self)}.jsonl"
 
     monkeypatch.setattr(SentinelLiveStreamAdvisor, "__init__", isolated_init)
 
     def close_test_writers():
-        for advisor in reversed(advisors):
-            advisor.shutdown_mode5_trace_writer(timeout_sec=2.0)
-            assert not advisor._mode5_trace_writer.is_alive()
-            assert advisor._mode5_trace_atexit_callback is None
+        cleanup_errors = []
+
+        def attempt(label, cleanup):
+            try:
+                cleanup()
+            except BaseException as exc:
+                cleanup_errors.append(f"{label}: {type(exc).__name__}: {exc}")
+
+        for advisor, retained_journals in reversed(advisors):
+            attempt("OR worker shutdown", advisor.shutdown_or_reconciliation_worker)
+            attempt("OR queue drain", lambda: _join_queue_bounded(advisor._or_request_queue))
+            attempt("OR worker join", lambda: advisor._or_worker_thread.join(timeout=3.0))
+            attempt(
+                "OR worker termination check",
+                lambda: (_ for _ in ()).throw(AssertionError("OR worker remains alive"))
+                if advisor._or_worker_thread.is_alive() else None,
+            )
+            attempt(
+                "trace writer shutdown",
+                lambda: advisor.shutdown_mode5_trace_writer(timeout_sec=2.0),
+            )
+            attempt(
+                "trace writer termination check",
+                lambda: (_ for _ in ()).throw(AssertionError("trace writer remains alive"))
+                if advisor._mode5_trace_writer.is_alive() else None,
+            )
+            attempt(
+                "trace writer atexit check",
+                lambda: (_ for _ in ()).throw(AssertionError("trace writer atexit hook remains"))
+                if advisor._mode5_trace_atexit_callback is not None else None,
+            )
+            for manager in advisor.apms.values():
+                attempt(f"APM close {getattr(manager, 'index_name', 'unknown')}", manager.close)
+            current_journal = getattr(advisor, "journal", None)
+            if current_journal is not None and all(
+                current_journal is not journal for journal in retained_journals
+            ):
+                retained_journals.append(current_journal)
+            for journal_index, journal in enumerate(retained_journals):
+                close_journal = getattr(journal, "close", None)
+                if callable(close_journal):
+                    attempt(f"journal close {journal_index}", close_journal)
+        if cleanup_errors:
+            raise AssertionError("advisor fixture cleanup failures: " + "; ".join(cleanup_errors))
 
     request.addfinalizer(close_test_writers)
 
@@ -78,10 +154,23 @@ def _test_bar_epoch(bar_time: dt_time) -> int:
     return int(bar_start.timestamp() // 300)
 
 
+def _test_bar_event_ms(bar_time: dt_time) -> int:
+    """Use the last in-bucket exchange millisecond, before its close boundary."""
+    return (_test_bar_epoch(bar_time) + 1) * 300_000 - 1
+
+
+def _test_bar_decision_available_ms(bar_time: dt_time) -> int:
+    """Test-only receipt clock one millisecond after the completed bar boundary."""
+    return (_test_bar_epoch(bar_time) + 1) * 300_000 + 1
+
+
 def _seed_test_or_pair(advisor, index_name: str, bar_time: dt_time) -> None:
     """Seed causal local OR evidence for tests exercising non-OR strategy behavior."""
     session_day = date(2026, 11, 17)
     ist = ZoneInfo("Asia/Kolkata")
+    # This fixture supplies its own explicit test evidence. Freeze reconciliation
+    # so historical tests cannot try to recover a live/current-session ledger.
+    advisor.or_reconciliation_frozen = True
     start = datetime.combine(session_day, dt_time(9, 15), tzinfo=ist)
     complete = bar_time >= dt_time(9, 45)
     source_time = dt_time(9, 44) if complete else dt_time(9, 15)
@@ -99,6 +188,9 @@ def _seed_test_or_pair(advisor, index_name: str, bar_time: dt_time) -> None:
             "status": "COMPLETE" if complete else "PARTIAL",
             "source": "UPSTOX_V2_1M_EXACT_30" if complete else "UPSTOX_TICK_PARTIAL",
             "source_timestamp_ms": int(datetime.combine(session_day, source_time, tzinfo=ist).timestamp() * 1000),
+            # Test-only local decision availability clock; never inferred from
+            # the source event timestamp above.
+            "available_at_ms": int(datetime.combine(session_day, bar_time, tzinfo=ist).timestamp() * 1000) - 1,
             "coverage_count": 30 if complete else 0,
             "coverage_start_ms": int(start.timestamp() * 1000) if complete else 0,
             "coverage_end_ms": int(datetime.combine(session_day, dt_time(9, 44), tzinfo=ist).timestamp() * 1000) if complete else 0,
@@ -127,25 +219,27 @@ def _seed_rp1_reversal_case(advisor, tmp_path: Path, side: str) -> None:
         target_strike=24700.0,
     )
     advisor.rbfn_grids_frozen["NIFTY"] = True
+    prior_epochs = _test_bar_epoch(dt_time(12, 10)) - 2
     if side == "lower":
         advisor.bars_5m_strategy_history["NIFTY"] = [
             {"open": 24420.0, "high": 24430.0, "low": 24390.0, "close": 24410.0,
-             "volume": 1000, "time": dt_time(12, 0), "timestamp_ms": 0, "epoch_5min": 0},
+             "volume": 1000, "time": dt_time(12, 0), "timestamp_ms": 0, "epoch_5min": prior_epochs},
             {"open": 24420.0, "high": 24435.0, "low": 24410.0, "close": 24430.0,
-             "volume": 1000, "time": dt_time(12, 5), "timestamp_ms": 0, "epoch_5min": 0},
+             "volume": 1000, "time": dt_time(12, 5), "timestamp_ms": 0, "epoch_5min": prior_epochs + 1},
         ]
     else:
         advisor.bars_5m_strategy_history["NIFTY"] = [
             {"open": 24580.0, "high": 24610.0, "low": 24570.0, "close": 24580.0,
-             "volume": 1000, "time": dt_time(12, 0), "timestamp_ms": 0, "epoch_5min": 0},
+             "volume": 1000, "time": dt_time(12, 0), "timestamp_ms": 0, "epoch_5min": prior_epochs},
             {"open": 24580.0, "high": 24590.0, "low": 24565.0, "close": 24570.0,
-             "volume": 1000, "time": dt_time(12, 5), "timestamp_ms": 0, "epoch_5min": 0},
+             "volume": 1000, "time": dt_time(12, 5), "timestamp_ms": 0, "epoch_5min": prior_epochs + 1},
         ]
 
 
 def _evaluate_rp1_reversal(advisor, side: str, open_price: float, close_price: float):
     bar_time = dt_time(12, 10)
-    timestamp_ms = _test_bar_epoch(bar_time) * 300_000
+    epoch_5min = _test_bar_epoch(bar_time)
+    timestamp_ms = (epoch_5min + 1) * 300_000 - 1
     return advisor._on_5m_bar_close(
         index_name="NIFTY",
         bar_open=open_price,
@@ -155,7 +249,8 @@ def _evaluate_rp1_reversal(advisor, side: str, open_price: float, close_price: f
         bar_volume=1000.0,
         bar_time=bar_time,
         timestamp_ms=timestamp_ms,
-        epoch_5min=timestamp_ms // 300_000,
+        epoch_5min=epoch_5min,
+        decision_available_at_ms=(epoch_5min + 1) * 300_000 + 1,
     )
 
 
@@ -231,12 +326,12 @@ def test_dynamic_hot_reload_rejects_stale_prior_day(tmp_path: Path):
     assert advisor.rbfn_grids_frozen["NIFTY"] is False
 
 
-def test_nifty_gate_2_calibrated_65_pts(tmp_path: Path):
-    """Evaluates Gate 2 hurdle at 65.0 pts (passes at 70 pts, vetoes below 65 pts)."""
+def test_mode5_gate_2_friction_is_diagnostic_at_50_and_70_pts(tmp_path: Path):
+    """Mode5 records inherited Gate 2 friction without changing RBFN signal authority."""
     wal = tmp_path / "test_wal_gate2.json"
     advisor = SentinelLiveStreamAdvisor(wal_path=str(wal), enable_stdout=False)
 
-    # 1. Under-hurdle: ATR_20 = 50.0 (< 65.0) -> Must ABSTAIN with GATE_2_FRICTIONAL_HURDLE
+    # 1. Under-hurdle: the inherited overlay would veto, but must not own Mode5.
     advisor.seed_prior_day_levels("NIFTY", pdh=25400.0, pdl=25200.0, pdc=25300.0, atr_20=50.0)
     advisor.session_open_prices["NIFTY"] = 25300.0
     _seed_test_or_pair(advisor, "NIFTY", dt_time(9, 20))
@@ -248,15 +343,17 @@ def test_nifty_gate_2_calibrated_65_pts(tmp_path: Path):
         bar_close=25440.0,
         bar_volume=50000.0,
         bar_time=dt_time(9, 20),
-        timestamp_ms=_test_bar_epoch(dt_time(9, 20)) * 300_000,
+        timestamp_ms=_test_bar_event_ms(dt_time(9, 20)),
         epoch_5min=_test_bar_epoch(dt_time(9, 20)),
+        decision_available_at_ms=_test_bar_decision_available_ms(dt_time(9, 20)),
     )
     assert sig_vetoed is not None
-    assert sig_vetoed.action == "ABSTAIN"
-    assert sig_vetoed.is_vetoed is True
-    assert sig_vetoed.veto_reason == "GATE_2_FRICTIONAL_HURDLE"
+    assert sig_vetoed.action in {"BUY_CALL", "BUY_PUT"}
+    assert sig_vetoed.is_active is True
+    assert sig_vetoed.is_vetoed is False
+    assert advisor._mode5_bar_policy_observations["NIFTY"]["gate2"]["atr_frictional_hurdle"]["would_veto"] is True
 
-    # 2. Hurdle passed: ATR_20 = 70.0 (>= 65.0) -> Expansion breakout must be accepted
+    # 2. At 70 points, the signal remains active and the diagnostic says no veto.
     advisor2 = SentinelLiveStreamAdvisor(wal_path=str(wal.with_name("test_wal_gate2_pass.json")), enable_stdout=False)
     advisor2.seed_prior_day_levels("NIFTY", pdh=25400.0, pdl=25200.0, pdc=25300.0, atr_20=70.0)
     advisor2.session_open_prices["NIFTY"] = 25300.0
@@ -269,13 +366,15 @@ def test_nifty_gate_2_calibrated_65_pts(tmp_path: Path):
         bar_close=25440.0,
         bar_volume=50000.0,
         bar_time=dt_time(9, 20),
-        timestamp_ms=_test_bar_epoch(dt_time(9, 20)) * 300_000,
+        timestamp_ms=_test_bar_event_ms(dt_time(9, 20)),
         epoch_5min=_test_bar_epoch(dt_time(9, 20)),
+        decision_available_at_ms=_test_bar_decision_available_ms(dt_time(9, 20)),
     )
     assert sig_passed is not None
     assert sig_passed.is_active is True
     assert sig_passed.is_vetoed is False
     assert sig_passed.action in {"BUY_CALL", "BUY_PUT"}
+    assert advisor2._mode5_bar_policy_observations["NIFTY"]["gate2"]["atr_frictional_hurdle"]["would_veto"] is False
 
 
 def test_1030_rp2_piercing_uncoupled_from_exhaustion_fade(tmp_path: Path):
@@ -297,8 +396,9 @@ def test_1030_rp2_piercing_uncoupled_from_exhaustion_fade(tmp_path: Path):
         bar_close=24220.0,
         bar_volume=80000.0,
         bar_time=dt_time(10, 15),
-        timestamp_ms=_test_bar_epoch(dt_time(10, 15)) * 300_000,
+        timestamp_ms=_test_bar_event_ms(dt_time(10, 15)),
         epoch_5min=_test_bar_epoch(dt_time(10, 15)),
+        decision_available_at_ms=_test_bar_decision_available_ms(dt_time(10, 15)),
     )
     assert advisor.rp2_pierced_before_1030["NIFTY"] is True
 
@@ -312,8 +412,9 @@ def test_1030_rp2_piercing_uncoupled_from_exhaustion_fade(tmp_path: Path):
         bar_close=24230.0,
         bar_volume=40000.0,
         bar_time=dt_time(11, 25),
-        timestamp_ms=_test_bar_epoch(dt_time(11, 25)) * 300_000,
+        timestamp_ms=_test_bar_event_ms(dt_time(11, 25)),
         epoch_5min=_test_bar_epoch(dt_time(11, 25)),
+        decision_available_at_ms=_test_bar_decision_available_ms(dt_time(11, 25)),
     )
 
     advisor._on_5m_bar_close(
@@ -324,8 +425,9 @@ def test_1030_rp2_piercing_uncoupled_from_exhaustion_fade(tmp_path: Path):
         bar_close=24215.0,
         bar_volume=40000.0,
         bar_time=dt_time(11, 30),
-        timestamp_ms=_test_bar_epoch(dt_time(11, 30)) * 300_000,
+        timestamp_ms=_test_bar_event_ms(dt_time(11, 30)),
         epoch_5min=_test_bar_epoch(dt_time(11, 30)),
+        decision_available_at_ms=_test_bar_decision_available_ms(dt_time(11, 30)),
     )
     sig_fade = advisor._on_5m_bar_close(
         index_name="NIFTY",
@@ -335,8 +437,9 @@ def test_1030_rp2_piercing_uncoupled_from_exhaustion_fade(tmp_path: Path):
         bar_close=24205.0,
         bar_volume=45000.0,
         bar_time=dt_time(11, 35),
-        timestamp_ms=_test_bar_epoch(dt_time(11, 35)) * 300_000,
+        timestamp_ms=_test_bar_event_ms(dt_time(11, 35)),
         epoch_5min=_test_bar_epoch(dt_time(11, 35)),
+        decision_available_at_ms=_test_bar_decision_available_ms(dt_time(11, 35)),
     )
 
     # S5 ceiling fade must NOT be vetoed by 10:30 RP2 piercing!
@@ -384,7 +487,8 @@ def test_rp2_fade_producers_snapshot_their_triggering_boundary(
     advisor.rbfn_grids_frozen["NIFTY"] = True
 
     def evaluate(bar_time: dt_time, open_price: float, high: float, low: float, close: float):
-        timestamp_ms = _test_bar_epoch(bar_time) * 300_000
+        epoch_5min = _test_bar_epoch(bar_time)
+        timestamp_ms = (epoch_5min + 1) * 300_000 - 1
         return advisor._on_5m_bar_close(
             index_name="NIFTY",
             bar_open=open_price,
@@ -394,7 +498,8 @@ def test_rp2_fade_producers_snapshot_their_triggering_boundary(
             bar_volume=45000.0,
             bar_time=bar_time,
             timestamp_ms=timestamp_ms,
-            epoch_5min=timestamp_ms // 300_000,
+            epoch_5min=epoch_5min,
+                decision_available_at_ms=(epoch_5min + 1) * 300_000 + 1,
         )
 
     if variant == "fast":
@@ -466,6 +571,85 @@ def test_rp1_reversal_requires_current_bar_direction(
         assert signal.triggering_reference_price == expected_reference
 
 
+def test_mode5_bar_signal_is_independent_of_target_and_companion_or_availability(
+    tmp_path: Path,
+):
+    results = []
+    for or_state in ("VALID", "TARGET_UNAVAILABLE", "COMPANION_UNAVAILABLE", "BOTH_UNAVAILABLE"):
+        advisor = SentinelLiveStreamAdvisor(
+            wal_path=str(tmp_path / f"bar-or-diagnostic-{or_state}.json"),
+            enable_stdout=False,
+        )
+        _seed_rp1_reversal_case(advisor, tmp_path, "lower")
+        if or_state in {"TARGET_UNAVAILABLE", "BOTH_UNAVAILABLE"}:
+            advisor.or_evidence["NIFTY"]["available_at_ms"] = None
+        if or_state in {"COMPANION_UNAVAILABLE", "BOTH_UNAVAILABLE"}:
+            advisor.or_evidence["SENSEX"]["status"] = "PENDING_RECONCILIATION"
+            advisor.or_evidence["SENSEX"]["available_at_ms"] = None
+
+        signal = _evaluate_rp1_reversal(
+            advisor, "lower", open_price=24440.0, close_price=24450.0
+        )
+        assert signal is not None
+        records = _read_mode5_trace_records(advisor)
+        records = [row for row in records if row.get("trace_run_id") == advisor.trace_run_id]
+        matching = [row for row in records if row.get("reason") == signal.setup_reason]
+        assert matching
+        or_validation = matching[-1]["details"]["or_validation"]
+        assert or_validation["decision_authority"] == "DIAGNOSTIC_ONLY"
+        assert or_validation["reason"].startswith(
+            "MODE5_TARGET_OR_VALID" if or_state in {"VALID", "COMPANION_UNAVAILABLE"}
+            else "MODE5_TARGET_OR_AVAILABILITY_UNPROVEN"
+        )
+        results.append((signal.action, signal.setup_reason, signal.target_pts, signal.sl_pts))
+        advisor.shutdown_mode5_trace_writer(timeout_sec=2)
+
+    assert len(set(results)) == 1
+
+
+@pytest.mark.parametrize("side", ["upper", "lower"])
+def test_rp1_reversal_does_not_join_confirmation_across_missing_five_minute_bar(
+    tmp_path: Path, side: str
+):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / f"rp1-gap-{side}.json"), enable_stdout=False
+    )
+    _seed_rp1_reversal_case(advisor, tmp_path, side)
+    current_epoch = _test_bar_epoch(dt_time(12, 10))
+    history = advisor.bars_5m_strategy_history["NIFTY"]
+    assert len(history) >= 2
+    history[-2]["epoch_5min"] = current_epoch - 3
+    history[-1]["epoch_5min"] = current_epoch - 2  # distinct E-3, E-2; E-1 is absent
+
+    signal = _evaluate_rp1_reversal(
+        advisor, side, open_price=24440.0 if side == "lower" else 24540.0,
+        close_price=24450.0 if side == "lower" else 24530.0,
+    )
+
+    expected = "RP1_LOWER_REVERSAL_CONFIRMED" if side == "lower" else "RP1_UPPER_REVERSAL_CONFIRMED"
+    assert signal is not None
+    assert signal.setup_reason != expected
+
+
+def test_mode5_epoch_adjacency_helper_requires_exact_two_and_three_bar_windows():
+    two = [{"epoch_5min": 100}, {"epoch_5min": 101}]
+    three = [{"epoch_5min": 100}, {"epoch_5min": 101}, {"epoch_5min": 102}]
+    assert SentinelLiveStreamAdvisor._has_consecutive_bar_epochs(two, 2) is True
+    assert SentinelLiveStreamAdvisor._has_consecutive_bar_epochs(three, 3) is True
+    assert SentinelLiveStreamAdvisor._has_consecutive_bar_epochs(
+        [{"epoch_5min": 100}, {"epoch_5min": 102}], 2
+    ) is False
+    assert SentinelLiveStreamAdvisor._has_consecutive_bar_epochs(
+        [{"epoch_5min": 100}, {"epoch_5min": 102}, {"epoch_5min": 103}], 3
+    ) is False
+    assert SentinelLiveStreamAdvisor._has_consecutive_bar_epochs(
+        [{"epoch_5min": 100}, {"epoch_5min": True}], 2
+    ) is False
+    assert SentinelLiveStreamAdvisor._has_consecutive_bar_epochs(
+        [{"epoch_5min": True}, {"epoch_5min": 2}], 2
+    ) is False
+
+
 def test_rp1_upper_expansion_producer_snapshots_frozen_rp1_boundary(tmp_path: Path):
     advisor = SentinelLiveStreamAdvisor(
         wal_path=str(tmp_path / "rp1-upper-expansion.json"), enable_stdout=False
@@ -517,7 +701,8 @@ def test_rp1_upper_expansion_producer_snapshots_frozen_rp1_boundary(tmp_path: Pa
     advisor._last_completed_5m_epoch["NIFTY"] = prior_epoch
     advisor._last_5m_timestamp_ms["NIFTY"] = prior_epoch * 300_000
 
-    timestamp_ms = _test_bar_epoch(bar_time) * 300_000
+    epoch_5min = _test_bar_epoch(bar_time)
+    timestamp_ms = (epoch_5min + 1) * 300_000 - 1
     signal = advisor._on_5m_bar_close(
         index_name="NIFTY",
         bar_open=25600.0,
@@ -527,7 +712,8 @@ def test_rp1_upper_expansion_producer_snapshots_frozen_rp1_boundary(tmp_path: Pa
         bar_volume=1000.0,
         bar_time=bar_time,
         timestamp_ms=timestamp_ms,
-        epoch_5min=timestamp_ms // 300_000,
+        epoch_5min=epoch_5min,
+        decision_available_at_ms=(epoch_5min + 1) * 300_000 + 1,
     )
 
     assert signal is not None
@@ -586,7 +772,8 @@ def test_rp1_lower_expansion_producer_snapshots_frozen_rp1_boundary(tmp_path: Pa
     advisor._last_completed_5m_epoch["NIFTY"] = prior_epoch
     advisor._last_5m_timestamp_ms["NIFTY"] = prior_epoch * 300_000
 
-    timestamp_ms = _test_bar_epoch(bar_time) * 300_000
+    epoch_5min = _test_bar_epoch(bar_time)
+    timestamp_ms = (epoch_5min + 1) * 300_000 - 1
     signal = advisor._on_5m_bar_close(
         index_name="NIFTY",
         bar_open=25150.0,
@@ -596,7 +783,8 @@ def test_rp1_lower_expansion_producer_snapshots_frozen_rp1_boundary(tmp_path: Pa
         bar_volume=1000.0,
         bar_time=bar_time,
         timestamp_ms=timestamp_ms,
-        epoch_5min=timestamp_ms // 300_000,
+        epoch_5min=epoch_5min,
+        decision_available_at_ms=(epoch_5min + 1) * 300_000 + 1,
     )
 
     assert signal is not None
@@ -614,6 +802,7 @@ def _make_dummy_depth(
     ts_ms: int = 1793196900000,
     ingress_ns: int = 1000000,
     sequence_id: int = 1,
+    ingress_wall_utc: str = "2026-11-17T11:35:00Z",
 ) -> UpstoxLevel5DepthRecord:
     """Helper to produce a valid Upstox Level-5 depth record."""
     return UpstoxLevel5DepthRecord(
@@ -621,7 +810,7 @@ def _make_dummy_depth(
         symbol=symbol,
         exchange_timestamp_ms=ts_ms,
         ingress_monotonic_ns=ingress_ns,
-        ingress_wall_utc="2026-11-17T11:35:00Z",
+        ingress_wall_utc=ingress_wall_utc,
         sequence_id=sequence_id,
         ltp=ltp,
         volume=200000,
@@ -867,7 +1056,7 @@ def test_cached_rbfn_signal_300s_monotonic_ttl_eviction(tmp_path: Path, monkeypa
         is_active=True,
     )
     clock_ns = [10_000_000_000]
-    monkeypatch.setattr("core.sentinel_live_stream_advisor.time.monotonic_ns", lambda: clock_ns[0])
+    monkeypatch.setattr(advisor_module, "_monotonic_clock_ns", lambda: clock_ns[0])
     with advisor._lock:
         advisor._cache_rbfn_signal_locked("NIFTY", fresh_signal, base_ts_ms // 300_000)
 
@@ -927,7 +1116,7 @@ def test_lagging_quote_preserves_candidate_and_boundary_quote_is_eligible(tmp_pa
     boundary_ms = int(boundary.timestamp() * 1000)
     current_wall_ms = boundary_ms + 500
     clock_ns = [10_000_000_000]
-    monkeypatch.setattr("core.sentinel_live_stream_advisor.time.monotonic_ns", lambda: clock_ns[0])
+    monkeypatch.setattr(advisor_module, "_monotonic_clock_ns", lambda: clock_ns[0])
     signal = CachedRBFNAuctionSignal(
         timestamp_ms=boundary_ms - 100,
         index_name="NIFTY",
@@ -985,6 +1174,124 @@ def test_lagging_quote_preserves_candidate_and_boundary_quote_is_eligible(tmp_pa
     assert found is signal
     assert generation == advisor._cached_rbfn_candidate_meta["NIFTY"].generation
     assert len(_read_mode5_trace_records(advisor)) == 1
+
+
+def test_candidate_lookup_uses_fresh_locked_monotonic_after_prepublication_sample(
+    tmp_path: Path, monkeypatch
+):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / "candidate-fresh-lock-clock.json"), enable_stdout=False
+    )
+    boundary = datetime(2026, 11, 18, 10, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    depth, signal, generation, wall_now_ms, _ = _configure_production_mode5_entry(
+        advisor, tmp_path, monkeypatch, boundary=boundary,
+        monotonic_base_ns=106_000_000_000,
+    )
+    metadata = advisor._cached_rbfn_candidate_meta["NIFTY"]
+    assert metadata is not None
+    prepublication_sample_ns = metadata.issued_monotonic_ns - 1
+    current_lookup_ns = metadata.issued_monotonic_ns + 5_000_000
+    monkeypatch.setattr(advisor_module, "_monotonic_clock_ns", lambda: current_lookup_ns)
+    quote_valid, reason, quote_day, key, source_order = advisor._option_quote_identity(
+        "NIFTY", depth, wall_now_ms=wall_now_ms,
+        monotonic_now_ns=depth.ingress_monotonic_ns + 1,
+    )
+    assert quote_valid, reason
+    assert quote_day is not None and key is not None and source_order is not None
+    assert advisor._record_option_depth_order("NIFTY", quote_day, key, source_order)
+
+    candidate, found_generation = advisor._candidate_for_option_depth(
+        "NIFTY", depth, quote_day, key, source_order,
+        now_ns=prepublication_sample_ns,
+    )
+
+    assert candidate is signal
+    assert found_generation == generation
+    assert advisor.cached_rbfn_signals["NIFTY"] is signal
+    assert advisor._cached_rbfn_candidate_meta["NIFTY"].status == "AVAILABLE"
+
+
+def test_mode5_research_bar_does_not_mutate_shared_runner_gears(
+    tmp_path: Path, monkeypatch
+):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / "mode5-gear-isolation.json"), enable_stdout=False
+    )
+    bar_time = dt_time(9, 20)
+    timestamp_ms = _test_bar_event_ms(bar_time)
+    epoch = _test_bar_epoch(bar_time)
+    boundary_ms = (epoch + 1) * 300_000
+    decision_ms = _test_bar_decision_available_ms(bar_time)
+    monkeypatch.setattr(
+        advisor_module, "_wall_clock_seconds", lambda: (decision_ms + 1) / 1000.0
+    )
+    day = date(2026, 11, 17)
+    _seed_test_or_pair(advisor, "NIFTY", bar_time)
+    assert advisor.seed_prior_day_levels(
+        "NIFTY", pdh=25_300.0, pdl=24_700.0, pdc=25_000.0,
+        session_date=day, atr_20=100.0,
+    )
+    advisor.session_gears["NIFTY"] = "GEAR_1_RANGE"
+    advisor.session_gear = "GEAR_1_RANGE"
+    advisor.gear_range_bar_counters["NIFTY"] = 0
+    advisor.gear_trend_bar_counters["NIFTY"] = 0
+    advisor.gear_expansion_ratios["NIFTY"] = 0.0
+
+    try:
+        advisor._on_5m_bar_close(
+            "NIFTY", 25_000.0, 25_300.0, 24_800.0, 25_100.0, 100.0,
+            bar_time, timestamp_ms, epoch,
+            decision_available_at_ms=decision_ms,
+        )
+        assert advisor._last_completed_5m_epoch["NIFTY"] == epoch
+        assert advisor.session_gears["NIFTY"] == "GEAR_1_RANGE"
+        assert advisor.session_gear == "GEAR_1_RANGE"
+        assert advisor.gear_range_bar_counters["NIFTY"] == 0
+        assert advisor.gear_trend_bar_counters["NIFTY"] == 0
+        assert advisor.gear_expansion_ratios["NIFTY"] == 0.0
+    finally:
+        advisor.shutdown_or_reconciliation_worker()
+        advisor.shutdown_mode5_trace_writer(timeout_sec=3.0)
+        for manager in advisor.apms.values():
+            manager.close()
+
+
+def test_invalid_bar_nonfinite_value_is_traced_as_null_without_state_advance(
+    tmp_path: Path, monkeypatch
+):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / "invalid-bar-nonfinite.json"), enable_stdout=False
+    )
+    advisor.decision_trace_path = tmp_path / "invalid-bar-nonfinite.jsonl"
+    boundary = datetime(2026, 11, 18, 9, 55, tzinfo=ZoneInfo("Asia/Kolkata"))
+    timestamp_ms = int(boundary.timestamp() * 1000) - 1
+    epoch = timestamp_ms // 300_000
+    decision_ms = (epoch + 1) * 300_000 + 1
+    monkeypatch.setattr(advisor_module, "_wall_clock_seconds", lambda: decision_ms / 1000.0)
+
+    result = advisor._on_5m_bar_close(
+        "NIFTY", math.nan, 25010.0, 24990.0, 25005.0, 100.0,
+        boundary.time(), timestamp_ms, epoch,
+        decision_available_at_ms=decision_ms,
+    )
+
+    assert result is None
+    assert advisor.bars_5m_history.get("NIFTY", []) == []
+    assert advisor._last_5m_timestamp_ms.get("NIFTY", 0) == 0
+    summaries = [
+        row for row in _read_mode5_trace_records(advisor)
+        if row.get("event_type") == "MODE5_EVALUATION_SUMMARY"
+    ]
+    assert len(summaries) == 1
+    summary = summaries[0]
+    assert summary["evaluation_state"] == "REJECTED"
+    assert summary["candidate_state"] == "NOT_EMITTED"
+    assert summary["reason_code"] == "INVALID_COMPLETED_BAR_OHLCV"
+    assert summary["bar_ohlcv"]["open"] is None
+    assert summary["bar_ohlcv"]["telemetry_sanitization"] == {
+        "status": "REPLACED_WITH_NULL",
+        "replaced_paths": ["or_details.open"],
+    }
 
 
 def _seed_quote_trace_candidate(advisor, boundary: datetime):
@@ -1213,6 +1520,7 @@ def test_mode5_invalid_bar_summary_preserves_validation_reason(tmp_path: Path):
         bar_time=dt_time(10, 0),
         timestamp_ms=int(datetime(2026, 11, 18, 10, 0, tzinfo=ZoneInfo("Asia/Kolkata")).timestamp() * 1000),
         epoch_5min=-1,
+        decision_available_at_ms=None,
     )
     records = _read_mode5_trace_records(advisor)
     summaries = [r for r in records if r.get("event_type") == "MODE5_EVALUATION_SUMMARY"]
@@ -1230,14 +1538,19 @@ def test_mode5_validated_no_signal_has_no_invented_reason(tmp_path: Path, monkey
         wal_path=str(tmp_path / "valid-no-signal.json"), enable_stdout=False
     )
     advisor.decision_trace_path = tmp_path / "valid-no-signal.jsonl"
-    boundary = datetime(2026, 11, 18, 10, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    boundary = datetime(2026, 11, 18, 9, 55, tzinfo=ZoneInfo("Asia/Kolkata"))
     timestamp_ms = int(boundary.timestamp() * 1000) - 1
     epoch = timestamp_ms // 300_000
-    monkeypatch.setattr(advisor, "_on_5m_bar_close_locked", lambda *args: None)
+    assert datetime.fromtimestamp(epoch * 300, tz=ZoneInfo("Asia/Kolkata")).time() == dt_time(9, 50)
+    evaluator = Mock(return_value=None)
+    monkeypatch.setattr(advisor, "_on_5m_bar_close_locked", evaluator)
+    # Freeze host wall time to the supplied completed-bar availability point.
+    monkeypatch.setattr(advisor_module, "_wall_clock_seconds", lambda: ((epoch + 1) * 300_000 + 1) / 1000.0)
     advisor._on_5m_bar_close(
         index_name="NIFTY", bar_open=25000.0, bar_high=25010.0, bar_low=24990.0,
         bar_close=25005.0, bar_volume=100.0, bar_time=boundary.time(),
         timestamp_ms=timestamp_ms, epoch_5min=epoch,
+        decision_available_at_ms=(epoch + 1) * 300_000 + 1,
     )
     summaries = [
         r for r in _read_mode5_trace_records(advisor)
@@ -1246,7 +1559,11 @@ def test_mode5_validated_no_signal_has_no_invented_reason(tmp_path: Path, monkey
     assert len(summaries) == 1
     assert summaries[0]["evaluation_state"] == "NO_SIGNAL"
     assert summaries[0]["candidate_state"] == "NOT_EMITTED"
+    assert summaries[0]["candidate_id"] is None
     assert summaries[0]["reason_code"] is None
+    assert summaries[0]["epoch_5min"] == epoch
+    assert evaluator.call_count == 1
+    assert advisor._mode5_last_eval_rejection.get("NIFTY") is None
 
 
 def test_mode5_evaluator_exception_is_traced_and_original_exception_survives_queue_failure(tmp_path: Path, monkeypatch):
@@ -1265,6 +1582,7 @@ def test_mode5_evaluator_exception_is_traced_and_original_exception_survives_que
         advisor._on_5m_bar_close(
             "NIFTY", 25000.0, 25010.0, 24990.0, 25005.0, 100.0,
             boundary.time(), timestamp_ms, epoch,
+            decision_available_at_ms=(epoch + 1) * 300_000 + 1,
         )
     assert caught.value is original_error
     error_events = [
@@ -1290,25 +1608,17 @@ def test_mode5_evaluator_exception_is_traced_and_original_exception_survives_que
         advisor._on_5m_bar_close(
             "NIFTY", 25000.0, 25010.0, 24990.0, 25005.0, 100.0,
             boundary.time(), timestamp_ms, epoch,
+            decision_available_at_ms=(epoch + 1) * 300_000 + 1,
         )
     assert caught_queue_failure.value is second_error
 
 
-@pytest.mark.parametrize(
-    ("use_dispatcher", "apm_result", "expected_stage", "expected_outcome"),
-    [
-        (True, True, "RESERVATION_ACCEPTED", "APM_ENTRY_RECORDED"),
-        (True, False, "RESERVATION_ACCEPTED", "APM_ENTRY_REJECTED"),
-        (False, True, "LOCAL_APM_AUTHORIZED", "APM_ENTRY_RECORDED"),
-        (False, False, "LOCAL_APM_AUTHORIZED", "APM_ENTRY_REJECTED"),
-    ],
-)
-def test_mode5_candidate_stage_and_local_apm_outcome_are_joined(
-    tmp_path: Path, monkeypatch, use_dispatcher: bool, apm_result: bool,
-    expected_stage: str, expected_outcome: str,
+@pytest.mark.parametrize("use_dispatcher", [True, False])
+def test_mode5_candidate_is_blocked_before_sizing_and_apm(
+    tmp_path: Path, monkeypatch, use_dispatcher: bool,
 ):
     advisor = SentinelLiveStreamAdvisor(
-        wal_path=str(tmp_path / f"apm-outcome-{use_dispatcher}-{apm_result}.json"),
+        wal_path=str(tmp_path / f"apm-outcome-{use_dispatcher}.json"),
         enable_stdout=False,
     )
     boundary = datetime(2026, 11, 18, 10, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
@@ -1317,11 +1627,12 @@ def test_mode5_candidate_stage_and_local_apm_outcome_are_joined(
     )
     depth, signal, generation, _, _ = _configure_production_mode5_entry(
         advisor, tmp_path, monkeypatch, boundary=boundary,
-        monotonic_base_ns=90_000_000_000 + int(use_dispatcher) * 10_000_000_000 + int(apm_result) * 1_000_000_000,
+        monotonic_base_ns=90_000_000_000 + int(use_dispatcher) * 10_000_000_000,
         reservation_result=reservation,
     )
-    advisor.decision_trace_path = tmp_path / f"apm-outcome-{use_dispatcher}-{apm_result}.jsonl"
-    advisor.apms["NIFTY"].arm_and_enter.return_value = apm_result
+    lot_sizing = Mock(return_value=(1, "FULL"))
+    monkeypatch.setattr(advisor_module, "calculate_discrete_lots", lot_sizing)
+    advisor.decision_trace_path = tmp_path / f"apm-outcome-{use_dispatcher}.jsonl"
     if not use_dispatcher:
         advisor.automated_dispatcher = None
     monkeypatch.setattr(
@@ -1331,20 +1642,694 @@ def test_mode5_candidate_stage_and_local_apm_outcome_are_joined(
 
     advisor._evaluate_option_depth(depth)
 
-    candidate_id = advisor._mode5_candidate_id(
-        "NIFTY", advisor._cached_rbfn_candidate_meta["NIFTY"].session_day, generation
-    )
     records = _read_mode5_trace_records(advisor)
     stage_rows = [r for r in records if r.get("event_type") == "MODE5_CANDIDATE_STAGE"]
     terminal_rows = [r for r in records if r.get("event_type") == "MODE5_CANDIDATE_TERMINAL"]
-    assert len(stage_rows) == 1
-    assert stage_rows[0]["candidate_stage"] == expected_stage
-    assert stage_rows[0]["candidate_id"] == candidate_id
+    observation_rows = [r for r in records if r.get("event_type") == "MODE5_POLICY_OBSERVATION"]
+    assert stage_rows == []
     assert len(terminal_rows) == 1
-    assert terminal_rows[0]["candidate_state"] == expected_outcome
-    assert terminal_rows[0]["candidate_id"] == candidate_id
-    assert terminal_rows[0]["record_origin"] == "LOCAL_APM"
+    assert terminal_rows[0]["terminal_reason"] == "MODE5_SIZING_POLICY_UNVERIFIED"
+    assert len(observation_rows) == 1
+    assert observation_rows[0]["candidate_generation"] == generation
+    assert any(
+        row.get("reason") == "MODE5_OR_FINAL_DIAGNOSTIC_ONLY"
+        for row in _read_mode5_trace_records(advisor)
+    )
+    lot_sizing.assert_not_called()
+    assert advisor.apms["NIFTY"].arm_and_enter.call_count == 0
+    if use_dispatcher:
+        advisor.automated_dispatcher.reserve_entry_intent.assert_not_called()
     assert terminal_rows[0]["broker_fill_confirmed"] is False
+
+
+@pytest.mark.parametrize("or_state", ["VALID", "TARGET_UNAVAILABLE", "COMPANION_UNAVAILABLE", "BOTH_UNAVAILABLE"])
+def test_actual_mode5_quote_path_observes_overlays_but_never_authorizes_entry(
+    tmp_path: Path, monkeypatch, or_state: str
+):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / "mode5-overlay-nonauthorizing.json"), enable_stdout=False
+    )
+    boundary = datetime(2026, 11, 18, 10, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    depth, rbfn_signal, generation, _, _ = _configure_production_mode5_entry(
+        advisor, tmp_path, monkeypatch, boundary=boundary, monotonic_base_ns=95_000_000_000,
+        setup_reason="TEST_DIRECTIONAL_CONTINUATION",
+        trade_phase="CONTINUOUS_STATE_MACHINE",
+    )
+    if or_state in {"TARGET_UNAVAILABLE", "BOTH_UNAVAILABLE"}:
+        advisor.or_evidence["NIFTY"]["available_at_ms"] = None
+    if or_state in {"COMPANION_UNAVAILABLE", "BOTH_UNAVAILABLE"}:
+        advisor.or_evidence["SENSEX"]["status"] = "PENDING_RECONCILIATION"
+        advisor.or_evidence["SENSEX"]["available_at_ms"] = None
+    expected_strategy_target_pts = rbfn_signal.target_pts
+    advisor._mode5_bar_policy_observations["NIFTY"] = {
+        "gate2": {
+            "compression": {"would_veto": True, "effect": "DIAGNOSTIC_ONLY"},
+            "atr_frictional_hurdle": {"would_veto": True, "effect": "DIAGNOSTIC_ONLY"},
+        }
+    }
+    # Force the shared macro overlay to evaluate its companion alignment branch.
+    advisor.spots["SENSEX"] = 84000.0
+    advisor.macro_gate.evaluate_alignment = Mock(return_value=(False, "TEST_MACRO_VETO"))
+    advisor.vol_compression_gate.evaluate_compression = Mock(
+        return_value=(False, "TEST_EXHAUSTION_VETO", None)
+    )
+    advisor.evaluate_nifty_frictional_hurdle = Mock(return_value=(False, "TEST_FRICTION_VETO"))
+    advisor.confidence_scorer.evaluate_confidence = Mock(return_value=SimpleNamespace(
+        is_actionable=False, total_score=float("nan"), grade="C", probable_win_rate_pct=20,
+        sizing_recommendation="ZERO_SUPPRESS",
+    ))
+    advisor.wall_gates["NIFTY"] = SimpleNamespace(
+        evaluate_entry_gate=Mock(return_value=SimpleNamespace(
+            action=advisor_module.GATE_ACTION_VETO, reason="TEST_WALL_VETO"
+        )),
+        clamp_target_to_wall=Mock(return_value=SimpleNamespace(
+            action=advisor_module.GATE_ACTION_CLAMP_TARGET,
+            reason="TEST_WALL_CLAMP",
+            clamped_target_pts=1.0,
+        )),
+    )
+    lot_sizing = Mock(return_value=(1, "FULL"))
+    monkeypatch.setattr(advisor_module, "calculate_discrete_lots", lot_sizing)
+    advisor.record_veto = Mock(wraps=advisor.record_veto)
+    active_apm = advisor.apms["NIFTY"]
+    active_apm.state = advisor_module.STATE_IN_FLIGHT
+    active_apm.payload = SimpleNamespace(opt_symbol=depth.symbol)
+    active_apm.evaluate_tick = Mock()
+    monkeypatch.setattr(
+        advisor_module.SentinelOptionStrikeResolver,
+        "resolve_mode5_strike",
+        staticmethod(lambda **kwargs: SimpleNamespace(target_strike=24100.0)),
+    )
+
+    metadata = advisor._cached_rbfn_candidate_meta["NIFTY"]
+    decision_available_ms = advisor._observed_ingress_timestamp_ms(depth.ingress_wall_utc)
+    assert decision_available_ms is not None
+    or_valid, or_reason, _ = advisor._validate_mode5_or_pair(
+        "NIFTY", depth.exchange_timestamp_ms, metadata.boundary_timestamp_ms,
+        decision_available_ms,
+    )
+    assert or_valid is (or_state in {"VALID", "COMPANION_UNAVAILABLE"}), or_reason
+    quote_valid, quote_reason, quote_day, instrument_key, source_order = advisor._option_quote_identity(
+        "NIFTY", depth, wall_now_ms=depth.exchange_timestamp_ms + 10,
+        monotonic_now_ns=metadata.issued_monotonic_ns + 2_000_000,
+    )
+    assert quote_valid, quote_reason
+    assert quote_day == metadata.session_day
+    assert instrument_key is not None and source_order is not None
+    assert depth.ltp < advisor.max_premium_cap
+    assert (depth.ask_p1 - depth.bid_p1) / depth.ltp <= advisor.spread_veto_threshold
+
+    advisor._evaluate_option_depth(depth)
+    advisor._evaluate_option_depth(depth)  # duplicate quote cannot repeat lifecycle/veto
+    assert not any(call.args[:1] == ("MODE5_OR",) for call in advisor.record_veto.call_args_list)
+    active_apm.evaluate_tick.assert_called_once()
+    advisor.apms["NIFTY"].arm_and_enter.assert_not_called()
+
+    advisor.macro_gate.evaluate_alignment.assert_called_once()
+    advisor.vol_compression_gate.evaluate_compression.assert_called_once()
+    advisor.evaluate_nifty_frictional_hurdle.assert_called_once()
+    advisor.confidence_scorer.evaluate_confidence.assert_called_once()
+    assert advisor.confidence_scorer.evaluate_confidence.call_args.kwargs["writer_conviction"] == 0.5
+    advisor.wall_gates["NIFTY"].evaluate_entry_gate.assert_called_once()
+    advisor.wall_gates["NIFTY"].clamp_target_to_wall.assert_called_once()
+    lot_sizing.assert_not_called()
+    advisor.automated_dispatcher.reserve_entry_intent.assert_not_called()
+    advisor.automated_dispatcher.on_apm_entry.assert_not_called()
+    advisor.apms["NIFTY"].arm_and_enter.assert_not_called()
+    assert advisor._cached_rbfn_candidate_meta["NIFTY"].generation == generation
+    assert advisor._cached_rbfn_candidate_meta["NIFTY"].status == "MODE5_SIZING_POLICY_UNVERIFIED"
+
+    records = _read_mode5_trace_records(advisor)
+    terminal_rows = [row for row in records if row.get("event_type") == "MODE5_CANDIDATE_TERMINAL"]
+    policy_rows = [row for row in records if row.get("event_type") == "MODE5_POLICY_OBSERVATION"]
+    assert len(terminal_rows) == len(policy_rows) == 1
+    or_rows = [row for row in records if row.get("reason") == "MODE5_OR_DIAGNOSTIC_ONLY"]
+    assert or_rows
+    assert or_rows[0]["action"] == rbfn_signal.action
+    assert or_rows[0]["details"]["decision_authority"] == "DIAGNOSTIC_ONLY"
+    assert or_rows[0]["details"]["valid"] is (or_state in {"VALID", "COMPANION_UNAVAILABLE"})
+    observed = policy_rows[0]["observations"]
+    assert observed["gate2"]["compression"]["effect"] == "DIAGNOSTIC_ONLY"
+    assert observed["macro"]["would_veto"] is True
+    assert observed["exhaustion"]["would_veto"] is True
+    assert observed["wall_and_clamp"]["entry_decision"]["reason"] == "TEST_WALL_VETO"
+    assert observed["wall_and_clamp"]["status"] == "EVALUATED"
+    assert observed["wall_and_clamp"]["target_clamp"]["target_mutation_applied"] is False
+    assert observed["friction"]["would_veto"] is True
+    assert observed["confidence"]["would_be_actionable"] is False
+    assert observed["target"]["strategy_target_pts"] == expected_strategy_target_pts
+    assert observed["target"]["effective_target_pts"] == expected_strategy_target_pts
+    assert observed["target"]["overlay_mutation_applied"] is False
+    assert observed["confidence"]["score"] is None
+    assert observed["diagnostic_sanitization"]["status"] == "NONFINITE_REPLACED_WITH_NULL"
+    assert "observations.confidence.score" in observed["diagnostic_sanitization"]["replaced_paths"]
+    json.dumps(policy_rows[0], allow_nan=False)
+    assert observed["opening_range"]["decision_authority"] == "DIAGNOSTIC_ONLY"
+    assert observed["opening_range"]["valid"] is (or_state in {"VALID", "COMPANION_UNAVAILABLE"})
+
+
+def test_mode5_research_policy_does_not_consume_wrong_strike_quote(
+    tmp_path: Path, monkeypatch
+):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / "mode5-wrong-strike-retained.json"), enable_stdout=False
+    )
+    boundary = datetime(2026, 11, 18, 10, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    depth, signal, generation, _, _ = _configure_production_mode5_entry(
+        advisor, tmp_path, monkeypatch, boundary=boundary,
+        monotonic_base_ns=95_500_000_000,
+    )
+    advisor.strike_resolver.is_contract_matching = Mock(return_value=False)
+    lot_sizing = Mock(return_value=(1, "FULL"))
+    monkeypatch.setattr(advisor_module, "calculate_discrete_lots", lot_sizing)
+
+    advisor._evaluate_option_depth(depth)
+
+    metadata = advisor._cached_rbfn_candidate_meta["NIFTY"]
+    assert metadata.generation == generation
+    assert metadata.status == "AVAILABLE"
+    assert advisor.cached_rbfn_signals["NIFTY"] is signal
+    lot_sizing.assert_not_called()
+    advisor.automated_dispatcher.reserve_entry_intent.assert_not_called()
+    advisor.apms["NIFTY"].arm_and_enter.assert_not_called()
+    records = _read_mode5_trace_records(advisor)
+    assert not any(row.get("event_type") == "MODE5_CANDIDATE_TERMINAL" for row in records)
+    assert not any(row.get("event_type") == "MODE5_POLICY_OBSERVATION" for row in records)
+    after_quote = [
+        row for row in records
+        if row.get("reason") == "MODE5_CANDIDATE_STATE_AFTER_QUOTE_REJECTION"
+    ]
+    assert after_quote and after_quote[-1]["details"]["candidate_state"] == "AVAILABLE"
+    assert after_quote[-1]["details"]["entry_authorized"] is False
+
+
+def test_mode5_research_policy_does_not_consume_candidate_after_newer_quote_watermark(
+    tmp_path: Path, monkeypatch
+):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / "mode5-newer-watermark-retained.json"), enable_stdout=False
+    )
+    boundary = datetime(2026, 11, 18, 10, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    depth, signal, generation, _, _ = _configure_production_mode5_entry(
+        advisor, tmp_path, monkeypatch, boundary=boundary,
+        monotonic_base_ns=95_750_000_000,
+    )
+    instrument_key = advisor._canonical_option_instrument_key("NIFTY", depth.token)
+    assert instrument_key is not None
+
+    def advance_watermark(**kwargs):
+        with advisor._lock:
+            advisor._option_depth_watermarks["NIFTY"][instrument_key] = (
+                date(2026, 11, 18), depth.exchange_timestamp_ms + 1, depth.sequence_id + 1
+            )
+        return SimpleNamespace(
+            is_actionable=True, total_score=90, grade="A", probable_win_rate_pct=70,
+            sizing_recommendation="FULL",
+        )
+
+    advisor.confidence_scorer.evaluate_confidence = Mock(side_effect=advance_watermark)
+    lot_sizing = Mock(return_value=(1, "FULL"))
+    monkeypatch.setattr(advisor_module, "calculate_discrete_lots", lot_sizing)
+
+    advisor._evaluate_option_depth(depth)
+
+    assert advisor._cached_rbfn_candidate_meta["NIFTY"].generation == generation
+    assert advisor._cached_rbfn_candidate_meta["NIFTY"].status == "AVAILABLE"
+    assert advisor.cached_rbfn_signals["NIFTY"] is signal
+    advisor.confidence_scorer.evaluate_confidence.assert_called_once()
+    lot_sizing.assert_not_called()
+    advisor.automated_dispatcher.reserve_entry_intent.assert_not_called()
+    records = _read_mode5_trace_records(advisor)
+    assert not any(row.get("event_type") == "MODE5_POLICY_OBSERVATION" for row in records)
+
+
+def test_mode5_research_policy_expires_candidate_at_terminalization_recheck(
+    tmp_path: Path, monkeypatch
+):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / "mode5-terminalization-expired.json"), enable_stdout=False
+    )
+    boundary = datetime(2026, 11, 18, 10, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    depth, _, generation, _, _ = _configure_production_mode5_entry(
+        advisor, tmp_path, monkeypatch, boundary=boundary,
+        monotonic_base_ns=96_000_000_000,
+    )
+    metadata = advisor._cached_rbfn_candidate_meta["NIFTY"]
+
+    def expire_before_policy_recheck(**kwargs):
+        monkeypatch.setattr(
+            advisor_module,
+            "_monotonic_clock_ns",
+            lambda: metadata.issued_monotonic_ns + 300_000_000_001,
+        )
+        return SimpleNamespace(
+            is_actionable=True, total_score=90, grade="A", probable_win_rate_pct=70,
+            sizing_recommendation="FULL",
+        )
+
+    advisor.confidence_scorer.evaluate_confidence = Mock(side_effect=expire_before_policy_recheck)
+    lot_sizing = Mock(return_value=(1, "FULL"))
+    monkeypatch.setattr(advisor_module, "calculate_discrete_lots", lot_sizing)
+
+    advisor._evaluate_option_depth(depth)
+
+    assert advisor._cached_rbfn_candidate_meta["NIFTY"] is None
+    assert advisor.cached_rbfn_signals["NIFTY"] is None
+    lot_sizing.assert_not_called()
+    advisor.automated_dispatcher.reserve_entry_intent.assert_not_called()
+    records = _read_mode5_trace_records(advisor)
+    terminal_rows = [
+        row for row in records
+        if row.get("event_type") == "MODE5_CANDIDATE_TERMINAL"
+        and row.get("candidate_generation") == generation
+    ]
+    assert len(terminal_rows) == 1
+    assert terminal_rows[0]["terminal_reason"] == "EXPIRED"
+    assert not any(row.get("event_type") == "MODE5_POLICY_OBSERVATION" for row in records)
+
+
+@pytest.mark.parametrize(
+    "position_state",
+    [
+        advisor_module.STATE_IN_FLIGHT,
+        advisor_module.STATE_TRAIL_LOCK,
+        advisor_module.STATE_EXIT_PENDING,
+    ],
+)
+def test_mode5_or_entry_veto_still_manages_matching_open_position_once(
+    tmp_path: Path, monkeypatch, position_state: str
+):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / f"mode5-or-position-{position_state}.json"),
+        enable_stdout=False,
+    )
+    boundary = datetime(2026, 11, 18, 10, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    depth, signal, generation, _, _ = _configure_production_mode5_entry(
+        advisor, tmp_path, monkeypatch, boundary=boundary,
+        monotonic_base_ns=96_000_000_000,
+    )
+    advisor.decision_trace_path = tmp_path / f"mode5-or-position-{position_state}.jsonl"
+    advisor.or_evidence["NIFTY"]["available_at_ms"] = None
+    apm = advisor.apms["NIFTY"]
+    apm.state = position_state
+    apm.payload = SimpleNamespace(opt_symbol=depth.symbol)
+    apm.evaluate_tick = Mock()
+    apm.arm_and_enter = Mock()
+    lot_sizing = Mock(return_value=(1, "FULL"))
+    monkeypatch.setattr(advisor_module, "calculate_discrete_lots", lot_sizing)
+    monkeypatch.setattr(
+        advisor_module.SentinelOptionStrikeResolver,
+        "resolve_mode5_strike",
+        staticmethod(lambda **kwargs: SimpleNamespace(target_strike=24100.0)),
+    )
+    advisor.record_veto = Mock(wraps=advisor.record_veto)
+
+    advisor._evaluate_option_depth(depth)
+
+    assert not any(call.args[:1] == ("MODE5_OR",) for call in advisor.record_veto.call_args_list)
+    apm.evaluate_tick.assert_called_once_with(
+        current_spot=advisor.spots["NIFTY"],
+        current_opt_ltp=depth.ltp,
+        tick_time_str=datetime.fromtimestamp(
+            depth.exchange_timestamp_ms / 1000.0, tz=ZoneInfo("Asia/Kolkata")
+        ).strftime("%H:%M:%S"),
+        atr_1m=12.0,
+    )
+    lot_sizing.assert_not_called()
+    advisor.automated_dispatcher.reserve_entry_intent.assert_not_called()
+    advisor.automated_dispatcher.on_apm_entry.assert_not_called()
+    apm.arm_and_enter.assert_not_called()
+    advisor.journal.record_execution.assert_not_called()
+    assert advisor.cached_rbfn_signals["NIFTY"] is None
+    assert advisor._cached_rbfn_candidate_meta["NIFTY"].generation == generation
+    assert advisor._cached_rbfn_candidate_meta["NIFTY"].status == "MODE5_SIZING_POLICY_UNVERIFIED"
+    records = _read_mode5_trace_records(advisor)
+    policy_rows = [row for row in records if row.get("event_type") == "MODE5_POLICY_OBSERVATION"]
+    assert len(policy_rows) == 1
+    assert any(row.get("reason") == "MODE5_OR_DIAGNOSTIC_ONLY" for row in records)
+
+
+def test_mode5_or_veto_preserves_existing_liquidation_journal_and_dispatch_once(
+    tmp_path: Path, monkeypatch
+):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / "mode5-or-exit-transition.json"), enable_stdout=False
+    )
+    boundary = datetime(2026, 11, 18, 10, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    depth, _, _, _, _ = _configure_production_mode5_entry(
+        advisor, tmp_path, monkeypatch, boundary=boundary,
+        monotonic_base_ns=96_500_000_000,
+    )
+    advisor.decision_trace_path = tmp_path / "mode5-or-exit-transition.jsonl"
+    advisor.or_evidence["NIFTY"]["available_at_ms"] = None
+    apm = advisor.apms["NIFTY"]
+    apm.state = advisor_module.STATE_IN_FLIGHT
+    apm.payload = SimpleNamespace(opt_symbol=depth.symbol)
+    apm.last_completed_trade = None
+    @dataclass
+    class CompletedTrade:
+        position_id: str = "existing-position-17"
+        direction: str = "CE"
+        entry_price: float = 24100.0
+        exit_price: float = 24080.0
+        opt_entry_ltp: float = 25.0
+        opt_exit_ltp: float = 21.0
+        opt_pnl_pts: float = -4.0
+        pnl_pts: float = -20.0
+        exit_reason: str = "STOP_LOSS"
+        total_quantity: int = 25
+        max_spot_excursion: float = 0.0
+        max_opt_excursion: float = 0.0
+        target_1_hit: bool = False
+        target_2_hit: bool = False
+        half_booked: bool = False
+        trail_locked: bool = False
+
+    completed_trade = CompletedTrade()
+
+    def complete_exit(**kwargs):
+        apm.last_completed_trade = completed_trade
+        apm.state = advisor_module.STATE_LIQUIDATED
+
+    apm.evaluate_tick = Mock(side_effect=complete_exit)
+    apm.arm_and_enter = Mock()
+    lot_sizing = Mock(return_value=(1, "FULL"))
+    monkeypatch.setattr(advisor_module, "calculate_discrete_lots", lot_sizing)
+    monkeypatch.setattr(
+        advisor_module.SentinelOptionStrikeResolver,
+        "resolve_mode5_strike",
+        staticmethod(lambda **kwargs: SimpleNamespace(target_strike=24100.0)),
+    )
+    advisor.record_veto = Mock(wraps=advisor.record_veto)
+
+    advisor._evaluate_option_depth(depth)
+
+    assert not any(call.args[:1] == ("MODE5_OR",) for call in advisor.record_veto.call_args_list)
+    apm.evaluate_tick.assert_called_once()
+    advisor.journal.record_exit.assert_called_once()
+    broker_key = advisor._canonical_option_instrument_key("NIFTY", depth.token)
+    assert broker_key is not None
+    advisor.automated_dispatcher.on_apm_exit.assert_called_once_with(
+        index_name="NIFTY",
+        symbol=broker_key,
+        exit_price=21.0,
+        reason="STOP_LOSS",
+        qty=25,
+        intent_id="existing-position-17",
+    )
+    advisor.automated_dispatcher.reserve_entry_intent.assert_not_called()
+    advisor.automated_dispatcher.on_apm_entry.assert_not_called()
+    apm.arm_and_enter.assert_not_called()
+    advisor.journal.record_execution.assert_not_called()
+    lot_sizing.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("quote_time", "expected_squareoff"),
+    [(dt_time(15, 14, 59), False), (dt_time(15, 15), True)],
+)
+def test_eod_quote_manages_matching_position_once_without_entry(
+    tmp_path: Path, monkeypatch, quote_time: dt_time, expected_squareoff: bool
+):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / f"eod-manage-{quote_time.isoformat()}.json"),
+        enable_stdout=False,
+    )
+    day = date(2026, 11, 18)
+    boundary = datetime.combine(day, quote_time, tzinfo=ZoneInfo("Asia/Kolkata"))
+    depth, _, _, _, _ = _configure_production_mode5_entry(
+        advisor, tmp_path, monkeypatch, boundary=boundary,
+        monotonic_base_ns=98_000_000_000 + quote_time.minute * 1_000_000,
+    )
+    apm = advisor.apms["NIFTY"]
+    apm.state = advisor_module.STATE_IN_FLIGHT
+    apm.payload = SimpleNamespace(opt_symbol=depth.symbol, opt_token=depth.token)
+    completed_trade = {
+        "position_id": "eod-position-1",
+        "direction": "CE",
+        "entry_price": 24000.0,
+        "exit_price": 24010.0,
+        "opt_entry_ltp": 20.0,
+        "opt_exit_ltp": 22.0,
+        "opt_pnl_pts": 2.0,
+        "pnl_pts": 10.0,
+        "exit_reason": "EOD_MANDATORY_SQUAREOFF",
+        "total_quantity": 25,
+    }
+
+    def manage_eod(**kwargs):
+        if expected_squareoff:
+            apm.last_completed_trade = completed_trade
+            apm.state = advisor_module.STATE_LIQUIDATED
+
+    apm.evaluate_tick = Mock(side_effect=manage_eod)
+    apm.arm_and_enter = Mock()
+    advisor.journal.record_exit = Mock()
+    advisor.automated_dispatcher.on_apm_exit = Mock()
+    lot_sizing = Mock(return_value=(1, "FULL"))
+    monkeypatch.setattr(advisor_module, "calculate_discrete_lots", lot_sizing)
+
+    advisor._evaluate_option_depth(depth)
+
+    apm.evaluate_tick.assert_called_once_with(
+        current_spot=advisor.spots["NIFTY"],
+        current_opt_ltp=depth.ltp,
+        tick_time_str=(
+            boundary.isoformat()
+            if expected_squareoff
+            else boundary.strftime("%H:%M:%S")
+        ),
+        atr_1m=12.0,
+    )
+    assert expected_squareoff is (quote_time >= dt_time(15, 15))
+    assert advisor.journal.record_exit.call_count == int(expected_squareoff)
+    assert advisor.automated_dispatcher.on_apm_exit.call_count == int(expected_squareoff)
+    lot_sizing.assert_not_called()
+    advisor.automated_dispatcher.reserve_entry_intent.assert_not_called()
+    advisor.automated_dispatcher.on_apm_entry.assert_not_called()
+    apm.arm_and_enter.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "zero_spot_timestamp", "stale_spot_timestamp", "invalid_spot", "stale_option",
+        "zero_ltp", "nan_ltp", "infinite_ltp", "missing_ltp", "string_ltp", "overflow_ltp", "zero_bid",
+        "nan_ask", "bool_ask", "crossed_book", "token_mismatch", "symbol_mismatch",
+    ],
+)
+def test_invalid_or_mismatched_quote_never_updates_active_position(
+    tmp_path: Path, monkeypatch, mutation: str
+):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / f"invalid-position-quote-{mutation}.json"),
+        enable_stdout=False,
+    )
+    boundary = datetime(2026, 11, 18, 10, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    depth, _, _, _, _ = _configure_production_mode5_entry(
+        advisor, tmp_path, monkeypatch, boundary=boundary,
+        monotonic_base_ns=99_000_000_000,
+    )
+    apm = advisor.apms["NIFTY"]
+    apm.state = advisor_module.STATE_IN_FLIGHT
+    apm.payload = SimpleNamespace(opt_symbol=depth.symbol, opt_token=depth.token)
+    apm.evaluate_tick = Mock()
+    sizing = Mock(return_value=(1, "FULL"))
+    monkeypatch.setattr(advisor_module, "calculate_discrete_lots", sizing)
+    if mutation == "zero_spot_timestamp":
+        advisor.spots_ts_ms["NIFTY"] = 0
+    elif mutation == "stale_spot_timestamp":
+        advisor.spots_ts_ms["NIFTY"] = depth.exchange_timestamp_ms - int(advisor.skew_threshold_ms) - 1
+    elif mutation == "invalid_spot":
+        advisor.spots["NIFTY"] = math.nan
+    elif mutation == "stale_option":
+        depth = replace(
+            depth,
+            exchange_timestamp_ms=(
+                depth.exchange_timestamp_ms
+                - int(float(advisor_module.app_config.MAX_QUOTE_AGE_SEC) * 1000)
+                - 1
+            ),
+        )
+    elif mutation == "zero_ltp":
+        depth = replace(depth, ltp=0.0)
+    elif mutation == "nan_ltp":
+        depth = replace(depth, ltp=math.nan)
+    elif mutation == "infinite_ltp":
+        depth = replace(depth, ltp=math.inf)
+    elif mutation == "missing_ltp":
+        depth = replace(depth, ltp=None)
+    elif mutation == "string_ltp":
+        depth = replace(depth, ltp="25.0")
+    elif mutation == "overflow_ltp":
+        depth = replace(depth, ltp=10**10000)
+    elif mutation == "zero_bid":
+        depth = replace(depth, bid_p1=0.0)
+    elif mutation == "nan_ask":
+        depth = replace(depth, ask_p1=math.nan)
+    elif mutation == "bool_ask":
+        depth = replace(depth, ask_p1=True)
+    elif mutation == "crossed_book":
+        depth = replace(depth, bid_p1=30.0, ask_p1=29.0)
+    elif mutation == "token_mismatch":
+        apm.payload.opt_token = "NSE_FO|OTHER"
+    elif mutation == "symbol_mismatch":
+        apm.payload.opt_symbol = "NIFTY 24000 PE"
+
+    advisor._evaluate_option_depth(depth)
+
+    apm.evaluate_tick.assert_not_called()
+    advisor.journal.record_exit.assert_not_called()
+    advisor.automated_dispatcher.on_apm_exit.assert_not_called()
+    advisor.automated_dispatcher.reserve_entry_intent.assert_not_called()
+    advisor.automated_dispatcher.on_apm_entry.assert_not_called()
+    apm.arm_and_enter.assert_not_called()
+    sizing.assert_not_called()
+    assert apm.state == advisor_module.STATE_IN_FLIGHT
+
+
+def test_strict_quote_value_helper_rejects_integer_float_overflow():
+    assert SentinelLiveStreamAdvisor._strict_positive_finite_quote_value(10**10000) is None
+
+
+def test_future_timestamp_check_fails_closed_when_decision_clock_is_unavailable(
+    tmp_path: Path, monkeypatch
+):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / "future-clock-fail-closed.json"), enable_stdout=False
+    )
+    monkeypatch.setattr(advisor, "_decision_wall_clock_ms", lambda: None)
+    assert advisor._source_timestamp_exceeds_future_skew(1_800_000_000_000) is True
+
+    monkeypatch.setattr(
+        advisor, "_decision_wall_clock_ms", Mock(side_effect=RuntimeError("clock unavailable"))
+    )
+    assert advisor._source_timestamp_exceeds_future_skew(1_800_000_000_000) is True
+
+    monkeypatch.setattr(advisor, "_decision_wall_clock_ms", lambda: 1_800_000_000_000)
+    assert advisor._source_timestamp_exceeds_future_skew(1_800_000_000_000) is False
+
+
+def test_position_exit_transition_blocks_same_quote_entry_and_dispatch(
+    tmp_path: Path, monkeypatch
+):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / "same-quote-exit-no-reentry.json"), enable_stdout=False
+    )
+    boundary = datetime(2026, 11, 18, 10, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    depth, _, _, _, _ = _configure_production_mode5_entry(
+        advisor, tmp_path, monkeypatch, boundary=boundary,
+        monotonic_base_ns=100_000_000_000,
+    )
+    apm = advisor.apms["NIFTY"]
+    apm.state = advisor_module.STATE_IN_FLIGHT
+    apm.payload = SimpleNamespace(opt_symbol=depth.symbol, opt_token=depth.token)
+    apm.last_completed_trade = None
+    apm.evaluate_tick = Mock(side_effect=lambda **_: setattr(apm, "state", advisor_module.STATE_LIQUIDATED))
+    advisor.journal.record_exit = Mock()
+    advisor.automated_dispatcher.on_apm_exit = Mock()
+    lot_sizing = Mock(return_value=(1, "FULL"))
+    monkeypatch.setattr(advisor_module, "calculate_discrete_lots", lot_sizing)
+
+    advisor._evaluate_option_depth(depth)
+
+    apm.evaluate_tick.assert_called_once()
+    lot_sizing.assert_not_called()
+    advisor.automated_dispatcher.reserve_entry_intent.assert_not_called()
+    advisor.automated_dispatcher.on_apm_entry.assert_not_called()
+    apm.arm_and_enter.assert_not_called()
+
+
+def test_oi_entry_veto_does_not_suppress_matching_position_management(
+    tmp_path: Path, monkeypatch
+):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / "oi-veto-still-manages.json"), enable_stdout=False
+    )
+    boundary = datetime(2026, 11, 18, 10, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    depth, _, _, _, _ = _configure_production_mode5_entry(
+        advisor, tmp_path, monkeypatch, boundary=boundary,
+        monotonic_base_ns=101_000_000_000, strike_oi_allowed=False,
+    )
+    apm = advisor.apms["NIFTY"]
+    apm.state = advisor_module.STATE_IN_FLIGHT
+    apm.payload = SimpleNamespace(opt_symbol=depth.symbol, opt_token=depth.token)
+    apm.evaluate_tick = Mock()
+    apm.arm_and_enter = Mock()
+
+    advisor._evaluate_option_depth(depth)
+
+    apm.evaluate_tick.assert_called_once()
+    advisor.evaluate_strike_oi.assert_called_once()
+    advisor.automated_dispatcher.reserve_entry_intent.assert_not_called()
+    apm.arm_and_enter.assert_not_called()
+
+
+def test_eod_exit_pending_position_is_evaluated_once_without_duplicate_exit_callbacks(
+    tmp_path: Path, monkeypatch
+):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / "eod-exit-pending.json"), enable_stdout=False
+    )
+    boundary = datetime(2026, 11, 18, 15, 15, tzinfo=ZoneInfo("Asia/Kolkata"))
+    depth, _, _, _, _ = _configure_production_mode5_entry(
+        advisor, tmp_path, monkeypatch, boundary=boundary,
+        monotonic_base_ns=102_000_000_000,
+    )
+    apm = advisor.apms["NIFTY"]
+    apm.state = advisor_module.STATE_EXIT_PENDING
+    apm.payload = SimpleNamespace(opt_symbol=depth.symbol, opt_token=depth.token)
+    apm.evaluate_tick = Mock()
+    advisor.journal.record_exit = Mock()
+    advisor.automated_dispatcher.on_apm_exit = Mock()
+
+    advisor._evaluate_option_depth(depth)
+    advisor._evaluate_option_depth(depth)  # duplicate source order must not repeat APM work
+
+    apm.evaluate_tick.assert_called_once()
+    advisor.journal.record_exit.assert_not_called()
+    advisor.automated_dispatcher.on_apm_exit.assert_not_called()
+    advisor.automated_dispatcher.reserve_entry_intent.assert_not_called()
+
+
+@pytest.mark.parametrize("position_kind", ["none", "wrong_symbol"])
+def test_mode5_or_entry_veto_does_not_manage_unmatched_position_or_enter(
+    tmp_path: Path, monkeypatch, position_kind: str
+):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / f"mode5-or-unmatched-{position_kind}.json"),
+        enable_stdout=False,
+    )
+    boundary = datetime(2026, 11, 18, 10, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    depth, _, _, _, _ = _configure_production_mode5_entry(
+        advisor, tmp_path, monkeypatch, boundary=boundary,
+        monotonic_base_ns=97_000_000_000,
+    )
+    advisor.or_evidence["NIFTY"]["available_at_ms"] = None
+    apm = advisor.apms["NIFTY"]
+    if position_kind == "none":
+        apm.state = advisor_module.STATE_STANDBY
+        apm.payload = None
+    else:
+        apm.state = advisor_module.STATE_IN_FLIGHT
+        apm.payload = SimpleNamespace(opt_symbol="NIFTY 24000 PE")
+    apm.evaluate_tick = Mock()
+    apm.arm_and_enter = Mock()
+    lot_sizing = Mock(return_value=(1, "FULL"))
+    monkeypatch.setattr(advisor_module, "calculate_discrete_lots", lot_sizing)
+    monkeypatch.setattr(
+        advisor_module.SentinelOptionStrikeResolver,
+        "resolve_mode5_strike",
+        staticmethod(lambda **kwargs: SimpleNamespace(target_strike=24100.0)),
+    )
+
+    advisor._evaluate_option_depth(depth)
+
+    apm.evaluate_tick.assert_not_called()
+    lot_sizing.assert_not_called()
+    advisor.automated_dispatcher.reserve_entry_intent.assert_not_called()
+    advisor.automated_dispatcher.on_apm_entry.assert_not_called()
+    apm.arm_and_enter.assert_not_called()
 
 
 def test_mode5_dispatch_unknown_is_not_terminalized_again_on_invalidation(tmp_path: Path):
@@ -1380,7 +2365,7 @@ def test_mode5_dispatch_unknown_is_not_terminalized_again_on_invalidation(tmp_pa
     assert terminal_rows[0]["terminal_reason"] == "RESERVATION_EXCEPTION_UNKNOWN"
 
 
-def test_mode5_apm_exception_flushes_unknown_without_fabricating_entry(tmp_path: Path, monkeypatch):
+def test_mode5_sizing_block_prevents_apm_entry_before_apm_handler(tmp_path: Path, monkeypatch):
     advisor = SentinelLiveStreamAdvisor(
         wal_path=str(tmp_path / "apm-exception-unknown.json"), enable_stdout=False
     )
@@ -1393,33 +2378,30 @@ def test_mode5_apm_exception_flushes_unknown_without_fabricating_entry(tmp_path:
         reservation_result=reservation,
     )
     advisor.decision_trace_path = tmp_path / "apm-exception-unknown.jsonl"
-    original_error = RuntimeError("APM state write failed")
-    advisor.apms["NIFTY"].arm_and_enter.side_effect = original_error
     monkeypatch.setattr(
         advisor_module.SentinelOptionStrikeResolver, "resolve_mode5_strike",
         staticmethod(lambda **kwargs: SimpleNamespace(target_strike=24100.0)),
     )
 
-    with pytest.raises(RuntimeError) as caught:
-        advisor._evaluate_option_depth(depth)
+    advisor._evaluate_option_depth(depth)
 
-    assert caught.value is original_error
-    assert advisor.automated_dispatcher.reserve_entry_intent.call_count == 1
+    advisor.automated_dispatcher.reserve_entry_intent.assert_not_called()
     assert advisor.automated_dispatcher.on_apm_entry.call_count == 0
+    advisor.apms["NIFTY"].arm_and_enter.assert_not_called()
     advisor.journal.record_execution.assert_not_called()
     records = _read_mode5_trace_records(advisor)
     stage_rows = [row for row in records if row.get("event_type") == "MODE5_CANDIDATE_STAGE"]
     terminal_rows = [row for row in records if row.get("event_type") == "MODE5_CANDIDATE_TERMINAL"]
-    assert len(stage_rows) == 1
-    assert stage_rows[0]["candidate_stage"] == "RESERVATION_ACCEPTED"
+    observation_rows = [row for row in records if row.get("event_type") == "MODE5_POLICY_OBSERVATION"]
+    assert stage_rows == []
     assert len(terminal_rows) == 1
-    assert terminal_rows[0]["candidate_state"] == "APM_ENTRY_UNKNOWN"
-    assert terminal_rows[0]["record_origin"] == "LOCAL_APM"
+    assert terminal_rows[0]["terminal_reason"] == "MODE5_SIZING_POLICY_UNVERIFIED"
+    assert len(observation_rows) == 1
     assert terminal_rows[0]["broker_fill_confirmed"] is False
     assert not any(row.get("record_type") == "EXECUTION" for row in records)
 
 
-def test_mode5_candidate_id_is_stable_across_issue_quote_stage_and_terminal(tmp_path: Path, monkeypatch):
+def test_mode5_candidate_id_is_stable_across_issue_quote_and_terminal(tmp_path: Path, monkeypatch):
     advisor = SentinelLiveStreamAdvisor(
         wal_path=str(tmp_path / "candidate-id-chain.json"), enable_stdout=False
     )
@@ -1455,12 +2437,12 @@ def test_mode5_candidate_id_is_stable_across_issue_quote_stage_and_terminal(tmp_
     records = _read_mode5_trace_records(advisor)
     issued = [row for row in records if row.get("event_type") == "MODE5_CANDIDATE_ISSUED"]
     quote = [row for row in records if row.get("event_type") == "MODE5_QUOTE_SUPPRESSED"]
-    stages = [row for row in records if row.get("event_type") == "MODE5_CANDIDATE_STAGE"]
     terminal = [row for row in records if row.get("event_type") == "MODE5_CANDIDATE_TERMINAL"]
-    assert len(issued) == len(quote) == len(stages) == len(terminal) == 1
-    assert [row["candidate_id"] for row in (issued[0], quote[0], stages[0], terminal[0])] == [candidate_id] * 4
-    assert stages[0]["candidate_stage"] == "RESERVATION_ACCEPTED"
-    assert terminal[0]["candidate_state"] == "APM_ENTRY_RECORDED"
+    observations = [row for row in records if row.get("event_type") == "MODE5_POLICY_OBSERVATION"]
+    assert len(issued) == len(quote) == len(terminal) == len(observations) == 1
+    assert [row["candidate_id"] for row in (issued[0], quote[0], terminal[0], observations[0])] == [candidate_id] * 4
+    assert terminal[0]["terminal_reason"] == "MODE5_SIZING_POLICY_UNVERIFIED"
+    assert observations[0]["authorization_block"] == "MODE5_SIZING_POLICY_UNVERIFIED"
 
 
 def test_mode5_candidate_lifecycle_slots_stay_one_per_supported_index(tmp_path: Path, monkeypatch):
@@ -1538,6 +2520,7 @@ def test_production_mode5_invalid_quote_cannot_reserve_or_dispatch(
         ts_ms=source_timestamp_ms,
         ingress_ns=ingress_monotonic_ns,
         sequence_id=sequence_id,
+        ingress_wall_utc=depth.ingress_wall_utc,
     )
     if invalid_kind == "out_of_order":
         instrument_key = advisor._canonical_option_instrument_key("NIFTY", depth.token)
@@ -1549,9 +2532,14 @@ def test_production_mode5_invalid_quote_cannot_reserve_or_dispatch(
         advisor_module.SentinelOptionStrikeResolver, "resolve_mode5_strike",
         staticmethod(lambda **kwargs: SimpleNamespace(target_strike=24100.0)),
     )
+    advisor.record_veto = Mock(wraps=advisor.record_veto)
 
     advisor._evaluate_option_depth(depth)
 
+    if invalid_kind == "out_of_order":
+        advisor.record_veto.assert_any_call(
+            "OPTION_DEPTH_ORDER", "OPTION_DEPTH_DUPLICATE_DECREASING_OR_PRIOR_SESSION"
+        )
     advisor.automated_dispatcher.reserve_entry_intent.assert_not_called()
     advisor.automated_dispatcher.on_apm_entry.assert_not_called()
     assert advisor.cached_rbfn_signals["NIFTY"] is signal
@@ -1570,7 +2558,7 @@ def test_expired_candidate_terminal_flushes_immediately_when_read(tmp_path: Path
     metadata = advisor._cached_rbfn_candidate_meta["NIFTY"]
     advisor._flush_mode5_lifecycle_records_after_unlock()
     monkeypatch.setattr(
-        advisor_module.time, "monotonic_ns",
+        advisor_module, "_monotonic_clock_ns",
         lambda: mono_now_ns + 300_000_000_001,
     )
 
@@ -2475,6 +3463,7 @@ def test_five_minute_trace_flush_waits_for_outermost_advisor_lock(tmp_path: Path
         assert advisor._on_5m_bar_close(
             "NIFTY", 100, 101, 99, 100, 1, boundary.time(),
             metadata.boundary_timestamp_ms, metadata.boundary_timestamp_ms // 300_000 - 1,
+            decision_available_at_ms=metadata.boundary_timestamp_ms + 1,
         ) is signal
         assert advisor.get_mode5_trace_health()["enqueued"] == 1
     rows = _read_mode5_trace_records(advisor)
@@ -2890,7 +3879,7 @@ def test_mode5_generation_recheck_blocks_superseded_quote_and_old_consume(tmp_pa
     boundary_ms = int(boundary.timestamp() * 1000)
     now_wall_ms = boundary_ms + 500
     clock_ns = [20_000_000_000]
-    monkeypatch.setattr("core.sentinel_live_stream_advisor.time.monotonic_ns", lambda: clock_ns[0])
+    monkeypatch.setattr(advisor_module, "_monotonic_clock_ns", lambda: clock_ns[0])
     old_signal = CachedRBFNAuctionSignal(
         timestamp_ms=boundary_ms - 100,
         index_name="NIFTY", action="BUY_CALL", direction="CE", target_strike=25400.0,
@@ -2939,7 +3928,7 @@ def test_mode5_concurrent_quote_reserves_candidate_once(tmp_path: Path, monkeypa
     boundary_ms = int(boundary.timestamp() * 1000)
     now_wall_ms = boundary_ms + 500
     clock_ns = [30_000_000_000]
-    monkeypatch.setattr("core.sentinel_live_stream_advisor.time.monotonic_ns", lambda: clock_ns[0])
+    monkeypatch.setattr(advisor_module, "_monotonic_clock_ns", lambda: clock_ns[0])
     signal = CachedRBFNAuctionSignal(
         timestamp_ms=boundary_ms - 100,
         index_name="NIFTY", action="BUY_CALL", direction="CE", target_strike=25400.0,
@@ -2990,7 +3979,7 @@ def test_mode5_option_watermark_rollover_and_consumption_lifecycle(tmp_path: Pat
     boundary = datetime.combine(day1, dt_time(11, 35), tzinfo=ist)
     boundary_ms = int(boundary.timestamp() * 1000)
     clock_ns = [40_000_000_000]
-    monkeypatch.setattr("core.sentinel_live_stream_advisor.time.monotonic_ns", lambda: clock_ns[0])
+    monkeypatch.setattr(advisor_module, "_monotonic_clock_ns", lambda: clock_ns[0])
     signal = CachedRBFNAuctionSignal(
         timestamp_ms=boundary_ms - 100,
         index_name="NIFTY", action="BUY_CALL", direction="CE", target_strike=25400.0,
@@ -3044,8 +4033,8 @@ def _configure_production_mode5_entry(
     boundary_ms = int(boundary.timestamp() * 1000)
     wall_now_ms = boundary_ms + 10
     monotonic_clock = [monotonic_base_ns]
-    monkeypatch.setattr(advisor_module.time, "time", lambda: wall_now_ms / 1000.0)
-    monkeypatch.setattr(advisor_module.time, "monotonic_ns", lambda: monotonic_clock[0])
+    monkeypatch.setattr(advisor_module, "_wall_clock_seconds", lambda: wall_now_ms / 1000.0)
+    monkeypatch.setattr(advisor_module, "_monotonic_clock_ns", lambda: monotonic_clock[0])
     _seed_test_or_pair(advisor, "NIFTY", dt_time(boundary.hour, boundary.minute))
     ist = ZoneInfo("Asia/Kolkata")
     or_start = datetime.combine(boundary.date(), dt_time(9, 15), tzinfo=ist)
@@ -3053,6 +4042,7 @@ def _configure_production_mode5_entry(
     for index in ("NIFTY", "SENSEX"):
         advisor.or_evidence[index]["session_date"] = boundary.date().isoformat()
         advisor.or_evidence[index]["source_timestamp_ms"] = int(or_end.timestamp() * 1000)
+        advisor.or_evidence[index]["available_at_ms"] = wall_now_ms - 1
         advisor.or_evidence[index]["coverage_start_ms"] = int(or_start.timestamp() * 1000)
         advisor.or_evidence[index]["coverage_end_ms"] = int(or_end.timestamp() * 1000)
     advisor.decision_trace_path = tmp_path / f"production-mode5-{boundary_ms}.jsonl"
@@ -3119,11 +4109,12 @@ def _configure_production_mode5_entry(
         ts_ms=boundary_ms,
         ingress_ns=candidate.issued_monotonic_ns + 1_000_000,
         sequence_id=1,
+        ingress_wall_utc=datetime.fromtimestamp(wall_now_ms / 1000.0, tz=timezone.utc).isoformat(),
     )
     return depth, signal, candidate.generation, wall_now_ms, mono_now_ns
 
 
-def test_production_mode5_exact_bucket_boundary_accepts_once_before_dispatch_callback(
+def test_production_mode5_exact_bucket_candidate_is_blocked_once_before_dispatch(
     tmp_path: Path, monkeypatch
 ):
     advisor = SentinelLiveStreamAdvisor(wal_path=str(tmp_path / "production-boundary.json"), enable_stdout=False)
@@ -3134,19 +4125,17 @@ def test_production_mode5_exact_bucket_boundary_accepts_once_before_dispatch_cal
         advisor, tmp_path, monkeypatch, boundary=boundary, monotonic_base_ns=50_000_000_000,
         reservation_result=accepted,
     )
-    advisor.automated_dispatcher.on_apm_entry.side_effect = lambda **kwargs: (
-        assert_candidate_consumed_before_callback(advisor, signal)
-    )
     with pytest.MonkeyPatch.context() as patcher:
         patcher.setattr(advisor_module.SentinelOptionStrikeResolver, "resolve_mode5_strike", staticmethod(
             lambda **kwargs: SimpleNamespace(target_strike=24100.0)
         ))
         advisor._evaluate_option_depth(depth)
-    advisor.automated_dispatcher.reserve_entry_intent.assert_called_once()
-    advisor.automated_dispatcher.on_apm_entry.assert_called_once()
-    advisor.apms["NIFTY"].arm_and_enter.assert_called_once()
+    advisor.automated_dispatcher.reserve_entry_intent.assert_not_called()
+    advisor.automated_dispatcher.on_apm_entry.assert_not_called()
+    advisor.apms["NIFTY"].arm_and_enter.assert_not_called()
     assert advisor.cached_rbfn_signals["NIFTY"] is None
-    assert advisor._cached_rbfn_candidate_meta["NIFTY"].status == "APM_ENTRY_RECORDED"
+    assert advisor._cached_rbfn_candidate_meta["NIFTY"].status == "MODE5_SIZING_POLICY_UNVERIFIED"
+    assert len([r for r in _read_mode5_trace_records(advisor) if r.get("event_type") == "MODE5_POLICY_OBSERVATION"]) == 1
 
 
 def test_mode5_rp_reference_changes_only_volatility_gate_displacement(tmp_path: Path, monkeypatch):
@@ -3195,7 +4184,7 @@ def test_mode5_rp_reference_changes_only_volatility_gate_displacement(tmp_path: 
         ("RP2_UPPER_NEW_FADE_FAMILY", 24240.0, 24403.0, "CE", True, "UNKNOWN_RP_BOUNDARY_SETUP"),
     ],
 )
-def test_mode5_distance_label_override_is_reason_only_and_narrow(
+def test_mode5_distance_label_is_diagnostic_and_never_veto_authority(
     tmp_path: Path,
     monkeypatch,
     setup_reason: str,
@@ -3243,28 +4232,29 @@ def test_mode5_distance_label_override_is_reason_only_and_narrow(
 
     assert advisor.alerts_history
     alert = advisor.alerts_history[-1]
-    assert (alert.status_flag == "VETO_VOLATILITY_EXHAUSTED") is expected_veto
+    assert alert.status_flag == "VETO_MODE5_SIZING_POLICY_UNVERIFIED"
+    rows = _read_mode5_trace_records(advisor)
+    observations = [row for row in rows if row.get("event_type") == "MODE5_POLICY_OBSERVATION"]
+    assert len(observations) == 1
+    exhaustion = observations[0]["observations"]["exhaustion"]
+    assert exhaustion["would_veto"] is expected_veto
     if expected_label is not None:
-        assert expected_label in alert.advisory
+        assert expected_label in exhaustion["reason"]
     else:
-        assert "DISTANCE_TO_BOUNDARY" not in alert.advisory
-    if expected_veto:
-        veto_calls = [
-            call.kwargs for call in advisor.journal.record_veto.call_args_list
-            if call.kwargs.get("veto_reason") == "VOLATILITY_EXHAUSTED"
-        ]
-        assert veto_calls
-        expected_candidate_id = advisor._mode5_candidate_id(
-            "NIFTY", advisor._cached_rbfn_candidate_meta["NIFTY"].session_day, generation
-        )
-        assert all(call.get("candidate_id") == expected_candidate_id for call in veto_calls)
-        assert alert.status_flag == "VETO_VOLATILITY_EXHAUSTED"
+        assert "DISTANCE_TO_BOUNDARY" not in exhaustion["reason"]
+    assert not any(
+        call.kwargs.get("veto_reason") == "VOLATILITY_EXHAUSTED"
+        for call in advisor.journal.record_veto.call_args_list
+    )
+    assert observations[0]["candidate_id"] == advisor._mode5_candidate_id(
+        "NIFTY", advisor._cached_rbfn_candidate_meta["NIFTY"].session_day, generation
+    )
 
 
-def test_production_mode5_queue_full_does_not_veto_entry_or_repeat_candidate(
+def test_production_mode5_queue_full_does_not_bypass_sizing_block(
     tmp_path: Path, monkeypatch
 ):
-    """Telemetry saturation cannot suppress the real Mode5 reservation route."""
+    """Telemetry saturation cannot bypass the Mode5 sizing-policy authorization block."""
     advisor = SentinelLiveStreamAdvisor(
         wal_path=str(tmp_path / "production-queue-full.json"),
         enable_stdout=False,
@@ -3338,17 +4328,14 @@ def test_production_mode5_queue_full_does_not_veto_entry_or_repeat_candidate(
     monkeypatch.setattr(advisor_module.SentinelOptionStrikeResolver, "resolve_mode5_strike", staticmethod(
         lambda **kwargs: SimpleNamespace(target_strike=24100.0)
     ))
-    advisor.automated_dispatcher.on_apm_entry.side_effect = lambda **kwargs: (
-        assert_candidate_consumed_before_callback(advisor, signal)
-    )
     try:
-        # This calls the real production option-depth path while every subsequent
-        # trace enqueue is rejected by the full queue.
+        # Real option-depth processing remains fail-closed while telemetry is full.
         advisor._evaluate_option_depth(depth)
-        assert advisor.automated_dispatcher.reserve_entry_intent.call_count == 1
-        assert advisor.automated_dispatcher.on_apm_entry.call_count == 1
+        advisor.automated_dispatcher.reserve_entry_intent.assert_not_called()
+        advisor.automated_dispatcher.on_apm_entry.assert_not_called()
+        advisor.apms["NIFTY"].arm_and_enter.assert_not_called()
         assert advisor.cached_rbfn_signals["NIFTY"] is None
-        assert advisor._cached_rbfn_candidate_meta["NIFTY"].status == "APM_ENTRY_RECORDED"
+        assert advisor._cached_rbfn_candidate_meta["NIFTY"].status == "MODE5_SIZING_POLICY_UNVERIFIED"
         health = advisor.get_mode5_trace_health()
         assert health["queue_full_drops"] >= 1
         assert health["candidate_lifecycle_incomplete"] is True
@@ -3356,8 +4343,8 @@ def test_production_mode5_queue_full_does_not_veto_entry_or_repeat_candidate(
 
         # A duplicate quote cannot re-arm or dispatch the consumed candidate.
         advisor._evaluate_option_depth(depth)
-        assert advisor.automated_dispatcher.reserve_entry_intent.call_count == 1
-        assert advisor.automated_dispatcher.on_apm_entry.call_count == 1
+        advisor.automated_dispatcher.reserve_entry_intent.assert_not_called()
+        advisor.automated_dispatcher.on_apm_entry.assert_not_called()
     finally:
         release_writer.set()
         advisor.shutdown_mode5_trace_writer(timeout_sec=3)
@@ -3371,15 +4358,13 @@ def assert_candidate_consumed_before_callback(advisor, signal):
     }
 
 
-def test_production_mode5_concurrent_duplicate_callbacks_reserve_and_dispatch_once(
+def test_production_mode5_concurrent_duplicate_callbacks_terminalize_once(
     tmp_path: Path, monkeypatch
 ):
     advisor = SentinelLiveStreamAdvisor(wal_path=str(tmp_path / "production-concurrent.json"), enable_stdout=False)
     boundary = datetime.combine(date(2026, 11, 18), dt_time(10, 0), tzinfo=ZoneInfo("Asia/Kolkata"))
-    accepted = SimpleNamespace(accepted=True, reason="RESERVED_PAPER", action="RESERVED", routed_mode="PAPER")
-    depth, _, _, _, _ = _configure_production_mode5_entry(
+    depth, _, generation, _, _ = _configure_production_mode5_entry(
         advisor, tmp_path, monkeypatch, boundary=boundary, monotonic_base_ns=60_000_000_000,
-        reservation_result=accepted,
     )
     monkeypatch.setattr(advisor_module.SentinelOptionStrikeResolver, "resolve_mode5_strike", staticmethod(
         lambda **kwargs: SimpleNamespace(target_strike=24100.0)
@@ -3401,50 +4386,38 @@ def test_production_mode5_concurrent_duplicate_callbacks_reserve_and_dispatch_on
         thread.join(timeout=5)
     assert all(not thread.is_alive() for thread in threads)
     assert errors == []
-    advisor.automated_dispatcher.reserve_entry_intent.assert_called_once()
-    advisor.automated_dispatcher.on_apm_entry.assert_called_once()
+    advisor.automated_dispatcher.reserve_entry_intent.assert_not_called()
+    advisor.automated_dispatcher.on_apm_entry.assert_not_called()
+    advisor.apms["NIFTY"].arm_and_enter.assert_not_called()
+    records = _read_mode5_trace_records(advisor)
+    terminal_rows = [row for row in records if row.get("event_type") == "MODE5_CANDIDATE_TERMINAL"]
+    policy_rows = [row for row in records if row.get("event_type") == "MODE5_POLICY_OBSERVATION"]
+    assert len(terminal_rows) == len(policy_rows) == 1
+    assert terminal_rows[0]["candidate_generation"] == generation
+    assert terminal_rows[0]["terminal_reason"] == "MODE5_SIZING_POLICY_UNVERIFIED"
+    assert policy_rows[0]["candidate_generation"] == generation
+    assert policy_rows[0]["authorization_block"] == "MODE5_SIZING_POLICY_UNVERIFIED"
 
 
-@pytest.mark.parametrize(
-    "outcome",
-    ["rejected", "reserve_exception", "callback_exception"],
-)
-def test_production_mode5_terminal_dispatch_outcomes_consume_candidate(
-    tmp_path: Path, monkeypatch, outcome: str
+def test_production_mode5_sizing_block_prevents_dispatch_before_handlers(
+    tmp_path: Path, monkeypatch
 ):
-    advisor = SentinelLiveStreamAdvisor(wal_path=str(tmp_path / f"production-{outcome}.json"), enable_stdout=False)
+    advisor = SentinelLiveStreamAdvisor(wal_path=str(tmp_path / "production-sizing-block.json"), enable_stdout=False)
     boundary = datetime.combine(date(2026, 11, 18), dt_time(10, 0), tzinfo=ZoneInfo("Asia/Kolkata"))
-    kwargs = {}
-    if outcome == "rejected":
-        kwargs["reservation_result"] = SimpleNamespace(
-            accepted=False, reason="blocked", action="VETOED_TEST", routed_mode="PAPER"
-        )
-    elif outcome == "reserve_exception":
-        kwargs["reservation_exception"] = RuntimeError("reservation unknown")
-    else:
-        kwargs["reservation_result"] = SimpleNamespace(
-            accepted=True, reason="RESERVED_PAPER", action="RESERVED", routed_mode="PAPER"
-        )
-        kwargs["callback_exception"] = RuntimeError("callback outcome unknown")
     depth, _, _, _, _ = _configure_production_mode5_entry(
-        advisor, tmp_path, monkeypatch, boundary=boundary, monotonic_base_ns=70_000_000_000, **kwargs
+        advisor, tmp_path, monkeypatch, boundary=boundary, monotonic_base_ns=70_000_000_000
     )
     monkeypatch.setattr(advisor_module.SentinelOptionStrikeResolver, "resolve_mode5_strike", staticmethod(
         lambda **kwargs: SimpleNamespace(target_strike=24100.0)
     ))
-    if outcome == "callback_exception":
-        with pytest.raises(RuntimeError, match="callback outcome unknown"):
-            advisor._evaluate_option_depth(depth)
-    else:
-        advisor._evaluate_option_depth(depth)
+    advisor._evaluate_option_depth(depth)
     assert advisor.cached_rbfn_signals["NIFTY"] is None
+    assert advisor._cached_rbfn_candidate_meta["NIFTY"].status == "MODE5_SIZING_POLICY_UNVERIFIED"
     assert advisor.get_valid_cached_rbfn_signal("NIFTY") is None
     advisor._evaluate_option_depth(depth)
-    assert advisor.automated_dispatcher.reserve_entry_intent.call_count == 1
-    if outcome == "rejected" or outcome == "reserve_exception":
-        advisor.automated_dispatcher.on_apm_entry.assert_not_called()
-    else:
-        advisor.automated_dispatcher.on_apm_entry.assert_called_once()
+    advisor.automated_dispatcher.reserve_entry_intent.assert_not_called()
+    advisor.automated_dispatcher.on_apm_entry.assert_not_called()
+    advisor.apms["NIFTY"].arm_and_enter.assert_not_called()
 
 
 def test_production_mode5_transient_pre_reservation_liquidity_veto_retains_candidate(
@@ -3512,3 +4485,221 @@ def test_safety_invariants(tmp_path: Path):
     assert advisor.is_order_action is False
     assert advisor.broker_api_called is False
     assert advisor.allowed_for_live_execution is False
+
+
+@pytest.mark.parametrize(
+    ("position_matches_quote", "expected_advisory"),
+    [
+        (True, "MATCHING_POSITION_MANAGED_THIS_QUOTE; ENTRY_BLOCKED"),
+        (False, "ACTIVE_POSITION_OTHER_CONTRACT; ENTRY_BLOCKED"),
+    ],
+)
+def test_active_position_advisory_identifies_exact_or_other_contract_without_reentry(
+    tmp_path: Path, monkeypatch, position_matches_quote: bool, expected_advisory: str
+):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / f"position-advisory-{position_matches_quote}.json"),
+        enable_stdout=False,
+    )
+    boundary = datetime(2026, 11, 18, 10, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    depth, _, _, _, _ = _configure_production_mode5_entry(
+        advisor, tmp_path, monkeypatch, boundary=boundary,
+        monotonic_base_ns=101_000_000_000 + int(position_matches_quote) * 10_000_000,
+    )
+    apm = advisor.apms["NIFTY"]
+    apm.state = advisor_module.STATE_IN_FLIGHT
+    apm.payload = SimpleNamespace(
+        opt_symbol=depth.symbol if position_matches_quote else "NIFTY 24000 PE",
+        opt_token=depth.token if position_matches_quote else "OTHER-TOKEN",
+    )
+    apm.evaluate_tick = Mock()
+    apm.arm_and_enter = Mock()
+    advisor._evaluate_option_depth(depth)
+
+    assert apm.evaluate_tick.call_count == int(position_matches_quote)
+    apm.arm_and_enter.assert_not_called()
+    assert advisor.alerts_history
+    alert = advisor.alerts_history[-1]
+    assert alert.status_flag == "VETO_CONCURRENT_POSITION"
+    assert expected_advisory in alert.advisory
+
+
+def test_quote_expiring_before_apm_update_cannot_manage_or_claim_exit(
+    tmp_path: Path, monkeypatch
+):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / "quote-expires-before-apm.json"), enable_stdout=False
+    )
+    boundary = datetime(2026, 11, 18, 10, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    depth, _, _, _, initial_monotonic_ns = _configure_production_mode5_entry(
+        advisor,
+        tmp_path,
+        monkeypatch,
+        boundary=boundary,
+        monotonic_base_ns=105_000_000_000,
+    )
+    max_age_ns = int(float(advisor_module.app_config.MAX_QUOTE_AGE_SEC) * 1_000_000_000)
+    clock_values = (
+        initial_monotonic_ns,
+        depth.ingress_monotonic_ns + max_age_ns + 1,
+    )
+    clock_index = [0]
+
+    def advance_clock():
+        value = clock_values[min(clock_index[0], len(clock_values) - 1)]
+        clock_index[0] += 1
+        return value
+
+    monkeypatch.setattr(advisor_module, "_monotonic_clock_ns", advance_clock)
+
+    apm = advisor.apms["NIFTY"]
+    apm.state = advisor_module.STATE_IN_FLIGHT
+    apm.payload = SimpleNamespace(opt_symbol=depth.symbol, opt_token=depth.token)
+    apm.evaluate_tick = Mock()
+    apm.arm_and_enter = Mock()
+    advisor.journal.record_exit = Mock()
+    advisor.automated_dispatcher.on_apm_exit = Mock()
+    advisor.automated_dispatcher.reserve_entry_intent = Mock()
+    advisor.automated_dispatcher.on_apm_entry = Mock()
+    advisor.record_veto = Mock(wraps=advisor.record_veto)
+
+    advisor._evaluate_option_depth(depth)
+
+    apm.evaluate_tick.assert_not_called()
+    advisor.journal.record_exit.assert_not_called()
+    advisor.automated_dispatcher.on_apm_exit.assert_not_called()
+    advisor.automated_dispatcher.reserve_entry_intent.assert_not_called()
+    advisor.automated_dispatcher.on_apm_entry.assert_not_called()
+    assert apm.state == advisor_module.STATE_IN_FLIGHT
+    assert any(
+        call.args[0] == "OPTION_DEPTH_TIMESTAMP"
+        and str(call.args[1]).endswith("_BEFORE_APM_UPDATE")
+        for call in advisor.record_veto.call_args_list
+    )
+
+
+def test_mode5_quote_change_during_final_or_diagnostic_retains_candidate(
+    tmp_path: Path, monkeypatch
+):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / "mode5-post-diagnostic-watermark.json"),
+        enable_stdout=False,
+    )
+    boundary = datetime(2026, 11, 18, 10, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    depth, signal, generation, _, _ = _configure_production_mode5_entry(
+        advisor, tmp_path, monkeypatch, boundary=boundary,
+        monotonic_base_ns=103_000_000_000,
+        setup_reason="TEST_DIRECTIONAL_CONTINUATION",
+        trade_phase="CONTINUOUS_STATE_MACHINE",
+    )
+    key = advisor._canonical_option_instrument_key("NIFTY", depth.token)
+    assert key is not None
+    original_validate = advisor._validate_mode5_or_pair
+    calls = 0
+
+    def advance_quote_watermark(*args, **kwargs):
+        nonlocal calls
+        result = original_validate(*args, **kwargs)
+        calls += 1
+        # The first pair is the initial quote checkpoint; advance the event
+        # watermark during the final diagnostic checkpoint.
+        if calls == 2:
+            advisor._option_depth_watermarks["NIFTY"][key] = (
+                date(2026, 11, 18), depth.exchange_timestamp_ms + 1, depth.sequence_id + 1
+            )
+        return result
+
+    advisor._validate_mode5_or_pair = advance_quote_watermark
+    advisor._evaluate_option_depth(depth)
+
+    assert calls >= 2
+    metadata = advisor._cached_rbfn_candidate_meta["NIFTY"]
+    assert metadata.generation == generation
+    assert metadata.status == "AVAILABLE"
+    assert advisor.cached_rbfn_signals["NIFTY"] is signal
+    records = _read_mode5_trace_records(advisor)
+    assert not any(row.get("event_type") == "MODE5_POLICY_OBSERVATION" for row in records)
+    assert any(
+        row.get("reason") == "MODE5_CANDIDATE_STATE_AFTER_QUOTE_REJECTION"
+        and row.get("details", {}).get("candidate_state") == "AVAILABLE"
+        for row in records
+    )
+
+
+def test_superseded_quote_cannot_update_apm_or_authorize_candidate(
+    tmp_path: Path, monkeypatch
+):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / "superseded-apm-quote.json"),
+        enable_stdout=False,
+    )
+    boundary = datetime(2026, 11, 18, 10, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    depth, signal, generation, _, mono_now_ns = _configure_production_mode5_entry(
+        advisor, tmp_path, monkeypatch, boundary=boundary,
+        monotonic_base_ns=104_000_000_000,
+        setup_reason="TEST_DIRECTIONAL_CONTINUATION",
+        trade_phase="CONTINUOUS_STATE_MACHINE",
+    )
+    key = advisor._canonical_option_instrument_key("NIFTY", depth.token)
+    assert key is not None
+    quote_day = boundary.date()
+    source_order = (depth.exchange_timestamp_ms, depth.sequence_id)
+    advisor._option_depth_watermarks["NIFTY"][key] = (
+        quote_day, source_order[0] + 1, source_order[1] + 1
+    )
+    apm = advisor.apms["NIFTY"]
+    apm.state = advisor_module.STATE_IN_FLIGHT
+    apm.payload = SimpleNamespace(opt_symbol=depth.symbol, opt_token=depth.token)
+    apm.evaluate_tick = Mock()
+
+    active, managed = advisor._manage_matching_position_from_quote(
+        index_name="NIFTY", depth=depth,
+        broker_instrument_key=key, spot=24_000.0, option_ltp=100.0,
+        now_dt=boundary, quote_day=quote_day, instrument_key=key,
+        source_order=source_order,
+    )
+    assert (active, managed) == (False, False)
+    apm.evaluate_tick.assert_not_called()
+    authorized, reason = advisor._final_candidate_authorization_locked(
+        index_name="NIFTY", generation=generation, depth=depth,
+        quote_day=quote_day, instrument_key=key, source_order=source_order,
+        now_ns=mono_now_ns,
+        wall_now_ms=depth.exchange_timestamp_ms + 10,
+    )
+    assert not authorized
+    assert reason == "MODE5_QUOTE_NO_LONGER_ELIGIBLE"
+    assert advisor.cached_rbfn_signals["NIFTY"] is signal
+    assert advisor._cached_rbfn_candidate_meta["NIFTY"].status == "AVAILABLE"
+
+
+def test_final_candidate_authorization_veto_is_not_reported_as_or_veto(
+    tmp_path: Path, monkeypatch
+):
+    advisor = SentinelLiveStreamAdvisor(
+        wal_path=str(tmp_path / "mode5-final-auth-reason.json"), enable_stdout=False
+    )
+    boundary = datetime(2026, 11, 18, 10, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    depth, _, _, _, _ = _configure_production_mode5_entry(
+        advisor, tmp_path, monkeypatch, boundary=boundary,
+        monotonic_base_ns=104_000_000_000,
+    )
+    monkeypatch.setattr(
+        advisor_module, "mode5_overlays_are_diagnostic", lambda _strategy: False
+    )
+    advisor._final_candidate_authorization_locked = Mock(
+        return_value=(False, "OPTION_DEPTH_SOURCE_STALE_OR_FUTURE")
+    )
+    advisor.record_veto = Mock(wraps=advisor.record_veto)
+
+    advisor._evaluate_option_depth(depth)
+
+    assert advisor.alerts_history
+    alert = advisor.alerts_history[-1]
+    assert alert.status_flag == "VETO_MODE5_FINAL_AUTHORIZATION"
+    assert "OPTION_DEPTH_SOURCE_STALE_OR_FUTURE" in alert.advisory
+    assert any(
+        call.args[:1] == ("MODE5_FINAL_AUTHORIZATION",)
+        and call.args[1:2] == ("OPTION_DEPTH_SOURCE_STALE_OR_FUTURE",)
+        for call in advisor.record_veto.call_args_list
+    )
+    assert not any(call.args[:1] == ("MODE5_OR",) for call in advisor.record_veto.call_args_list)

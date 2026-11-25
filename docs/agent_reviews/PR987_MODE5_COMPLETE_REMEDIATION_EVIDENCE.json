@@ -1,0 +1,96 @@
+{
+  "schema": "tradebot.pr987.mode5.remediation.evidence.v1",
+  "verdict": "HOLD",
+  "candidate": {
+    "worktree": "/private/tmp/tradebot-pr987-mode5-complete-remediation",
+    "branch": "ram/pr987-mode5-complete-remediation",
+    "base_sha": "c9608df0830ef9331fec1c467edd8fa5dc163d6d",
+    "pr_987": {
+      "head_sha": "c9608df0830ef9331fec1c467edd8fa5dc163d6d",
+      "state": "OPEN",
+      "draft": true,
+      "remote_mutated": false
+    }
+  },
+  "files": [
+    {
+      "path": "core/sentinel_live_stream_advisor.py",
+      "sha256": "510766566f00a42a6f4707d0cccb6b33676c9dbe6bfefd38d03eb9a81bfccfe7"
+    },
+    {
+      "path": "tests/unit/test_sentinel_advisor_hardening_005.py",
+      "sha256": "e9069597d71f5ef2c51af57435f047fe71e06cd77c00de93bc6a0720e82cfcdd"
+    },
+    {
+      "path": "tests/unit/test_sentinel_optionmate_execution_hardening.py",
+      "sha256": "ad033a3d9dced9c43f09bfacede021c354c237fecf5be5f6b473db4748df7c65"
+    },
+    {
+      "path": "tests/unit/test_mode5_or_causality_policy.py",
+      "sha256": "6c9eed225a24a8f2e00555a3beecec6c2b44b507bd08e92364ebd4475ff7696d"
+    },
+    {
+      "path": "tests/unit/test_mode5_complete_advisor_reproduction.py",
+      "sha256": "7944ad5c98340564c5c6cbd3cb91d637c114caa520946f91cc788d32022de22d"
+    },
+    {
+      "path": "docs/agent_reviews/PR987_MODE5_COMPLETE_REMEDIATION_REPORT.md",
+      "role": "current evidence report"
+    },
+    {
+      "path": "docs/tradebot_delivery/work_items/TASK-PR987-MODE5-COMPLETE-REMEDIATION.md",
+      "role": "local work item"
+    }
+  ],
+  "tests": {
+    "command": "sandbox-exec -f .qa-sandbox/mode5-test.sb env PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=\"$PWD\" HOME=\"$PWD/.qa-sandbox/home\" TMPDIR=\"$PWD/.qa-sandbox/tmp\" pytest -q -p no:cacheprovider --basetemp=\"$PWD/.qa-sandbox/restored-final-510\" tests/unit/test_sentinel_advisor_hardening_005.py tests/unit/test_sentinel_optionmate_execution_hardening.py tests/unit/test_mode5_or_causality_policy.py tests/unit/test_mode5_complete_advisor_reproduction.py",
+    "environment": "macOS sandbox-exec, Python 3.14, pytest 9.0.3, network denied, writes confined to .qa-sandbox",
+    "passed": 286,
+    "failed": 1,
+    "skipped": 0,
+    "environment_blocked_test": "test_independent_processes_reserve_only_one_last_attempt",
+    "environment_block_reason": "PermissionError creating multiprocessing SemLock before product code",
+    "duration_seconds": 25.94,
+    "py_compile": "PASS",
+    "git_diff_check": "PASS",
+    "full_ci": "NOT_RUN"
+  },
+  "reviews": {
+    "qa": "HOLD_EXACT_HASHES_VERIFIED",
+    "technical_quant": "HOLD_EXACT_HASHES_VERIFIED",
+    "senior_qa": "BLOCK_ACCEPTANCE_READINESS; draft-only review push operationally separable",
+    "uat": "PASS_PACKAGE_CONSISTENCY; no product acceptance",
+    "release_manager": "PASS_REVIEW_ONLY_DRAFT_PUSH; no merge/release approval",
+    "coderabbit": {
+      "status": "COMPLETED_WITH_UNRESOLVED_FINDINGS",
+      "core_findings": 7,
+      "test_findings": 5,
+      "approval": false
+    }
+  },
+  "remaining_blockers": [
+    "No authoritative completed-bar/finality/continuity provider",
+    "No approved Mode 5 sizing contract; entry remains blocked before sizing/dispatcher/APM",
+    "Stale spot or one-sided depth can prevent position management; no exit fallback contract",
+    "Journal failure may prevent exit dispatch",
+    "Open CodeRabbit findings and incomplete test proof/cleanup items",
+    "42-case parity, full historical replay, execution/UNKNOWN suite, PIT option/fill-cost analysis, and full CI not run",
+    "External task-platform intake UNSATISFIED"
+  ],
+  "safety": {
+    "broker_api_called": false,
+    "is_order_action": false,
+    "allowed_for_live_execution": false,
+    "committed": false,
+    "pushed": false,
+    "deployed": false,
+    "runtime_artifacts_modified": false,
+    "runtime_artifacts_included": false
+  },
+  "excluded": [
+    ".qa-sandbox/**",
+    "runtime/** WAL/lock/trace/OR-ledger artifacts",
+    "credentials/secrets",
+    "unrelated research"
+  ]
+}
