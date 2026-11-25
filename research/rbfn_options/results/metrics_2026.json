@@ -1,0 +1,35 @@
+{
+  "base": {
+    "trades_count": 81,
+    "rejections_count": 189,
+    "gross_pnl_inr": -1367.5,
+    "net_pnl_inr": -5604.68,
+    "total_costs_inr": 4237.18,
+    "win_rate": 0.4444,
+    "wins": 36,
+    "losses": 45,
+    "profit_factor": 0.8856
+  },
+  "stress": {
+    "trades_count": 81,
+    "rejections_count": 189,
+    "gross_pnl_inr": -4081.25,
+    "net_pnl_inr": -8316.11,
+    "total_costs_inr": 4234.86,
+    "win_rate": 0.3951,
+    "wins": 32,
+    "losses": 49,
+    "profit_factor": 0.6956
+  },
+  "worst": {
+    "trades_count": 81,
+    "rejections_count": 189,
+    "gross_pnl_inr": -7473.5,
+    "net_pnl_inr": -11707.09,
+    "total_costs_inr": 4233.59,
+    "win_rate": 0.3704,
+    "wins": 30,
+    "losses": 51,
+    "profit_factor": 0.5277
+  }
+}

@@ -1,0 +1,242 @@
+{
+  "work_item_id": "BUG-PR987-R4-WAL-SIDECAR-COLLISION-001",
+  "type": "BUG",
+  "parent_epic": "EPIC-APM-WAL-DURABILITY-001",
+  "parent_feature": "FEAT-APM-WAL-OWNERSHIP-001",
+  "title": "Prevent an APM WAL from replacing another WAL lock sidecar",
+  "schema_version": 1,
+  "current_state": "IN_DEVELOPMENT",
+  "priority": "CRITICAL",
+  "business_goal": "Prevent WAL ownership bypass and split-brain recovery caused by a WAL path replacing another manager’s locked sidecar.",
+  "current_behavior": "APM appends .lock to a resolved WAL path. A separate manager may use that sidecar as its WAL and atomically replace it, allowing another process to lock a replacement inode while the original owner still holds the old inode.",
+  "expected_behavior": "Each supported effective WAL maps to one stable lock identity outside the replaceable WAL namespace. Alias or lock failures reject before recovery/admission; unsupported hard-link aliases fail closed.",
+  "in_scope": [
+    "APM WAL ownership identity",
+    "Offline path alias and process collision tests",
+    "R3 regression rerun",
+    "Source-hash-bound R4 report"
+  ],
+  "out_of_scope": [
+    "Strategy and threshold changes",
+    "Broker/order/live actions",
+    "Credential or deployment changes",
+    "Multiwriter transaction architecture",
+    "Other CodeRabbit defects"
+  ],
+  "dependencies": [
+    "R3 source snapshot hash",
+    "APFS ownership tests on TradeBotFast",
+    "Actual deployment filesystem is unknown"
+  ],
+  "acceptance_criteria": [
+    "Pre-fix independent process reproduction demonstrates sidecar inode replacement and concurrent owners.",
+    "Post-fix collision fails before WAL mutation and third owner is denied while original owner is alive.",
+    "Relative, dot-segment, parent symlink and leaf symlink aliases share ownership; hard-linked WAL fails closed.",
+    "Lock identity remains stable across WAL atomic replacement and owner death; successor recovery is tested.",
+    "R3 regression set runs on exact new source with baseline failures separately classified.",
+    "Unknown deployment filesystem is reported DEPLOYMENT_UNVERIFIED."
+  ],
+  "safety_constraints": [
+    "read_only=true where applicable",
+    "is_order_action=false",
+    "broker_api_called=false",
+    "allowed_for_live_execution=false",
+    "No broker, order, live process, deployment, commit, push, or merge action."
+  ],
+  "architecture_impact": "Changes only APM WAL identity/ownership and its tests; no strategy or broker interface changes.",
+  "allowed_paths": [
+    "core/active_position_manager.py",
+    "tests/unit/test_apm_wal_process_ownership.py",
+    "docs/agent_reviews/pr987-r2-controlled-remediation/PR987_R4_WAL_OWNERSHIP_VERIFICATION.md",
+    "docs/tradebot_delivery/work_items/EPIC-APM-WAL-DURABILITY-001.md",
+    "docs/tradebot_delivery/work_items/FEAT-APM-WAL-OWNERSHIP-001.md",
+    "docs/tradebot_delivery/work_items/BUG-PR987-R4-WAL-SIDECAR-COLLISION-001.md",
+    "governance/evidence/CLAIM_REGISTRY.json",
+    "governance/evidence/SOURCE_REGISTRY.json",
+    "governance/evidence/work_items/BUG-PR987-R4-WAL-SIDECAR-COLLISION-001.json"
+  ],
+  "forbidden_paths": [
+    "core/broker/",
+    "core/order/",
+    "credentials.py",
+    ".env",
+    "runtime/live/",
+    "logs/broker/",
+    "strategies/"
+  ],
+  "expected_tests": [
+    "tests/unit/test_apm_wal_process_ownership.py",
+    "tests/unit/test_apm_runner_trailing_regression.py",
+    "tests/unit/test_pr987_r2_controlled_remediation.py",
+    "tests/unit/test_sentinel_premarket_and_sizing_hardening.py",
+    "250 historical Sentinel selectors",
+    "full tests/unit/test_sentinel_advisor_hardening_003.py diagnostic"
+  ],
+  "qa_attack_plan": [
+    "Separate-process owner replacement",
+    "Symlink, relative, dot-segment and hard-link alias tests",
+    "Lock path replacement and inode comparison",
+    "Crash during persistence and successor recovery",
+    "Unsupported flock and malformed lock path fail-closed cases"
+  ],
+  "uat_criteria": [
+    "R4 report explains collision and disposition with exact hashes and commands.",
+    "Report preserves DEPLOYMENT_UNVERIFIED and does not claim live readiness.",
+    "Unchanged smoke IN_FLIGHT assertion is explained without weakening OR trust."
+  ],
+  "release_gates": [
+    "No commit/push/merge/deployment in this task.",
+    "Do not claim merge or production readiness from selected tests."
+  ],
+  "rollback_plan": "Stop all APM managers before rollback. Restore only the scoped APM code/test files; preserve WAL and lock artifacts. Never unlink lock files while an owner could remain.",
+  "evidence_refs": [],
+  "acting_role": "BACKEND_DEVELOPER",
+  "state_history": [
+    {
+      "from_state": "BACKLOG",
+      "to_state": "REQUIREMENT_READY",
+      "acting_role": "BUSINESS_ANALYST",
+      "actor": "/root/r3_uat",
+      "timestamp": "2026-11-22T20:45:24Z",
+      "reason": "R4 requirements and acceptance criteria recorded.",
+      "evidence_ids": [
+        "PR987_R4_BA_20261123"
+      ],
+      "contract_hash": "0c13e8f643ba13134329752d2247f3af0928ab5961b26ca0c1df282fc8e08569",
+      "previous_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "entry_hash": "cd4b0e74c3ae5e985c8b0654f46bff7ab02ffc0238ac6fd760008e30e1eec69d"
+    },
+    {
+      "from_state": "REQUIREMENT_READY",
+      "to_state": "DESIGN_READY",
+      "acting_role": "SOLUTION_ARCHITECT",
+      "actor": "/root/r2_hermes",
+      "timestamp": "2026-11-22T20:45:27Z",
+      "reason": "Hermes contract defines stable ownership identity and explicit tests; PO and BA criteria are linked.",
+      "evidence_ids": [
+        "PR987_R4_HERMES_20261123",
+        "PR987_R4_PO_20261123",
+        "PR987_R4_BA_20261123"
+      ],
+      "contract_hash": "0c13e8f643ba13134329752d2247f3af0928ab5961b26ca0c1df282fc8e08569",
+      "previous_hash": "cd4b0e74c3ae5e985c8b0654f46bff7ab02ffc0238ac6fd760008e30e1eec69d",
+      "entry_hash": "ed615559daf11ade5657c3c5918517481b27bacd89a7d7d568663fec9789a116"
+    },
+    {
+      "from_state": "DESIGN_READY",
+      "to_state": "IN_DEVELOPMENT",
+      "acting_role": "BACKEND_DEVELOPER",
+      "actor": "/root/r2_gsd_plan",
+      "timestamp": "2026-11-22T20:47:03Z",
+      "reason": "User authorized a local R4 hierarchy; BA/PO criteria and Hermes architecture are accepted; Grill Me collision and hard-link risks are explicitly in scope for fail-closed coverage.",
+      "evidence_ids": [],
+      "contract_hash": "0c13e8f643ba13134329752d2247f3af0928ab5961b26ca0c1df282fc8e08569",
+      "previous_hash": "ed615559daf11ade5657c3c5918517481b27bacd89a7d7d568663fec9789a116",
+      "entry_hash": "54acb72ba010f79a1f5e1e89312156b00a546bc49f49f4159f3761b90b7a30c4"
+    }
+  ],
+  "defect_history": [],
+  "evidence": [
+    {
+      "evidence_id": "PR987_R4_BA_20261123",
+      "work_item_id": "BUG-PR987-R4-WAL-SIDECAR-COLLISION-001",
+      "evidence_type": "REQUIREMENT_EVIDENCE",
+      "role": "BUSINESS_ANALYST",
+      "author": "/root/r3_uat",
+      "timestamp": "2026-11-22T20:45:23Z",
+      "status": "PASS",
+      "summary": "BA defined narrow WAL-sidecar collision requirements, acceptance evidence and governance gap.",
+      "references": [
+        "docs/tradebot_delivery/work_items/BUG-PR987-R4-WAL-SIDECAR-COLLISION-001.md",
+        "conversation://current-task/Sentinel-PR987-R4-WAL-Ownership-Correctness"
+      ],
+      "content_hash": "8549c557481e3a89768b32e8bda0c045d79696b58304efccbf796ebe7714a13d",
+      "check_results": [],
+      "work_item_hash": "0c13e8f643ba13134329752d2247f3af0928ab5961b26ca0c1df282fc8e08569",
+      "sequence": 1,
+      "previous_hash": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "evidence_id": "PR987_R4_PO_20261123",
+      "work_item_id": "BUG-PR987-R4-WAL-SIDECAR-COLLISION-001",
+      "evidence_type": "REQUIREMENT_EVIDENCE",
+      "role": "PRODUCT_OWNER",
+      "author": "/root/r4_product_owner",
+      "timestamp": "2026-11-22T20:45:25Z",
+      "status": "PASS",
+      "summary": "PO accepted the narrow collision scope; deployment proof remains a distinct blocker.",
+      "references": [
+        "docs/tradebot_delivery/work_items/BUG-PR987-R4-WAL-SIDECAR-COLLISION-001.md",
+        "docs/agent_reviews/pr987-r2-controlled-remediation/PR987_R3_TARGETED_REMEDIATION.md"
+      ],
+      "content_hash": "d5959ae47cc8504946dac81840e971c0813fc0bd1820bb21c91b46baf9617e77",
+      "check_results": [],
+      "work_item_hash": "0c13e8f643ba13134329752d2247f3af0928ab5961b26ca0c1df282fc8e08569",
+      "sequence": 2,
+      "previous_hash": "8549c557481e3a89768b32e8bda0c045d79696b58304efccbf796ebe7714a13d"
+    },
+    {
+      "evidence_id": "PR987_R4_HERMES_20261123",
+      "work_item_id": "BUG-PR987-R4-WAL-SIDECAR-COLLISION-001",
+      "evidence_type": "ARCHITECTURE_EVIDENCE",
+      "role": "SOLUTION_ARCHITECT",
+      "author": "/root/r2_hermes",
+      "timestamp": "2026-11-22T20:45:26Z",
+      "status": "PASS",
+      "summary": "Hermes specified a reserved lock namespace, stable path identity, hard-link rejection, fail-closed startup, and filesystem limitations.",
+      "references": [
+        "core/active_position_manager.py",
+        "docs/agent_reviews/pr987-r2-controlled-remediation/PR987_R3_TARGETED_REMEDIATION.md"
+      ],
+      "content_hash": "ac172941402fee0beeb315c5d8cfd7a06244baa981d402424f17bd55e8ca7a33",
+      "check_results": [],
+      "work_item_hash": "0c13e8f643ba13134329752d2247f3af0928ab5961b26ca0c1df282fc8e08569",
+      "sequence": 3,
+      "previous_hash": "d5959ae47cc8504946dac81840e971c0813fc0bd1820bb21c91b46baf9617e77"
+    }
+  ],
+  "defects": [],
+  "required_ci_checks": [],
+  "extensions": {
+    "evidence_standard": {
+      "schema_version": 1,
+      "enforcement_mode": "REPORT_ONLY",
+      "applicability": "REQUIRED",
+      "applicability_reason": "The WAL ownership claim is material to durable recovery and entry admission.",
+      "evidence_refs": [],
+      "assessed_paths": [
+        "core/active_position_manager.py",
+        "tests/unit/test_apm_wal_process_ownership.py"
+      ],
+      "subject_commit_sha": null,
+      "claims": [
+        {
+          "claim_id": "PR987_R4_WAL_SINGLE_OWNER",
+          "statement": "For every supported APM WAL identity, one manager owns a stable lock identity that a WAL replacement or supported path alias cannot bypass.",
+          "claim_kind": "operational_reliability",
+          "status": "UNVERIFIED",
+          "source_ids": [
+            "PR987_R4_USER_REQUEST",
+            "PR987_R4_APM_SOURCE",
+            "PR987_R3_REMEDIATION_REPORT",
+            "PR987_CODERABBIT_INDEPENDENT_REVIEW",
+            "PR987_CODEX_FROZEN_WAL_REPORT"
+          ],
+          "evidence_refs": [],
+          "assumptions": [
+            {
+              "assumption_id": "A1",
+              "statement": "Supported APM writers use ActivePositionManager and honor its ownership check.",
+              "classification": "THEORETICAL_ASSUMPTION",
+              "source_ids": [
+                "PR987_R4_APM_SOURCE"
+              ]
+            }
+          ],
+          "gate_evidence": {},
+          "limitation": "Post-fix QA and deployment filesystem evidence are not yet available."
+        }
+      ]
+    }
+  }
+}

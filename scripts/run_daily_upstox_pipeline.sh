@@ -44,10 +44,46 @@ if [ ! -f "$REPO_DIR/.env" ]; then
     exit 1
 fi
 
-# 4. Remove any stale lock files
-rm -f /tmp/upstox_daily_pipeline.lock
+# 3A. BOD APM WAL Reset Preflight (08:55 AM IST)
+echo "[*] Executing BOD APM WAL reset preflight..." >> "$LOG_FILE"
+"$PYTHON_BIN" "$REPO_DIR/scripts/ops/reset_sentinel_wal_for_session.py" --force >> "$LOG_FILE" 2>&1 || true
 
-# 5. Execute unified capture and post-market stitching pipeline
+# 3B. Upstox Token Preflight Auth Guard (09:00 AM IST)
+echo "[*] Validating Upstox Access Token preflight authorization..." >> "$LOG_FILE"
+set +e
+"$PYTHON_BIN" "$REPO_DIR/scripts/ops/check_upstox_token.py" >> "$LOG_FILE" 2>&1
+AUTH_CODE=$?
+set -e
+
+if [ "$AUTH_CODE" -eq 2 ]; then
+    echo "[!] CRITICAL AUTH FAILURE: Upstox Access Token Expired (HTTP 401/403)." >> "$LOG_FILE"
+    echo "[!] TRADING EXECUTION DISARMED: Preserving market telemetry & shadow capture while disabling live order routing." >> "$LOG_FILE"
+    export TRADING_EXECUTION_DISARMED=1
+    export UPSTOX_AUTH_FAILED=1
+fi
+
+# 4. Lock file management: Do NOT remove /tmp/upstox_daily_pipeline.lock.
+# flock uses kernel file locks atomically; removing the lock file breaks mutex isolation
+# for concurrently starting or running instances. Preserving the lock file ensures safe atomic mutual exclusion.
+
+# 5. Launch Sentinel Dashboard on port 8503 if not already running
+STREAMLIT_BIN="/opt/anaconda3/bin/streamlit"
+if [ ! -f "$STREAMLIT_BIN" ]; then
+    STREAMLIT_BIN="$(which streamlit)"
+fi
+DASHBOARD_LOG="$REPO_DIR/logs/sentinel_dashboard_$(date +%Y%m%d).log"
+
+if ! lsof -i :8503 > /dev/null 2>&1; then
+    echo "[*] Starting Sentinel Dashboard on http://localhost:8503..." >> "$LOG_FILE"
+    nohup "$STREAMLIT_BIN" run "$REPO_DIR/scripts/run_sentinel_dashboard.py" \
+        --server.headless true \
+        --server.port 8503 > "$DASHBOARD_LOG" 2>&1 &
+    echo "[✓] Dashboard started in background with PID: $!" >> "$LOG_FILE"
+else
+    echo "[✓] Dashboard is already active on port 8503." >> "$LOG_FILE"
+fi
+
+# 6. Execute unified capture and post-market stitching pipeline
 echo "[*] Launching scripts/upstox_daily_live_capture_and_stitch.py..." >> "$LOG_FILE"
 "$PYTHON_BIN" "$REPO_DIR/scripts/upstox_daily_live_capture_and_stitch.py" >> "$LOG_FILE" 2>&1
 

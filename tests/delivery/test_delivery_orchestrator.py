@@ -1,4 +1,6 @@
+import hashlib
 from dataclasses import replace
+from datetime import datetime, timezone
 
 import pytest
 
@@ -50,8 +52,8 @@ def transition(o, target, role, actor, ev=(), minute=0):
                         reason=f"evidence review for {target}", evidence_ids=ev)
 
 
-def prepared_for_dev():
-    o = DeliveryOrchestrator(make_item())
+def prepared_for_dev(**item_kwargs):
+    o = DeliveryOrchestrator(make_item(**item_kwargs))
     ba = add(o, "req-ba", EvidenceType.REQUIREMENT_EVIDENCE, R.BUSINESS_ANALYST, "ba")
     transition(o, DeliveryState.REQUIREMENT_READY, R.BUSINESS_ANALYST, "ba", (ba.evidence_id,))
     po = add(o, "req-po", EvidenceType.REQUIREMENT_EVIDENCE, R.PRODUCT_OWNER, "po")
@@ -402,14 +404,27 @@ def test_json_serialization_is_deterministic():
     assert canonical_json(work_item_to_dict(item)) == canonical_json(work_item_to_dict(item))
 
 
-def test_cli_create_validate_and_refuse_overwrite(tmp_path, capsys):
-    path = tmp_path / "item.json"
-    assert delivery_cli(["create", str(path), "FTR-CLI", "FEATURE", "CLI work"]) == 0
+def test_cli_create_validate_and_refuse_overwrite(tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    path = tmp_path / "governance/evidence/work_items/FTR-CLI.json"
+    path.parent.mkdir(parents=True)
+    epic_path = path.parent / "EPIC-CLI.json"
+    assert delivery_cli(["create", str(epic_path), "EPIC-CLI", "EPIC", "CLI epic"]) == 0
+    capsys.readouterr()
+    assert delivery_cli(["create", str(path), "FTR-CLI", "FEATURE", "CLI work",
+                         "--parent-epic", "EPIC-CLI"]) == 0
+    capsys.readouterr()
     assert delivery_cli(["validate", str(path)]) == 0
-    assert '"valid": true' in capsys.readouterr().out
+    result = __import__("json").loads(capsys.readouterr().out)
+    assert result["valid"] is True
+    assert result["scope"] == "structural_only"
+    assert result["research_capture_authorized"] is False
+    before = path.read_bytes()
     with pytest.raises(SystemExit) as exc:
-        delivery_cli(["create", str(path), "FTR-CLI", "FEATURE", "overwrite"])
+        delivery_cli(["create", str(path), "FTR-CLI", "FEATURE", "overwrite",
+                      "--parent-epic", "EPIC-CLI"])
     assert exc.value.code == 2
+    assert path.read_bytes() == before
 
 
 def test_cli_rejects_duplicate_json_keys(tmp_path):
@@ -427,3 +442,183 @@ def test_ci_gate_blocks_when_no_required_check_names_are_configured():
     result = evaluate_gate(GateName.G6_CI, (evidence,), ())
     assert result.status == GateStatus.BLOCKED
     assert "no required CI checks" in result.reason
+
+
+def _capture_item_with_pending_request(tmp_path, monkeypatch, *, close_unknown=False):
+    from datetime import datetime, timezone
+    from pathlib import Path
+    from core.delivery.research_request_capture import append_event, locked_sidecar, make_event
+    from core.delivery.cli import _write_atomic
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "evidence.txt").write_text("local metadata reference\n", encoding="utf-8")
+    path = tmp_path / "STORY-CAPTURE.json"
+    item = make_item(allowed_paths=("evidence.txt",))
+    _write_atomic(path, item)
+    scope_ref = "00000000-0000-0000-0000-000000000001"
+    route_ref = "00000000-0000-0000-0000-000000000002"
+    request_id = "00000000-0000-0000-0000-000000000003"
+    with locked_sidecar(Path(str(path) + ".lock"), create=True) as fd:
+        preflight = make_event(item, "ROUTE_PREFLIGHT", {
+            "route_ref": route_ref, "request_scope": "DOCS_ONLY", "scope_ref": scope_ref,
+            "route_class": "STATIC_METADATA", "result": "PASS",
+            "evidence_refs": ["repo:evidence.txt#sha256:" + "a" * 64], "reason_code": "NONE"},
+            now=datetime(2026, 1, 1, 1, 0, tzinfo=timezone.utc))
+        item = append_event(path, fd, preflight)
+        prepared = make_event(item, "REQUEST_PREPARED", {
+            "request_id": request_id, "route_preflight_event_id": preflight["event_id"],
+            "request_scope": "DOCS_ONLY", "scope_ref": scope_ref,
+            "request_class": "STATIC_METADATA"},
+            now=datetime(2026, 1, 1, 1, 1, tzinfo=timezone.utc))
+        item = append_event(path, fd, prepared)
+        if close_unknown:
+            result = make_event(item, "REQUEST_RESULT", {
+                "request_id": request_id, "prepared_event_id": prepared["event_id"],
+                "result_status": "UNKNOWN", "access_category": "UNKNOWN"},
+                now=datetime(2026, 1, 1, 1, 2, tzinfo=timezone.utc))
+            item = append_event(path, fd, result)
+    from core.delivery.research_request_capture import _read_canonical
+    return _read_canonical(path)[1]
+
+
+def test_pending_research_request_blocks_orchestrator_transitions(tmp_path, monkeypatch):
+    item = _capture_item_with_pending_request(tmp_path, monkeypatch)
+    orchestrator = DeliveryOrchestrator(item)
+    assert orchestrator.allowed_next_states() == ()
+    with pytest.raises(GovernanceError, match="pending research request"):
+        orchestrator.transition(DeliveryState.BLOCKED_REQUIREMENT,
+                                acting_role=R.BUSINESS_ANALYST, actor="ba",
+                                timestamp="2026-01-01T02:00:00+00:00", reason="test")
+
+
+def test_terminal_research_result_blocks_orchestrator_writes(tmp_path, monkeypatch):
+    item = _capture_item_with_pending_request(tmp_path, monkeypatch, close_unknown=True)
+    orchestrator = DeliveryOrchestrator(item)
+    assert orchestrator.allowed_next_states() == ()
+    with pytest.raises(GovernanceError, match="terminal research freeze"):
+        orchestrator.transition(DeliveryState.BLOCKED_REQUIREMENT,
+                                acting_role=R.BUSINESS_ANALYST, actor="ba",
+                                timestamp="2026-01-01T02:00:00+00:00", reason="test")
+
+
+def _journal_work_item(path, item):
+    from core.delivery.cli import _write_atomic
+    from core.delivery.research_request_capture import append_event, locked_sidecar, make_event, _read_canonical
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.parents[3].joinpath("evidence.txt").write_text("local test evidence\n", encoding="utf-8")
+    _write_atomic(path, item)
+    lock_path = path.with_name(path.name + ".lock")
+    with locked_sidecar(lock_path, create=True) as fd:
+        _, current, _ = _read_canonical(path)
+        preflight = make_event(current, "ROUTE_PREFLIGHT", {
+            "route_ref": "00000000-0000-0000-0000-000000000041", "request_scope": "DOCS_ONLY",
+            "scope_ref": "00000000-0000-0000-0000-000000000042", "route_class": "STATIC_METADATA",
+            "result": "PASS", "evidence_refs": ["repo:evidence.txt#sha256:" + "a" * 64],
+            "reason_code": "NONE"}, now=datetime(2026, 11, 3, 20, 0, tzinfo=timezone.utc))
+        append_event(path, fd, preflight)
+    return lock_path
+
+
+def test_post_init_requirement_evidence_and_transition_survive_restart(tmp_path, monkeypatch):
+    from core.delivery.research_request_capture import (
+        _load_journal, _read_canonical, locked_sidecar, persist_work_item, research_status,
+    )
+
+    monkeypatch.chdir(tmp_path)
+    item = make_item(allowed_paths=("evidence.txt",))
+    path = tmp_path / "governance/evidence/work_items" / f"{item.work_item_id}.json"
+    lock_path = _journal_work_item(path, item)
+    with locked_sidecar(lock_path, create=False) as fd:
+        raw, base, _ = _read_canonical(path)
+        orchestrator = DeliveryOrchestrator(base)
+        requirement = add(orchestrator, "journal-ba", EvidenceType.REQUIREMENT_EVIDENCE,
+                          R.BUSINESS_ANALYST, "ba")
+        persist_work_item(path, fd, raw, base, orchestrator.item, "EVIDENCE_UPDATE")
+        raw, base, _ = _read_canonical(path)
+        orchestrator = DeliveryOrchestrator(base)
+        updated = transition(orchestrator, DeliveryState.REQUIREMENT_READY, R.BUSINESS_ANALYST,
+                             "ba", (requirement.evidence_id,), minute=1)
+        persist_work_item(path, fd, raw, base, updated, "LIFECYCLE_UPDATE")
+        records = _load_journal(fd)
+        final_raw, final_item, _ = _read_canonical(path)
+
+    assert final_item.current_state == DeliveryState.REQUIREMENT_READY
+    assert len(final_item.evidence) == 1
+    assert final_item.state_history[-1].to_state == DeliveryState.REQUIREMENT_READY.value
+    assert records[-4]["operation"] == "EVIDENCE_UPDATE"
+    assert records[-2]["operation"] == "LIFECYCLE_UPDATE"
+    assert records[-1]["resulting_canonical_sha256"] == hashlib.sha256(final_raw).hexdigest()
+    status, code = research_status(item.work_item_id, root=tmp_path)
+    assert code == 0 and status["status"] == "READY"
+    assert status["capture_allowed"] is True
+
+
+def test_post_init_defect_and_history_mutations_survive_restart(tmp_path, monkeypatch):
+    from core.delivery.research_request_capture import (
+        _load_journal, _read_canonical, locked_sidecar, persist_work_item, research_status,
+    )
+
+    monkeypatch.chdir(tmp_path)
+    orchestrator = prepared_for_dev(allowed_paths=("evidence.txt",))
+    item = orchestrator.item
+    path = tmp_path / "governance/evidence/work_items" / f"{item.work_item_id}.json"
+    lock_path = _journal_work_item(path, item)
+
+    def mutate(operation, callback):
+        with locked_sidecar(lock_path, create=False) as fd:
+            raw, base, _ = _read_canonical(path)
+            current = DeliveryOrchestrator(base)
+            updated = callback(current)
+            if updated is None:
+                updated = current.item
+            persist_work_item(path, fd, raw, base, updated, operation)
+
+    mutate("EVIDENCE_UPDATE", lambda current: add(
+        current, "journal-dev-test", EvidenceType.DEV_TEST_EVIDENCE,
+        R.BACKEND_DEVELOPER, "dev", timestamp="2026-01-01T01:03:00+00:00") and current.item)
+    mutate("LIFECYCLE_UPDATE", lambda current: transition(
+        current, DeliveryState.DEV_VERIFIED, R.BACKEND_DEVELOPER, "dev",
+        ("journal-dev-test",), minute=3))
+    mutate("LIFECYCLE_UPDATE", lambda current: transition(
+        current, DeliveryState.QA_IN_PROGRESS, R.QA_ENGINEER, "qa", minute=4))
+
+    def add_qa_proofs(current):
+        add(current, "journal-qa-fail", EvidenceType.QA_EVIDENCE, R.QA_ENGINEER, "qa",
+            EvidenceStatus.FAIL, timestamp="2026-01-01T01:05:00+00:00")
+        add(current, "journal-defect-proof", EvidenceType.DEFECT_EVIDENCE, R.QA_ENGINEER, "qa",
+            timestamp="2026-01-01T01:04:30+00:00")
+        return current.item
+    mutate("EVIDENCE_UPDATE", add_qa_proofs)
+
+    def create_defect(current):
+        defect = Defect("JOURNAL-D1", current.item.work_item_id, DefectSeverity.S1,
+                        "journal recovery defect", ("reproduce",), "reject", "accepted",
+                        ("journal-defect-proof",))
+        current.add_defect(defect, actor_role=R.QA_ENGINEER, actor="qa",
+                           timestamp="2026-01-01T01:05:30+00:00", reason="QA reproduced defect")
+        return current.item
+    mutate("DEFECT_UPDATE", create_defect)
+    mutate("LIFECYCLE_UPDATE", lambda current: transition(
+        current, DeliveryState.QA_FAILED, R.QA_ENGINEER, "qa",
+        ("journal-qa-fail", "journal-defect-proof"), minute=6))
+    mutate("LIFECYCLE_UPDATE", lambda current: transition(
+        current, DeliveryState.IN_DEVELOPMENT, R.BACKEND_DEVELOPER, "dev", minute=7))
+    mutate("HISTORY_UPDATE", lambda current: current.advance_defect(
+        "JOURNAL-D1", DefectStatus.FIX_IN_PROGRESS, actor_role=R.BACKEND_DEVELOPER,
+        actor="dev", timestamp="2026-01-01T01:07:30+00:00", reason="fix started"))
+
+    with locked_sidecar(lock_path, create=False) as fd:
+        records = _load_journal(fd)
+        final_raw, final_item, _ = _read_canonical(path)
+    operations = [records[i]["operation"] for i in range(1, len(records), 2)]
+    assert "EVIDENCE_UPDATE" in operations
+    assert "DEFECT_UPDATE" in operations
+    assert "HISTORY_UPDATE" in operations
+    assert operations.count("LIFECYCLE_UPDATE") >= 4
+    assert final_item.current_state == DeliveryState.IN_DEVELOPMENT
+    assert final_item.defects[0].status == DefectStatus.FIX_IN_PROGRESS
+    assert records[-1]["resulting_canonical_sha256"] == hashlib.sha256(final_raw).hexdigest()
+    status, code = research_status(item.work_item_id, root=tmp_path)
+    assert code == 0 and status["status"] == "READY"
+    assert status["capture_allowed"] is True

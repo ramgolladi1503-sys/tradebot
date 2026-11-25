@@ -223,6 +223,25 @@
       "source_ids": [],
       "evidence_refs": [],
       "limitation": "Covers feed stability and ownership commitment only; does not authorize live orders."
+    },
+    {
+      "claim_id": "PR987_R4_WAL_SINGLE_OWNER",
+      "statement": "For every supported APM WAL identity, one manager owns a stable lock identity that a WAL replacement or supported path alias cannot bypass.",
+      "claim_kind": "operational_reliability",
+      "scope_paths": [
+        "core/active_position_manager.py",
+        "tests/unit/test_apm_wal_process_ownership.py"
+      ],
+      "status": "UNVERIFIED",
+      "source_ids": [
+        "PR987_R4_USER_REQUEST",
+        "PR987_R4_APM_SOURCE",
+        "PR987_R3_REMEDIATION_REPORT",
+        "PR987_CODERABBIT_INDEPENDENT_REVIEW",
+        "PR987_CODEX_FROZEN_WAL_REPORT"
+      ],
+      "evidence_refs": [],
+      "limitation": "The pre-fix collision is reproduced; remediation, post-fix regressions, and deployed filesystem compatibility remain unverified."
     }
   ]
 }

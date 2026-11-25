@@ -28,6 +28,10 @@ class BrokerOrderResponse:
     broker_order_id: str | None = None
     status: str = "UNKNOWN"
     reason: str | None = None
+    # Submission is not a fill. These are populated only when the broker
+    # response itself reports an executed quantity and average fill price.
+    filled_qty: int = 0
+    avg_fill_price: float = 0.0
 
 
 @dataclass
